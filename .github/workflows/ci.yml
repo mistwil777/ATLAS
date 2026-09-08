@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── pair-forge ────────────────────────────────────────────────────────────
+  pair-forge:
+    name: pair-forge / smoke + contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install agents
+        run: uv pip install -e agents/pair-forge/ -e agents/agent-tester/
+
+      - name: Dependency status
+        run: python -m pair_forge check
+        continue-on-error: true
+
+      - name: Smoke tests (PDF / RTF / DOCX)
+        run: |
+          uv run pytest \
+            agents/pair-forge/pair_forge/tests/smoke/test_pdf.py \
+            agents/pair-forge/pair_forge/tests/smoke/test_rtf.py \
+            agents/pair-forge/pair_forge/tests/smoke/test_docx.py \
+            -v
+
+      - name: Smoke tests (OCR — optional)
+        run: uv run pytest agents/pair-forge/pair_forge/tests/smoke/test_ocr.py -v
+        continue-on-error: true
+
+  # ── agent-tester ──────────────────────────────────────────────────────────
+  agent-tester:
+    name: agent-tester / smoke + validate pair-forge
+    runs-on: ubuntu-latest
+    needs: pair-forge
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install agents
+        run: uv pip install -e agents/pair-forge/ -e agents/agent-tester/
+
+      - name: Smoke tests — agent-tester
+        run: uv run pytest agents/agent-tester/agent_tester/tests/smoke/ -v
+
+      - name: Validate pair-forge (level 1 — contract)
+        run: uv run python -m agent_tester run --agent agents/pair-forge --level 1
+
+      - name: Validate pair-forge (level 2 — prompt contracts)
+        run: uv run python -m agent_tester run --agent agents/pair-forge --level 2
+
+  # ── Lint ──────────────────────────────────────────────────────────────────
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install ruff
+        run: uv pip install ruff
+
+      - name: Ruff check
+        run: uv run ruff check agents/
+
+      - name: Ruff format check
+        run: uv run ruff format --check agents/

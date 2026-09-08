@@ -1,0 +1,28 @@
+[project]
+name = "atlas"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+# ── UV workspace ──────────────────────────────────────────────────────────────
+# Each subdirectory under agents/ is an independent installable package.
+# `uv pip install -e agents/pair-forge/ -e agents/agent-tester/` to install all.
+[tool.uv.workspace]
+members = ["agents/*"]
+
+[tool.uv.sources]
+pair-forge    = { workspace = true }
+agent-tester  = { workspace = true }
+
+# ── Ruff ──────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length    = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+# ── Pytest ────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["agents"]
+addopts   = "-q --tb=short"

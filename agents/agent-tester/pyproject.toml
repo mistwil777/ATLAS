@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-tester"
+version = "1.0.0"
+description = "ATLAS agent validator: structural contract, prompt contracts, and behavioral golden tests."
+requires-python = ">=3.10"
+dependencies = [
+    "jsonschema>=4.0,<5.0",
+    "pytest>=8.0,<9.0",
+]
+
+[project.optional-dependencies]
+golden = ["inspect-ai>=0.3,<1.0"]
+dev    = ["pytest>=8.0"]
+
+[project.scripts]
+agent-tester = "agent_tester.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent_tester*"]
+
+[tool.setuptools.package-data]
+"agent_tester.tests.smoke.fixtures" = ["**/*"]

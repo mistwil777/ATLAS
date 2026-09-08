@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "pair-forge"
+version = "1.0.0"
+description = "Autonomous agent: transforms raw documents into fine-tuning pairs with LLM generation and judge validation."
+requires-python = ">=3.10"
+dependencies = [
+    # Document extraction
+    "pdfplumber>=0.11,<2.0",
+    "python-docx>=1.1,<2.0",
+    "striprtf>=0.0.33,<1.0",
+    "pytesseract>=0.3,<1.0",
+    "pdf2image>=1.17,<2.0",
+    "chardet>=5.0,<8.0",
+    "langdetect>=1.0,<2.0",
+    # HTTP
+    "httpx>=0.27,<1.0",
+    # AWS (optional — used if provider=bedrock)
+    "boto3>=1.35,<2.0",
+    # Qdrant memory
+    "qdrant-client>=1.12,<2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+pair-forge = "pair_forge.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pair_forge*"]
+
+[tool.setuptools.package-data]
+"pair_forge.tests.smoke.fixtures" = ["*"]
