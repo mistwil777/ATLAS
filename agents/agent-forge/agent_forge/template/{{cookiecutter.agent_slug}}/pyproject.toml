@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{{cookiecutter.agent_slug}}"
+version = "0.1.0"
+description = "{{cookiecutter.description}}"
+requires-python = ">=3.10"
+dependencies = [
+    {% if cookiecutter.uses_llm == "true" %}"boto3>=1.35,<2.0",
+    {% endif %}]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+{{cookiecutter.agent_slug}} = "{{cookiecutter.pkg_name}}.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["{{cookiecutter.pkg_name}}*"]
+
+[tool.setuptools.package-data]
+"{{cookiecutter.pkg_name}}.tests.smoke.fixtures" = ["*"]
