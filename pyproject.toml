@@ -12,6 +12,7 @@ members = ["agents/*"]
 [tool.uv.sources]
 pair-forge    = { workspace = true }
 agent-tester  = { workspace = true }
+atlas-bus     = { workspace = true }
 
 # ── Ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]

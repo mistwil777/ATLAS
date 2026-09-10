@@ -27,6 +27,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 
+[project.entry-points."atlas.agents"]
+pair-forge = "pair_forge.agent:PairForgeAgent"
+
 [project.scripts]
 pair-forge = "pair_forge.__main__:main"
 

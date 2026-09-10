@@ -15,6 +15,9 @@ dependencies = [
 dev = ["pytest>=8.0"]
 validate = ["agent-tester"]
 
+[project.entry-points."atlas.agents"]
+agent-forge = "agent_forge.agent:AgentForgeAgent"
+
 [project.scripts]
 agent-forge = "agent_forge.__main__:main"
 

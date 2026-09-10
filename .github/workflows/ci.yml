@@ -17,6 +17,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
+          python-version: "3.11"
           enable-cache: true
 
       - name: Install agents
@@ -49,6 +50,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
+          python-version: "3.11"
           enable-cache: true
 
       - name: Install agents
@@ -73,6 +75,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
+          python-version: "3.11"
           enable-cache: true
 
       - name: Install agent-forge
@@ -80,6 +83,25 @@ jobs:
 
       - name: Smoke tests — agent-forge
         run: uv run pytest agents/agent-forge/agent_forge/tests/smoke/ -v
+
+  # ── atlas-bus ─────────────────────────────────────────────────────────────
+  atlas-bus:
+    name: atlas-bus / smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install atlas-bus
+        run: uv pip install -e agents/atlas-bus/
+
+      - name: Smoke tests — atlas-bus
+        run: uv run pytest agents/atlas-bus/atlas_bus/tests/smoke/ -v
 
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
@@ -91,6 +113,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
+          python-version: "3.11"
           enable-cache: true
 
       - name: Install ruff

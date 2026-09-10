@@ -16,6 +16,9 @@ dependencies = [
 golden = ["inspect-ai>=0.3,<1.0"]
 dev    = ["pytest>=8.0"]
 
+[project.entry-points."atlas.agents"]
+agent-tester = "agent_tester.contract:validate_contract"
+
 [project.scripts]
 agent-tester = "agent_tester.__main__:main"
 

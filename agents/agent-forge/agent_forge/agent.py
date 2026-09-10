@@ -4,7 +4,7 @@ Generates ATLAS agent scaffolding from a spec file (CDC mode) or
 interactive CLI dialogue (interactive mode).
 
 Flow:
-  parse spec / ask questions → extract params → render template (Cookiecutter)
+  parse spec / ask questions → extract params → render scaffold (scaffold.py)
   → validate contract (agent-tester level 1) → yield summary
 
 LLM and logging backends are injected at construction time.
@@ -23,8 +23,8 @@ from agent_forge.prompts import INTERACTIVE_QUESTIONS, SPEC_EXTRACTION
 
 def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 1024) -> str | None:
     try:
-        import boto3  # noqa: PLC0415
-        from botocore.config import Config  # noqa: PLC0415
+        import boto3  # noqa: PLC0415  # type: ignore[import-untyped]
+        from botocore.config import Config  # noqa: PLC0415  # type: ignore[import-untyped]
 
         model_id = llm_config.get("model_id", "us.amazon.nova-pro-v1:0")
         temperature = float(llm_config.get("temperature", 0.1))
