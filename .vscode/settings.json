@@ -2,5 +2,11 @@
   "python.analysis.ignore": [
     "agents/agent-forge/agent_forge/template"
   ],
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "agents/pair-forge",
+    "agents/agent-tester",
+    "agents/agent-forge",
+    "agents/atlas-bus"
+  ]
 }
