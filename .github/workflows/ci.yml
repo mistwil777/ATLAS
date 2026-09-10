@@ -20,22 +20,22 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install --system -e agents/pair-forge/ -e agents/agent-tester/
+        run: uv pip install -e agents/pair-forge/ -e agents/agent-tester/
 
       - name: Dependency status
-        run: python -m pair_forge check
+        run: uv run python -m pair_forge check
         continue-on-error: true
 
       - name: Smoke tests (PDF / RTF / DOCX)
         run: |
-          python -m pytest \
+          uv run pytest \
             agents/pair-forge/pair_forge/tests/smoke/test_pdf.py \
             agents/pair-forge/pair_forge/tests/smoke/test_rtf.py \
             agents/pair-forge/pair_forge/tests/smoke/test_docx.py \
             -v
 
       - name: Smoke tests (OCR — optional)
-        run: python -m pytest agents/pair-forge/pair_forge/tests/smoke/test_ocr.py -v
+        run: uv run pytest agents/pair-forge/pair_forge/tests/smoke/test_ocr.py -v
         continue-on-error: true
 
   # ── agent-tester ──────────────────────────────────────────────────────────
@@ -52,16 +52,16 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install --system -e agents/pair-forge/ -e agents/agent-tester/
+        run: uv pip install -e agents/pair-forge/ -e agents/agent-tester/
 
       - name: Smoke tests — agent-tester
-        run: python -m pytest agents/agent-tester/agent_tester/tests/smoke/ -v
+        run: uv run pytest agents/agent-tester/agent_tester/tests/smoke/ -v
 
       - name: Validate pair-forge (level 1 — contract)
-        run: python -m agent_tester run --agent agents/pair-forge --level 1
+        run: uv run python -m agent_tester run --agent agents/pair-forge --level 1
 
       - name: Validate pair-forge (level 2 — prompt contracts)
-        run: python -m agent_tester run --agent agents/pair-forge --level 2
+        run: uv run python -m agent_tester run --agent agents/pair-forge --level 2
 
   # ── agent-forge ───────────────────────────────────────────────────────────
   agent-forge:
@@ -76,10 +76,10 @@ jobs:
           enable-cache: true
 
       - name: Install agent-forge
-        run: uv pip install --system -e agents/agent-forge/ -e agents/agent-tester/
+        run: uv pip install -e agents/agent-forge/ -e agents/agent-tester/
 
       - name: Smoke tests — agent-forge
-        run: python -m pytest agents/agent-forge/agent_forge/tests/smoke/ -v
+        run: uv run pytest agents/agent-forge/agent_forge/tests/smoke/ -v
 
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
@@ -94,10 +94,10 @@ jobs:
           enable-cache: true
 
       - name: Install ruff
-        run: uv pip install --system ruff
+        run: uv pip install ruff
 
       - name: Ruff check
-        run: python -m ruff check agents/
+        run: uv run ruff check agents/
 
       - name: Ruff format check
-        run: python -m ruff format --check agents/
+        run: uv run ruff format --check agents/
