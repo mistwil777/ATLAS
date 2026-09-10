@@ -37,26 +37,30 @@ def emit_metrics(agent_name: str, metrics: dict) -> None:
     """Emit execution metrics. No-op when ATLAS_COLLECT is off."""
     if not is_active():
         return
-    _emit({
-        "ts":      _now(),
-        "agent":   agent_name,
-        "mode":    get_mode(),
-        "type":    "metrics",
-        "metrics": metrics,
-    })
+    _emit(
+        {
+            "ts": _now(),
+            "agent": agent_name,
+            "mode": get_mode(),
+            "type": "metrics",
+            "metrics": metrics,
+        }
+    )
 
 
 def emit_output(agent_name: str, output: dict) -> None:
     """Emit a validated output. Only active in client mode — anonymized before emit."""
     if get_mode() != "client":
         return
-    _emit({
-        "ts":     _now(),
-        "agent":  agent_name,
-        "mode":   "client",
-        "type":   "output",
-        "output": anonymize(output),
-    })
+    _emit(
+        {
+            "ts": _now(),
+            "agent": agent_name,
+            "mode": "client",
+            "type": "output",
+            "output": anonymize(output),
+        }
+    )
 
 
 def anonymize(data: dict) -> dict:

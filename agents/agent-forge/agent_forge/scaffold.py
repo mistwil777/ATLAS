@@ -16,30 +16,30 @@ def generate(params: dict, output_dir: Path) -> Path:
                  output_type, domain, uses_llm (bool).
     Returns the root path of the generated agent.
     """
-    slug      = params["agent_slug"]
-    pkg       = params["pkg_name"]
-    cls       = _class_name(pkg)
-    desc      = params.get("description", "An ATLAS agent.")
-    inp       = params.get("input_type", "raw data")
-    out       = params.get("output_type", "processed output")
-    domain    = params.get("domain", "general")
-    uses_llm  = bool(params.get("uses_llm", False))
+    slug = params["agent_slug"]
+    pkg = params["pkg_name"]
+    cls = _class_name(pkg)
+    desc = params.get("description", "An ATLAS agent.")
+    inp = params.get("input_type", "raw data")
+    out = params.get("output_type", "processed output")
+    domain = params.get("domain", "general")
+    uses_llm = bool(params.get("uses_llm", False))
 
-    root     = output_dir / slug
-    pkg_dir  = root / pkg
+    root = output_dir / slug
+    pkg_dir = root / pkg
     test_dir = pkg_dir / "tests" / "smoke" / "fixtures"
     test_dir.mkdir(parents=True, exist_ok=True)
 
-    _write(root / "pyproject.toml",            _pyproject(slug, pkg, desc, uses_llm))
-    _write(pkg_dir / "__init__.py",            _init(slug, desc))
-    _write(pkg_dir / "__main__.py",            _main(slug, pkg, cls))
-    _write(pkg_dir / "agent.py",               _agent(slug, pkg, cls, inp, out, domain, uses_llm))
-    _write(pkg_dir / "collect.py",             _collect())
-    _write(pkg_dir / "docker.py",              _docker(slug, pkg))
-    _write(pkg_dir / "install.py",             _install(slug, pkg))
-    _write(pkg_dir / "prompts.py",             _prompts(slug, domain, out))
-    _write(pkg_dir / "tools.py",               _tools(slug, pkg))
-    _write(pkg_dir / "tests" / "__init__.py",  "")
+    _write(root / "pyproject.toml", _pyproject(slug, pkg, desc, uses_llm))
+    _write(pkg_dir / "__init__.py", _init(slug, desc))
+    _write(pkg_dir / "__main__.py", _main(slug, pkg, cls))
+    _write(pkg_dir / "agent.py", _agent(slug, pkg, cls, inp, out, domain, uses_llm))
+    _write(pkg_dir / "collect.py", _collect())
+    _write(pkg_dir / "docker.py", _docker(slug, pkg))
+    _write(pkg_dir / "install.py", _install(slug, pkg))
+    _write(pkg_dir / "prompts.py", _prompts(slug, domain, out))
+    _write(pkg_dir / "tools.py", _tools(slug, pkg))
+    _write(pkg_dir / "tests" / "__init__.py", "")
     _write(pkg_dir / "tests" / "smoke" / "__init__.py", "")
     _write(pkg_dir / "tests" / "smoke" / "test_smoke.py", _test_smoke(slug, pkg, cls))
     (test_dir / ".gitkeep").touch()
@@ -53,9 +53,10 @@ def _write(path: Path, content: str) -> None:
 
 # ── Templates ─────────────────────────────────────────────────────────────────
 
+
 def _pyproject(slug: str, pkg: str, desc: str, uses_llm: bool) -> str:
     boto_dep = '    "boto3>=1.35,<2.0",\n' if uses_llm else ""
-    return f'''\
+    return f"""\
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -80,7 +81,7 @@ include = ["{pkg}*"]
 
 [tool.setuptools.package-data]
 "{pkg}.tests.smoke.fixtures" = ["*"]
-'''
+"""
 
 
 def _init(slug: str, desc: str) -> str:
@@ -144,7 +145,7 @@ def _agent(slug: str, pkg: str, cls: str, inp: str, out: str, domain: str, uses_
 
     llm_fn_def = ""
     if uses_llm:
-        llm_fn_def = f'''\
+        llm_fn_def = f"""\
 
 def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 2048) -> str | None:
     try:
@@ -168,11 +169,15 @@ def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 2048) -> str |
         logging.getLogger("{pkg}").warning("LLM call failed: %s", exc)
         return None
 
-'''
+"""
 
-    llm_param_doc  = "        llm_fn:  callable(prompt, llm_config, max_tokens) -> str | None\n" if uses_llm else ""
+    llm_param_doc = (
+        "        llm_fn:  callable(prompt, llm_config, max_tokens) -> str | None\n"
+        if uses_llm
+        else ""
+    )
     llm_param_init = "        llm_fn=None,\n" if uses_llm else ""
-    llm_self       = "        self._llm = llm_fn or _default_llm\n" if uses_llm else ""
+    llm_self = "        self._llm = llm_fn or _default_llm\n" if uses_llm else ""
 
     return f'''\
 """{slug} — core agent logic.

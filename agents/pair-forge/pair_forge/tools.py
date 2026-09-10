@@ -12,17 +12,35 @@ import unicodedata
 # ── Dispatch map: extraction method → ordered list of tools ───────────────────
 
 TOOLS_BY_METHOD: dict[str, list[str]] = {
-    "text":     ["normalize_encoding", "normalize_whitespace", "extract_code_blocks"],
-    "rtf":      ["normalize_encoding", "normalize_whitespace", "strip_page_artifacts"],
-    "pdf":      ["normalize_encoding", "normalize_whitespace", "strip_page_artifacts", "normalize_tables", "remove_boilerplate"],
-    "ocr":      ["fix_ocr_noise", "normalize_encoding", "normalize_whitespace", "strip_page_artifacts", "normalize_tables"],
-    "docx":     ["normalize_encoding", "normalize_whitespace", "remove_boilerplate", "normalize_tables"],
-    "zip":      ["normalize_encoding", "normalize_whitespace"],
+    "text": ["normalize_encoding", "normalize_whitespace", "extract_code_blocks"],
+    "rtf": ["normalize_encoding", "normalize_whitespace", "strip_page_artifacts"],
+    "pdf": [
+        "normalize_encoding",
+        "normalize_whitespace",
+        "strip_page_artifacts",
+        "normalize_tables",
+        "remove_boilerplate",
+    ],
+    "ocr": [
+        "fix_ocr_noise",
+        "normalize_encoding",
+        "normalize_whitespace",
+        "strip_page_artifacts",
+        "normalize_tables",
+    ],
+    "docx": [
+        "normalize_encoding",
+        "normalize_whitespace",
+        "remove_boilerplate",
+        "normalize_tables",
+    ],
+    "zip": ["normalize_encoding", "normalize_whitespace"],
     "fallback": ["normalize_encoding", "normalize_whitespace"],
 }
 
 
 # ── Tool registry ──────────────────────────────────────────────────────────────
+
 
 def apply_tools(content: str, method: str) -> tuple[str, list[str]]:
     """Apply the tool chain for the given extraction method.
@@ -44,15 +62,20 @@ def apply_tools(content: str, method: str) -> tuple[str, list[str]]:
 
 # ── Individual tools ───────────────────────────────────────────────────────────
 
+
 def normalize_encoding(text: str) -> str:
     """Normalize unicode: typographic quotes, dashes, non-breaking spaces, etc."""
     replacements = {
-        "‘": "'", "’": "'",   # curly single quotes
-        "“": '"', "”": '"',   # curly double quotes
-        "–": "-", "—": "-",   # en-dash, em-dash
-        " ": " ", "​": "",    # non-breaking space, zero-width space
-        "…": "...",                # ellipsis
-        "﻿": "",                   # BOM
+        "‘": "'",
+        "’": "'",  # curly single quotes
+        "“": '"',
+        "”": '"',  # curly double quotes
+        "–": "-",
+        "—": "-",  # en-dash, em-dash
+        " ": " ",
+        "​": "",  # non-breaking space, zero-width space
+        "…": "...",  # ellipsis
+        "﻿": "",  # BOM
     }
     for src, dst in replacements.items():
         text = text.replace(src, dst)
@@ -101,12 +124,12 @@ def fix_ocr_noise(text: str) -> str:
     """Correct common OCR substitution errors and stray characters."""
     # Common OCR confusions in code contexts
     fixes = [
-        (r"\bl\b(?=\d)", "1"),          # lone 'l' before digit → '1'
-        (r"(?<=\d)O(?=\d)", "0"),        # 'O' between digits → '0'
+        (r"\bl\b(?=\d)", "1"),  # lone 'l' before digit → '1'
+        (r"(?<=\d)O(?=\d)", "0"),  # 'O' between digits → '0'
         (r"(?<=[a-z])I(?=[a-z])", "l"),  # capital I inside word → lowercase l
-        (r"[|](?=\s)", "I"),             # pipe at word boundary → I
-        (r"\s{2,}", " "),               # multiple spaces → single (within line)
-        (r"- \n(\w)", r"\1"),            # hyphenated line break → join word
+        (r"[|](?=\s)", "I"),  # pipe at word boundary → I
+        (r"\s{2,}", " "),  # multiple spaces → single (within line)
+        (r"- \n(\w)", r"\1"),  # hyphenated line break → join word
     ]
     for pattern, replacement in fixes:
         text = re.sub(pattern, replacement, text)
@@ -123,8 +146,8 @@ def extract_code_blocks(text: str) -> str:
     if re.search(r"```", text):
         return text
 
-    lines   = text.split("\n")
-    result  = []
+    lines = text.split("\n")
+    result = []
     in_code = False
 
     for line in lines:
@@ -169,9 +192,9 @@ def normalize_tables(text: str) -> str:
     - ASCII box tables (+---+---+)
     - Tab-separated values
     """
-    lines  = text.split("\n")
+    lines = text.split("\n")
     result = []
-    i      = 0
+    i = 0
 
     while i < len(lines):
         line = lines[i]
@@ -211,14 +234,19 @@ def detect_language(text: str) -> str:
     """
     try:
         from langdetect import detect  # noqa: PLC0415
+
         return detect(text[:2000])
     except Exception:  # noqa: BLE001
         pass
 
     # Simple heuristic: count common French vs English stop words
     sample = text[:1000].lower()
-    fr_words = sum(sample.count(w) for w in [" le ", " la ", " les ", " de ", " du ", " est ", " que "])
-    en_words = sum(sample.count(w) for w in [" the ", " is ", " are ", " of ", " and ", " in ", " to "])
+    fr_words = sum(
+        sample.count(w) for w in [" le ", " la ", " les ", " de ", " du ", " est ", " que "]
+    )
+    en_words = sum(
+        sample.count(w) for w in [" the ", " is ", " are ", " of ", " and ", " in ", " to "]
+    )
     if fr_words > en_words:
         return "fr"
     if en_words > 0:
@@ -233,45 +261,45 @@ def detect_language(text: str) -> str:
 
 _DEPENDENCY_MANIFEST: list[dict] = [
     {
-        "capability":      "RTF extraction",
-        "trigger":         "files with .rtf extension",
-        "smoke_test":      "pair_forge.tests.smoke.test_rtf",
-        "tested_up_to":    "0.0.33",
+        "capability": "RTF extraction",
+        "trigger": "files with .rtf extension",
+        "smoke_test": "pair_forge.tests.smoke.test_rtf",
+        "tested_up_to": "0.0.33",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "striprtf>=0.0.33,<1.0",
+            "pip": "striprtf>=0.0.33,<1.0",
             "import": "striprtf.striprtf",
             "system": [],
         },
         "alternatives": [],
     },
     {
-        "capability":      "PDF text extraction",
-        "trigger":         "files with .pdf extension",
-        "smoke_test":      "pair_forge.tests.smoke.test_pdf",
-        "tested_up_to":    "0.11.4",
+        "capability": "PDF text extraction",
+        "trigger": "files with .pdf extension",
+        "smoke_test": "pair_forge.tests.smoke.test_pdf",
+        "tested_up_to": "0.11.4",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "pdfplumber>=0.11,<2.0",
+            "pip": "pdfplumber>=0.11,<2.0",
             "import": "pdfplumber",
             "system": [],
         },
         "alternatives": [
-            {"pip": "pymupdf>=1.0,<2.0",  "import": "fitz",  "system": []},
-            {"pip": "pypdf>=3.0,<5.0",    "import": "pypdf", "system": []},
+            {"pip": "pymupdf>=1.0,<2.0", "import": "fitz", "system": []},
+            {"pip": "pypdf>=3.0,<5.0", "import": "pypdf", "system": []},
         ],
     },
     {
-        "capability":      "PDF OCR (scanned documents)",
-        "trigger":         "PDF files with no selectable text",
-        "smoke_test":      "pair_forge.tests.smoke.test_ocr",
-        "tested_up_to":    "0.3.13",
+        "capability": "PDF OCR (scanned documents)",
+        "trigger": "PDF files with no selectable text",
+        "smoke_test": "pair_forge.tests.smoke.test_ocr",
+        "tested_up_to": "0.3.13",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "pytesseract>=0.3,<1.0",
+            "pip": "pytesseract>=0.3,<1.0",
             "import": "pytesseract",
             "system": ["tesseract"],
         },
@@ -280,28 +308,28 @@ _DEPENDENCY_MANIFEST: list[dict] = [
         ],
     },
     {
-        "capability":      "PDF-to-image conversion (required for OCR)",
-        "trigger":         "PDF files with no selectable text",
-        "smoke_test":      "pair_forge.tests.smoke.test_ocr",
-        "tested_up_to":    "1.17.0",
+        "capability": "PDF-to-image conversion (required for OCR)",
+        "trigger": "PDF files with no selectable text",
+        "smoke_test": "pair_forge.tests.smoke.test_ocr",
+        "tested_up_to": "1.17.0",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "pdf2image>=1.17,<2.0",
+            "pip": "pdf2image>=1.17,<2.0",
             "import": "pdf2image",
             "system": ["pdftoppm"],
         },
         "alternatives": [],
     },
     {
-        "capability":      "Word document extraction",
-        "trigger":         "files with .docx extension",
-        "smoke_test":      "pair_forge.tests.smoke.test_docx",
-        "tested_up_to":    "1.1.2",
+        "capability": "Word document extraction",
+        "trigger": "files with .docx extension",
+        "smoke_test": "pair_forge.tests.smoke.test_docx",
+        "tested_up_to": "1.1.2",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "python-docx>=1.1,<2.0",
+            "pip": "python-docx>=1.1,<2.0",
             "import": "docx",
             "system": [],
         },
@@ -310,14 +338,14 @@ _DEPENDENCY_MANIFEST: list[dict] = [
         ],
     },
     {
-        "capability":      "Encoding detection (unknown formats)",
-        "trigger":         "files with unrecognized extension",
-        "smoke_test":      None,
-        "tested_up_to":    "5.2.0",
+        "capability": "Encoding detection (unknown formats)",
+        "trigger": "files with unrecognized extension",
+        "smoke_test": None,
+        "tested_up_to": "5.2.0",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "chardet>=5.0,<8.0",
+            "pip": "chardet>=5.0,<8.0",
             "import": "chardet",
             "system": [],
         },
@@ -326,14 +354,14 @@ _DEPENDENCY_MANIFEST: list[dict] = [
         ],
     },
     {
-        "capability":      "Language detection",
-        "trigger":         "all files — used to adapt generation prompt",
-        "smoke_test":      None,
-        "tested_up_to":    "1.0.9",
+        "capability": "Language detection",
+        "trigger": "all files — used to adapt generation prompt",
+        "smoke_test": None,
+        "tested_up_to": "1.0.9",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "langdetect>=1.0,<2.0",
+            "pip": "langdetect>=1.0,<2.0",
             "import": "langdetect",
             "system": [],
         },
@@ -370,23 +398,27 @@ def check_dependencies() -> dict[str, list[dict]]:
                     f"brew install {' '.join(system_missing)}"
                     f"  # or: apt-get install {' '.join(_apt_names(system_missing))}"
                 )
-            result["missing"].append({
-                "capability":   dep["capability"],
-                "trigger":      dep["trigger"],
-                "pip":          primary["pip"],
-                "system":       primary["system"],
-                "install_hint": " && ".join(hint_parts),
-                "smoke_test":   dep["smoke_test"],
-            })
+            result["missing"].append(
+                {
+                    "capability": dep["capability"],
+                    "trigger": dep["trigger"],
+                    "pip": primary["pip"],
+                    "system": primary["system"],
+                    "install_hint": " && ".join(hint_parts),
+                    "smoke_test": dep["smoke_test"],
+                }
+            )
             continue
 
         # 2. Check if this tool is deprecated
         if dep.get("deprecated_since"):
-            result["deprecated"].append({
-                "capability":      dep["capability"],
-                "deprecated_since": dep["deprecated_since"],
-                "replaced_by":     dep.get("replaced_by"),
-            })
+            result["deprecated"].append(
+                {
+                    "capability": dep["capability"],
+                    "deprecated_since": dep["deprecated_since"],
+                    "replaced_by": dep.get("replaced_by"),
+                }
+            )
             continue
 
         # 3. Check installed version against tested_up_to
@@ -395,18 +427,21 @@ def check_dependencies() -> dict[str, list[dict]]:
             pkg_name = primary["pip"].split(">=")[0].strip()
             installed = _installed_version(pkg_name)
             if installed and _version_newer_than(installed, tested):
-                result["untested_versions"].append({
-                    "capability":       dep["capability"],
-                    "tested_up_to":     tested,
-                    "installed_version": installed,
-                    "smoke_test":       dep["smoke_test"],
-                })
+                result["untested_versions"].append(
+                    {
+                        "capability": dep["capability"],
+                        "tested_up_to": tested,
+                        "installed_version": installed,
+                        "smoke_test": dep["smoke_test"],
+                    }
+                )
 
     return result
 
 
 def _can_import(module: str) -> bool:
     import importlib  # noqa: PLC0415
+
     try:
         importlib.import_module(module.split(".")[0])
         return True
@@ -416,6 +451,7 @@ def _can_import(module: str) -> bool:
 
 def _installed_version(package_name: str) -> str | None:
     import importlib.metadata  # noqa: PLC0415
+
     try:
         return importlib.metadata.version(package_name)
     except importlib.metadata.PackageNotFoundError:
@@ -425,8 +461,10 @@ def _installed_version(package_name: str) -> str | None:
 def _version_newer_than(installed: str, reference: str) -> bool:
     """Return True if installed version is strictly newer than reference."""
     try:
+
         def to_tuple(v: str) -> tuple[int, ...]:
             return tuple(int(x) for x in v.split(".")[:3] if x.isdigit())
+
         return to_tuple(installed) > to_tuple(reference)
     except Exception:  # noqa: BLE001
         return False
@@ -445,12 +483,12 @@ def get_manifest() -> list[dict]:
 # ── Registry ───────────────────────────────────────────────────────────────────
 
 _REGISTRY: dict[str, object] = {
-    "normalize_encoding":   normalize_encoding,
+    "normalize_encoding": normalize_encoding,
     "normalize_whitespace": normalize_whitespace,
     "strip_page_artifacts": strip_page_artifacts,
-    "fix_ocr_noise":        fix_ocr_noise,
-    "extract_code_blocks":  extract_code_blocks,
-    "remove_boilerplate":   remove_boilerplate,
-    "normalize_tables":     normalize_tables,
-    "detect_language":      detect_language,
+    "fix_ocr_noise": fix_ocr_noise,
+    "extract_code_blocks": extract_code_blocks,
+    "remove_boilerplate": remove_boilerplate,
+    "normalize_tables": normalize_tables,
+    "detect_language": detect_language,
 }

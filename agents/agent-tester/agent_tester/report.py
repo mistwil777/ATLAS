@@ -14,17 +14,17 @@ from agent_tester.prompt_tests import PromptTestReport
 
 def build_report(
     agent_path: Path,
-    contract:   ContractReport,
-    prompts:    PromptTestReport | None = None,
-    golden:     GoldenReport    | None = None,
+    contract: ContractReport,
+    prompts: PromptTestReport | None = None,
+    golden: GoldenReport | None = None,
 ) -> dict:
     """Combine level results into a single structured report dict."""
     overall = "PASS"
 
     contract_section = {
-        "passed":     contract.passed,
+        "passed": contract.passed,
         "violations": contract.violations,
-        "warnings":   contract.warnings,
+        "warnings": contract.warnings,
     }
     if not contract.passed:
         overall = "FAIL"
@@ -33,10 +33,11 @@ def build_report(
     if prompts is not None:
         prompts_section = {
             "passed": prompts.passed,
-            "total":  prompts.total,
+            "total": prompts.total,
             "failed": prompts.failed,
-            "tests":  [{"name": t.name, "passed": t.passed, "error": t.error}
-                       for t in prompts.tests],
+            "tests": [
+                {"name": t.name, "passed": t.passed, "error": t.error} for t in prompts.tests
+            ],
         }
         if not prompts.passed:
             overall = "FAIL"
@@ -44,21 +45,21 @@ def build_report(
     golden_section = None
     if golden is not None:
         golden_section = {
-            "passed":  golden.passed,
+            "passed": golden.passed,
             "skipped": golden.skipped,
-            "total":   golden.total,
-            "failed":  golden.failed,
+            "total": golden.total,
+            "failed": golden.failed,
         }
         if not golden.passed:
             overall = "FAIL"
 
     return {
-        "agent":    contract.agent_name,
-        "path":     str(agent_path),
+        "agent": contract.agent_name,
+        "path": str(agent_path),
         "contract": contract_section,
-        "prompts":  prompts_section,
-        "golden":   golden_section,
-        "overall":  overall,
+        "prompts": prompts_section,
+        "golden": golden_section,
+        "overall": overall,
     }
 
 
@@ -82,7 +83,7 @@ def print_report(report: dict) -> None:
         _section("Level 2 — Prompt contracts", p["passed"])
         for t in p.get("tests", []):
             status = "PASS" if t["passed"] else "FAIL"
-            color  = "green" if t["passed"] else "red"
+            color = "green" if t["passed"] else "red"
             _line(f"  [{status}] {t['name']}", color)
             if t.get("error"):
                 _line(f"         {t['error']}", "red")
@@ -97,7 +98,7 @@ def print_report(report: dict) -> None:
             _section("Level 3 — Golden tests", g["passed"])
 
     # Overall
-    color   = "green" if report["overall"] == "PASS" else "red"
+    color = "green" if report["overall"] == "PASS" else "red"
     overall = report["overall"]
     print()
     _line(f"Overall: {overall}", color)

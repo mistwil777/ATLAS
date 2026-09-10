@@ -12,14 +12,14 @@ import shutil
 
 _DEPENDENCY_MANIFEST: list[dict] = [
     {
-        "capability":      "JSON schema validation (prompt contracts)",
-        "trigger":         "level-2 prompt contract tests",
-        "smoke_test":      "agent_tester.tests.smoke.test_contract_valid",
-        "tested_up_to":    "4.23.0",
+        "capability": "JSON schema validation (prompt contracts)",
+        "trigger": "level-2 prompt contract tests",
+        "smoke_test": "agent_tester.tests.smoke.test_contract_valid",
+        "tested_up_to": "4.23.0",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "jsonschema>=4.0,<5.0",
+            "pip": "jsonschema>=4.0,<5.0",
             "import": "jsonschema",
             "system": [],
         },
@@ -28,28 +28,28 @@ _DEPENDENCY_MANIFEST: list[dict] = [
         ],
     },
     {
-        "capability":      "Behavioral golden tests (inspect-ai)",
-        "trigger":         "level-3 golden tests with a real LLM",
-        "smoke_test":      None,
-        "tested_up_to":    "0.3.45",
+        "capability": "Behavioral golden tests (inspect-ai)",
+        "trigger": "level-3 golden tests with a real LLM",
+        "smoke_test": None,
+        "tested_up_to": "0.3.45",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "inspect-ai>=0.3,<1.0",
+            "pip": "inspect-ai>=0.3,<1.0",
             "import": "inspect_ai",
             "system": [],
         },
         "alternatives": [],
     },
     {
-        "capability":      "Pytest test runner",
-        "trigger":         "running smoke tests of the target agent",
-        "smoke_test":      None,
-        "tested_up_to":    "8.3.5",
+        "capability": "Pytest test runner",
+        "trigger": "running smoke tests of the target agent",
+        "smoke_test": None,
+        "tested_up_to": "8.3.5",
         "deprecated_since": None,
-        "replaced_by":     None,
+        "replaced_by": None,
         "primary": {
-            "pip":    "pytest>=8.0,<9.0",
+            "pip": "pytest>=8.0,<9.0",
             "import": "pytest",
             "system": [],
         },
@@ -73,35 +73,41 @@ def check_dependencies() -> dict[str, list[dict]]:
             hint_parts = [f"pip install {primary['pip']}"]
             if system_missing:
                 hint_parts.append(f"brew install {' '.join(system_missing)}")
-            result["missing"].append({
-                "capability":   dep["capability"],
-                "trigger":      dep["trigger"],
-                "pip":          primary["pip"],
-                "system":       primary["system"],
-                "install_hint": " && ".join(hint_parts),
-                "smoke_test":   dep["smoke_test"],
-            })
+            result["missing"].append(
+                {
+                    "capability": dep["capability"],
+                    "trigger": dep["trigger"],
+                    "pip": primary["pip"],
+                    "system": primary["system"],
+                    "install_hint": " && ".join(hint_parts),
+                    "smoke_test": dep["smoke_test"],
+                }
+            )
             continue
 
         if dep.get("deprecated_since"):
-            result["deprecated"].append({
-                "capability":      dep["capability"],
-                "deprecated_since": dep["deprecated_since"],
-                "replaced_by":     dep.get("replaced_by"),
-            })
+            result["deprecated"].append(
+                {
+                    "capability": dep["capability"],
+                    "deprecated_since": dep["deprecated_since"],
+                    "replaced_by": dep.get("replaced_by"),
+                }
+            )
             continue
 
         tested = dep.get("tested_up_to")
         if tested:
-            pkg_name  = dep["primary"]["pip"].split(">=")[0].strip()
+            pkg_name = dep["primary"]["pip"].split(">=")[0].strip()
             installed = _installed_version(pkg_name)
             if installed and _version_newer_than(installed, tested):
-                result["untested_versions"].append({
-                    "capability":        dep["capability"],
-                    "tested_up_to":      tested,
-                    "installed_version": installed,
-                    "smoke_test":        dep["smoke_test"],
-                })
+                result["untested_versions"].append(
+                    {
+                        "capability": dep["capability"],
+                        "tested_up_to": tested,
+                        "installed_version": installed,
+                        "smoke_test": dep["smoke_test"],
+                    }
+                )
 
     return result
 
@@ -123,8 +129,10 @@ def _installed_version(package_name: str) -> str | None:
 
 def _version_newer_than(installed: str, reference: str) -> bool:
     try:
+
         def to_tuple(v: str) -> tuple[int, ...]:
             return tuple(int(x) for x in v.split(".")[:3] if x.isdigit())
+
         return to_tuple(installed) > to_tuple(reference)
     except Exception:  # noqa: BLE001
         return False

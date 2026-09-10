@@ -21,6 +21,6 @@ def test_pdf_extraction_content():
 
     assert method == "pdf", f"Expected method 'pdf', got '{method}'"
     assert len(content) > 20, "Extracted content is too short"
-    assert "Java" in content or "Python" in content, (
-        f"Reference keywords not found in extracted content: {content[:200]!r}"
-    )
+    assert (
+        "Java" in content or "Python" in content
+    ), f"Reference keywords not found in extracted content: {content[:200]!r}"

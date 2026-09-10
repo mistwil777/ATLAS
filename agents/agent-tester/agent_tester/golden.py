@@ -35,11 +35,16 @@ class GoldenReport:
     tests: list[GoldenTestCase] = field(default_factory=list)
 
     @property
-    def total(self)   -> int: return len(self.tests)
+    def total(self) -> int:
+        return len(self.tests)
+
     @property
-    def n_skipped(self) -> int: return sum(1 for t in self.tests if t.skipped)
+    def n_skipped(self) -> int:
+        return sum(1 for t in self.tests if t.skipped)
+
     @property
-    def failed(self)  -> int: return sum(1 for t in self.tests if not t.passed and not t.skipped)
+    def failed(self) -> int:
+        return sum(1 for t in self.tests if not t.passed and not t.skipped)
 
 
 def run_golden_tests(
@@ -50,20 +55,32 @@ def run_golden_tests(
     """Run behavioral golden tests. Returns a skipped report if inspect-ai or LLM unavailable."""
     if not _inspect_ai_available():
         return GoldenReport(
-            pkg_name, passed=True, skipped=True,
-            tests=[GoldenTestCase(
-                "inspect-ai availability", passed=True, skipped=True,
-                error="inspect-ai not installed — install with: pip install inspect-ai",
-            )],
+            pkg_name,
+            passed=True,
+            skipped=True,
+            tests=[
+                GoldenTestCase(
+                    "inspect-ai availability",
+                    passed=True,
+                    skipped=True,
+                    error="inspect-ai not installed — install with: pip install inspect-ai",
+                )
+            ],
         )
 
     if not llm_config:
         return GoldenReport(
-            pkg_name, passed=True, skipped=True,
-            tests=[GoldenTestCase(
-                "llm config", passed=True, skipped=True,
-                error="No LLM config provided — pass llm_config={provider, model_id} to enable",
-            )],
+            pkg_name,
+            passed=True,
+            skipped=True,
+            tests=[
+                GoldenTestCase(
+                    "llm config",
+                    passed=True,
+                    skipped=True,
+                    error="No LLM config provided — pass llm_config={provider, model_id} to enable",
+                )
+            ],
         )
 
     path = Path(agent_path).resolve()
@@ -80,33 +97,41 @@ def run_golden_tests(
 
 # ── Individual golden tasks ────────────────────────────────────────────────────
 
+
 def _test_pair_generation(pkg_name: str, llm_config: dict, agent_path: Path) -> GoldenTestCase:
     name = "pair_generation_produces_valid_pairs"
     try:
         import importlib  # noqa: PLC0415
 
-        mod       = importlib.import_module(pkg_name)
+        mod = importlib.import_module(pkg_name)
         agent_cls = next(
-            getattr(mod, n) for n in dir(mod)
-            if "Agent" in n and not n.startswith("_")
+            getattr(mod, n) for n in dir(mod) if "Agent" in n and not n.startswith("_")
         )
 
         config = {
-            "domain": "test", "task_type": "generation",
+            "domain": "test",
+            "task_type": "generation",
             "adapters": [{"name": "default", "description": ""}],
             "ingestion": {
                 "pair_generator": llm_config,
-                "pair_judge": {**llm_config, "min_score": 0.5, "auto_correct": False, "max_retries": 0},
+                "pair_judge": {
+                    **llm_config,
+                    "min_score": 0.5,
+                    "auto_correct": False,
+                    "max_retries": 0,
+                },
             },
-            "min_tokens": 10, "max_tokens": 512,
+            "min_tokens": 10,
+            "max_tokens": 512,
         }
 
-        agent    = agent_cls(project_id="golden_test", config=config)
-        fixture  = agent_path / pkg_name / "tests" / "smoke" / "fixtures" / "reference.pdf"
+        agent = agent_cls(project_id="golden_test", config=config)
+        fixture = agent_path / pkg_name / "tests" / "smoke" / "fixtures" / "reference.pdf"
 
         if not fixture.exists():
-            return GoldenTestCase(name, passed=True, skipped=True,
-                                  error="No reference.pdf fixture found")
+            return GoldenTestCase(
+                name, passed=True, skipped=True, error="No reference.pdf fixture found"
+            )
 
         results = list(agent.run(fixture, source="golden_test"))
         summary = next((r for r in results if r.get("summary")), None)
@@ -115,8 +140,9 @@ def _test_pair_generation(pkg_name: str, llm_config: dict, agent_path: Path) -> 
             return GoldenTestCase(name, False, error="No summary dict yielded by agent.run()")
 
         if summary.get("generated", 0) == 0:
-            return GoldenTestCase(name, False,
-                                  error=f"Agent generated 0 pairs. Full summary: {summary}")
+            return GoldenTestCase(
+                name, False, error=f"Agent generated 0 pairs. Full summary: {summary}"
+            )
 
         return GoldenTestCase(name, True)
 
@@ -128,34 +154,42 @@ def _test_judge_quality(pkg_name: str, llm_config: dict, agent_path: Path) -> Go
     name = "judge_scores_sensible_pair_above_threshold"
     try:
         import importlib  # noqa: PLC0415
-        mod       = importlib.import_module(pkg_name)
+
+        mod = importlib.import_module(pkg_name)
         agent_cls = next(
-            getattr(mod, n) for n in dir(mod)
-            if "Agent" in n and not n.startswith("_")
+            getattr(mod, n) for n in dir(mod) if "Agent" in n and not n.startswith("_")
         )
 
         config = {
-            "domain": "test", "task_type": "generation",
+            "domain": "test",
+            "task_type": "generation",
             "adapters": [{"name": "default", "description": ""}],
             "ingestion": {
                 "pair_generator": llm_config,
-                "pair_judge": {**llm_config, "min_score": 0.5, "auto_correct": False, "max_retries": 0},
+                "pair_judge": {
+                    **llm_config,
+                    "min_score": 0.5,
+                    "auto_correct": False,
+                    "max_retries": 0,
+                },
             },
-            "min_tokens": 10, "max_tokens": 512,
+            "min_tokens": 10,
+            "max_tokens": 512,
         }
         agent = agent_cls(project_id="golden_test", config=config)
 
         # A clearly correct pair should score above 0.5
         good_pair = {
-            "input":  "Convert the Java class `Greeter` with a single method `sayHello()` to Python.",
+            "input": "Convert the Java class `Greeter` with a single method `sayHello()` to Python.",
             "output": "class Greeter:\n    def say_hello(self):\n        print('Hello')\n",
         }
         verdict = agent._judge_pair(good_pair, {"name": "default", "description": ""})
-        score   = verdict.get("score", 0.0)
+        score = verdict.get("score", 0.0)
 
         if score < 0.5:
             return GoldenTestCase(
-                name, False,
+                name,
+                False,
                 error=f"Expected score >= 0.5 for a correct pair, got {score:.2f}",
             )
         return GoldenTestCase(name, True)
@@ -167,6 +201,7 @@ def _test_judge_quality(pkg_name: str, llm_config: dict, agent_path: Path) -> Go
 def _inspect_ai_available() -> bool:
     try:
         import inspect_ai  # noqa: F401, PLC0415
+
         return True
     except ImportError:
         return False

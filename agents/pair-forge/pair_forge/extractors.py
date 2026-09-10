@@ -17,7 +17,7 @@ from pathlib import Path
 logger = logging.getLogger("pair_forge.extractors")
 
 _TEXT_EXTENSIONS = {".java", ".py", ".txt", ".md", ".ts", ".js", ".go", ".rs", ".c", ".cpp", ".h"}
-_RTF_EXTENSIONS  = {".rtf"}
+_RTF_EXTENSIONS = {".rtf"}
 _MIN_PDF_CHARS = 50
 
 

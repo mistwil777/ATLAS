@@ -25,16 +25,18 @@ from pair_forge.tools import apply_tools, check_dependencies, detect_language
 
 # ── Default backend implementations (lazy imports — only used if not injected) ─
 
+
 def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 2048) -> str | None:
     try:
         import boto3  # noqa: PLC0415
         from botocore.config import Config  # noqa: PLC0415
 
-        model_id    = llm_config.get("model_id", "us.amazon.nova-pro-v1:0")
+        model_id = llm_config.get("model_id", "us.amazon.nova-pro-v1:0")
         temperature = float(llm_config.get("temperature", 0.1))
-        region      = llm_config.get("region", "us-east-1")
+        region = llm_config.get("region", "us-east-1")
         client = boto3.client(
-            "bedrock-runtime", region_name=region,
+            "bedrock-runtime",
+            region_name=region,
             config=Config(connect_timeout=10, read_timeout=120, retries={"max_attempts": 2}),
         )
         response = client.converse(
@@ -52,7 +54,7 @@ def _default_embed(texts: list[str]) -> list[list[float]]:
     try:
         import boto3  # noqa: PLC0415
 
-        client  = boto3.client("bedrock-runtime", region_name="us-east-1")
+        client = boto3.client("bedrock-runtime", region_name="us-east-1")
         results = []
         for text in texts:
             r = client.invoke_model(
@@ -71,6 +73,7 @@ def _default_log(level: str, message: str) -> None:
 
 
 # ── Agent ──────────────────────────────────────────────────────────────────────
+
 
 class PairForgeAgent:
     """Transforms raw documents into validated fine-tuning pairs.
@@ -94,25 +97,25 @@ class PairForgeAgent:
         self,
         project_id: str,
         config: dict,
-        llm_fn:    Callable[[str, dict, int], str | None]   | None = None,
-        embed_fn:  Callable[[list[str]], list[list[float]]] | None = None,
-        log_fn:    Callable[[str, str], None]               | None = None,
+        llm_fn: Callable[[str, dict, int], str | None] | None = None,
+        embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
+        log_fn: Callable[[str, str], None] | None = None,
         qdrant_url: str = "http://localhost:6333",
     ) -> None:
-        self.project_id  = project_id
-        self.config      = config
-        self.ingest_cfg  = config.get("ingestion", {})
-        self.gen_cfg     = self.ingest_cfg.get("pair_generator", {})
-        self.judge_cfg   = self.ingest_cfg.get("pair_judge", {})
-        self.min_score   = float(self.judge_cfg.get("min_score", 0.8))
+        self.project_id = project_id
+        self.config = config
+        self.ingest_cfg = config.get("ingestion", {})
+        self.gen_cfg = self.ingest_cfg.get("pair_generator", {})
+        self.judge_cfg = self.ingest_cfg.get("pair_judge", {})
+        self.min_score = float(self.judge_cfg.get("min_score", 0.8))
         self.max_retries = int(self.judge_cfg.get("max_retries", 2))
-        self.min_tokens  = int(config.get("min_tokens", 50))
-        self.max_tokens  = int(config.get("max_tokens", 2048))
-        self.qdrant_url  = qdrant_url
-        self._llm        = llm_fn    or _default_llm
-        self._embed      = embed_fn  or _default_embed
-        self._log        = log_fn    or _default_log
-        self._qdrant     = None
+        self.min_tokens = int(config.get("min_tokens", 50))
+        self.max_tokens = int(config.get("max_tokens", 2048))
+        self.qdrant_url = qdrant_url
+        self._llm = llm_fn or _default_llm
+        self._embed = embed_fn or _default_embed
+        self._log = log_fn or _default_log
+        self._qdrant = None
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -131,11 +134,17 @@ class PairForgeAgent:
         # --- Dependency check ---
         dep_status = check_dependencies()
         for item in dep_status.get("missing", []):
-            yield self._warn(f"Capability unavailable: {item['capability']} — {item['install_hint']}")
+            yield self._warn(
+                f"Capability unavailable: {item['capability']} — {item['install_hint']}"
+            )
         for item in dep_status.get("deprecated", []):
-            yield self._warn(f"Deprecated tool: {item['capability']} — replaced by: {item['replaced_by']}")
+            yield self._warn(
+                f"Deprecated tool: {item['capability']} — replaced by: {item['replaced_by']}"
+            )
         for item in dep_status.get("untested_versions", []):
-            yield self._warn(f"Untested version: {item['capability']} (tested up to {item['tested_up_to']})")
+            yield self._warn(
+                f"Untested version: {item['capability']} (tested up to {item['tested_up_to']})"
+            )
 
         # --- Extract content ---
         try:
@@ -187,13 +196,13 @@ class PairForgeAgent:
         yield self._info(f"Saved {n_saved} pairs")
 
         yield {
-            "summary":          True,
-            "generated":        len(pairs),
-            "validated":        len(validated),
-            "rejected":         len(rejected),
-            "saved":            n_saved,
+            "summary": True,
+            "generated": len(pairs),
+            "validated": len(validated),
+            "rejected": len(rejected),
+            "saved": n_saved,
             "patterns_learned": self._count_patterns(adapter),
-            "method":           method,
+            "method": method,
         }
 
     # ------------------------------------------------------------------
@@ -202,7 +211,7 @@ class PairForgeAgent:
 
     def _generate_pairs(self, content: str, adapter: dict) -> list[dict]:
         n_pairs = max(1, min(20, len(content) // 500))
-        prompt  = PAIR_GENERATION.format(
+        prompt = PAIR_GENERATION.format(
             domain=self.config.get("domain", "general"),
             task_type=self.config.get("task_type", "generation"),
             adapter_name=adapter.get("name", "default"),
@@ -220,22 +229,27 @@ class PairForgeAgent:
     # ------------------------------------------------------------------
 
     def _judge_and_iterate(self, pair: dict, adapter: dict) -> dict:
-        attempts     = 0
+        attempts = 0
         current_pair = pair
-        error_type   = "unknown"
-        error_desc   = ""
+        error_type = "unknown"
+        error_desc = ""
 
         while attempts <= self.max_retries:
-            verdict  = self._judge_pair(current_pair, adapter)
-            score    = verdict.get("score", 0.0)
+            verdict = self._judge_pair(current_pair, adapter)
+            score = verdict.get("score", 0.0)
             attempts += 1
 
             if score >= self.min_score:
-                return {"status": "validated", "pair": current_pair, "score": score, "attempts": attempts}
+                return {
+                    "status": "validated",
+                    "pair": current_pair,
+                    "score": score,
+                    "attempts": attempts,
+                }
 
             error_type = verdict.get("error_type") or "unknown"
             error_desc = verdict.get("error_description") or ""
-            suggested  = verdict.get("suggested_fix") or ""
+            suggested = verdict.get("suggested_fix") or ""
 
             self._store_memory(adapter, error_type, error_desc, suggested)
 
@@ -244,14 +258,22 @@ class PairForgeAgent:
 
             memories = self._retrieve_memories(adapter, error_desc)
             corrected = self._correct_pair(
-                current_pair, error_type, error_desc, suggested,
+                current_pair,
+                error_type,
+                error_desc,
+                suggested,
                 self._format_memories(memories),
             )
             if corrected:
                 current_pair = corrected
 
-        return {"status": "rejected", "pair": current_pair, "error_type": error_type,
-                "error_description": error_desc, "attempts": attempts}
+        return {
+            "status": "rejected",
+            "pair": current_pair,
+            "error_type": error_type,
+            "error_description": error_desc,
+            "attempts": attempts,
+        }
 
     def _judge_pair(self, pair: dict, adapter: dict) -> dict:
         prompt = JUDGE_EVALUATION.format(
@@ -263,8 +285,9 @@ class PairForgeAgent:
         raw = self._llm(prompt, self.judge_cfg, 256)
         return self._parse_json_object(raw) or {"score": 0.0}
 
-    def _correct_pair(self, pair: dict, error_type: str, error_desc: str,
-                      suggested: str, memory_context: str) -> dict | None:
+    def _correct_pair(
+        self, pair: dict, error_type: str, error_desc: str, suggested: str, memory_context: str
+    ) -> dict | None:
         prompt = PAIR_CORRECTION.format(
             input=pair.get("input", ""),
             output=pair.get("output", ""),
@@ -283,6 +306,7 @@ class PairForgeAgent:
     def _get_qdrant(self):
         if self._qdrant is None:
             from qdrant_client import QdrantClient  # noqa: PLC0415
+
             host, port = self._parse_qdrant_url()
             self._qdrant = QdrantClient(host=host, port=port)
         return self._qdrant
@@ -301,7 +325,8 @@ class PairForgeAgent:
 
     def _ensure_collection(self, adapter: dict) -> None:
         from qdrant_client.models import Distance, VectorParams  # noqa: PLC0415
-        client     = self._get_qdrant()
+
+        client = self._get_qdrant()
         collection = self._collection_name(adapter)
         if collection not in [c.name for c in client.get_collections().collections]:
             client.create_collection(
@@ -314,6 +339,7 @@ class PairForgeAgent:
             return
         try:
             from qdrant_client.models import PointStruct  # noqa: PLC0415
+
             self._ensure_collection(adapter)
             vectors = self._embed([error_desc])
             if not vectors:
@@ -321,13 +347,19 @@ class PairForgeAgent:
             client = self._get_qdrant()
             client.upsert(
                 collection_name=self._collection_name(adapter),
-                points=[PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=vectors[0],
-                    payload={"error_type": error_type, "error_description": error_desc,
-                             "suggested_fix": fix, "seen_count": 1,
-                             "last_seen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
-                )],
+                points=[
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=vectors[0],
+                        payload={
+                            "error_type": error_type,
+                            "error_description": error_desc,
+                            "suggested_fix": fix,
+                            "seen_count": 1,
+                            "last_seen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        },
+                    )
+                ],
             )
         except Exception as exc:  # noqa: BLE001
             self._log("warning", f"Memory store failed: {exc}")
@@ -342,7 +374,8 @@ class PairForgeAgent:
                 return []
             hits = self._get_qdrant().search(
                 collection_name=self._collection_name(adapter),
-                query_vector=vectors[0], limit=limit,
+                query_vector=vectors[0],
+                limit=limit,
             )
             return [h.payload for h in hits if h.score > 0.7]
         except Exception as exc:  # noqa: BLE001
@@ -371,17 +404,27 @@ class PairForgeAgent:
             return 0
         raw_dir = Path(self.config.get("data", {}).get("raw", f"output/{self.project_id}/raw/"))
         raw_dir.mkdir(parents=True, exist_ok=True)
-        ts          = time.strftime("%Y%m%d_%H%M%S")
-        out_path    = raw_dir / f"pairs_{source}_{ts}.jsonl"
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        out_path = raw_dir / f"pairs_{source}_{ts}.jsonl"
         ingested_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         with out_path.open("w", encoding="utf-8") as f:
             for pair in pairs:
-                f.write(json.dumps({
-                    "prompt":     pair.get("input", ""),
-                    "completion": pair.get("output", ""),
-                    "meta": {"source": source, "adapter": adapter.get("name", "default"),
-                             "ingested_at": ingested_at, "origin": "pair-forge"},
-                }, ensure_ascii=False) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "prompt": pair.get("input", ""),
+                            "completion": pair.get("output", ""),
+                            "meta": {
+                                "source": source,
+                                "adapter": adapter.get("name", "default"),
+                                "ingested_at": ingested_at,
+                                "origin": "pair-forge",
+                            },
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
         return len(pairs)
 
     # ------------------------------------------------------------------
@@ -396,9 +439,14 @@ class PairForgeAgent:
                     return a
         return adapters[0] if adapters else {"name": "default", "description": ""}
 
-    def _info(self, msg: str)  -> dict: return {"level": "info",    "msg": msg}
-    def _warn(self, msg: str)  -> dict: return {"level": "warning", "msg": msg}
-    def _error(self, msg: str) -> dict: return {"level": "error",   "msg": msg}
+    def _info(self, msg: str) -> dict:
+        return {"level": "info", "msg": msg}
+
+    def _warn(self, msg: str) -> dict:
+        return {"level": "warning", "msg": msg}
+
+    def _error(self, msg: str) -> dict:
+        return {"level": "error", "msg": msg}
 
     @staticmethod
     def _strip_markdown(raw: str) -> str:
@@ -411,18 +459,18 @@ class PairForgeAgent:
 
     def _parse_json_list(self, raw: str) -> list[dict]:
         try:
-            raw   = self._strip_markdown(raw)
+            raw = self._strip_markdown(raw)
             start = raw.find("[")
-            end   = raw.rfind("]") + 1
+            end = raw.rfind("]") + 1
             return json.loads(raw[start:end]) if start != -1 and end > 0 else []
         except Exception:  # noqa: BLE001
             return []
 
     def _parse_json_object(self, raw: str) -> dict | None:
         try:
-            raw   = self._strip_markdown(raw)
+            raw = self._strip_markdown(raw)
             start = raw.find("{")
-            end   = raw.rfind("}") + 1
+            end = raw.rfind("}") + 1
             return json.loads(raw[start:end]) if start != -1 and end > 0 else None
         except Exception:  # noqa: BLE001
             return None

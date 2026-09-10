@@ -31,7 +31,7 @@ GENERATION_SCHEMA: dict = {
         "type": "object",
         "required": ["input", "output"],
         "properties": {
-            "input":  {"type": "string"},
+            "input": {"type": "string"},
             "output": {"type": "string"},
         },
     },
@@ -43,9 +43,9 @@ JUDGE_SCHEMA: dict = {
     "required": ["score"],
     "properties": {
         "score": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-        "error_type":        {"type": ["string", "null"]},
+        "error_type": {"type": ["string", "null"]},
         "error_description": {"type": ["string", "null"]},
-        "suggested_fix":     {"type": ["string", "null"]},
+        "suggested_fix": {"type": ["string", "null"]},
     },
 }
 
@@ -53,13 +53,14 @@ CORRECTION_SCHEMA: dict = {
     "type": "object",
     "required": ["input", "output"],
     "properties": {
-        "input":  {"type": "string"},
+        "input": {"type": "string"},
         "output": {"type": "string"},
     },
 }
 
 
 # ── Result types ───────────────────────────────────────────────────────────────
+
 
 @dataclass
 class PromptTestCase:
@@ -85,6 +86,7 @@ class PromptTestReport:
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
+
 def run_prompt_tests(agent_path: Path, pkg_name: str) -> PromptTestReport:
     """Run all prompt contract tests against an agent.
 
@@ -101,7 +103,8 @@ def run_prompt_tests(agent_path: Path, pkg_name: str) -> PromptTestReport:
         agent_cls = _import_agent_class(pkg_name)
     except Exception as exc:  # noqa: BLE001
         return PromptTestReport(
-            pkg_name, False,
+            pkg_name,
+            False,
             [PromptTestCase("import_agent_class", False, str(exc))],
         )
 
@@ -131,11 +134,14 @@ def run_prompt_tests(agent_path: Path, pkg_name: str) -> PromptTestReport:
 
 # ── Individual test cases ──────────────────────────────────────────────────────
 
+
 def _test_generation_valid(cls: type, config: dict) -> PromptTestCase:
     name = "generation_valid_json"
-    mock_response = json.dumps([
-        {"input": "Convert Java class Foo to Python.", "output": "class Foo:\n    pass"},
-    ])
+    mock_response = json.dumps(
+        [
+            {"input": "Convert Java class Foo to Python.", "output": "class Foo:\n    pass"},
+        ]
+    )
     agent = cls(project_id="test", config=config, llm_fn=lambda p, c, m: mock_response)
     try:
         pairs = agent._generate_pairs("Some Java content here.", _adapter())
@@ -147,11 +153,7 @@ def _test_generation_valid(cls: type, config: dict) -> PromptTestCase:
 
 def _test_generation_fenced(cls: type, config: dict) -> PromptTestCase:
     name = "generation_json_in_markdown_fences"
-    mock_response = (
-        "```json\n"
-        + json.dumps([{"input": "q", "output": "a"}])
-        + "\n```"
-    )
+    mock_response = "```json\n" + json.dumps([{"input": "q", "output": "a"}]) + "\n```"
     agent = cls(project_id="test", config=config, llm_fn=lambda p, c, m: mock_response)
     try:
         pairs = agent._generate_pairs("content", _adapter())
@@ -185,11 +187,12 @@ def _test_generation_none(cls: type, config: dict) -> PromptTestCase:
 
 def _test_judge_valid(cls: type, config: dict) -> PromptTestCase:
     name = "judge_valid_schema"
-    mock_response = json.dumps({"score": 0.92, "error_type": None,
-                                "error_description": None, "suggested_fix": None})
+    mock_response = json.dumps(
+        {"score": 0.92, "error_type": None, "error_description": None, "suggested_fix": None}
+    )
     agent = cls(project_id="test", config=config, llm_fn=lambda p, c, m: mock_response)
     try:
-        pair    = {"input": "Convert Foo", "output": "class Foo: pass"}
+        pair = {"input": "Convert Foo", "output": "class Foo: pass"}
         verdict = agent._judge_pair(pair, _adapter())
         _validate_schema(verdict, JUDGE_SCHEMA)
         assert 0.0 <= verdict["score"] <= 1.0
@@ -211,6 +214,7 @@ def _test_judge_out_of_range(cls: type, config: dict) -> PromptTestCase:
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+
 def _import_agent_class(pkg_name: str) -> type:
     module = importlib.import_module(pkg_name)
     cls_name = next(
@@ -224,13 +228,19 @@ def _import_agent_class(pkg_name: str) -> type:
 
 def _minimal_config() -> dict:
     return {
-        "domain":    "test",
+        "domain": "test",
         "task_type": "generation",
-        "adapters":  [{"name": "default", "description": "test adapter"}],
+        "adapters": [{"name": "default", "description": "test adapter"}],
         "ingestion": {
             "pair_generator": {"provider": "mock", "model_id": "mock", "temperature": 0.1},
-            "pair_judge":     {"provider": "mock", "model_id": "mock", "temperature": 0.1,
-                               "min_score": 0.8, "auto_correct": False, "max_retries": 0},
+            "pair_judge": {
+                "provider": "mock",
+                "model_id": "mock",
+                "temperature": 0.1,
+                "min_score": 0.8,
+                "auto_correct": False,
+                "max_retries": 0,
+            },
         },
         "min_tokens": 10,
         "max_tokens": 512,
@@ -244,6 +254,7 @@ def _adapter() -> dict:
 def _validate_schema(data: Any, schema: dict) -> None:
     try:
         import jsonschema  # noqa: PLC0415
+
         jsonschema.validate(instance=data, schema=schema)
     except ImportError:
         # jsonschema not installed — basic structural check

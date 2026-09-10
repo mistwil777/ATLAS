@@ -22,9 +22,9 @@ JSON:"""
 
 # Interactive mode — fixed questions, not LLM prompts
 INTERACTIVE_QUESTIONS = [
-    ("agent_name",   "Agent name (kebab-case, e.g. text-classifier): "),
-    ("description",  "One-sentence description of what it does: "),
-    ("input_type",   "What does it receive as input? (e.g. text documents, CSV files): "),
-    ("output_type",  "What does it produce as output? (e.g. JSON with label, SQL query): "),
-    ("uses_llm",     "Does it need an LLM to operate? (yes/no): "),
+    ("agent_name", "Agent name (kebab-case, e.g. text-classifier): "),
+    ("description", "One-sentence description of what it does: "),
+    ("input_type", "What does it receive as input? (e.g. text documents, CSV files): "),
+    ("output_type", "What does it produce as output? (e.g. JSON with label, SQL query): "),
+    ("uses_llm", "Does it need an LLM to operate? (yes/no): "),
 ]

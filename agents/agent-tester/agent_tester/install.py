@@ -13,13 +13,13 @@ _PYPROJECT = Path(__file__).parent.parent / "pyproject.toml"
 
 
 def run_install(verbose: bool = True) -> bool:
-    manifest  = get_manifest()
+    manifest = get_manifest()
     failures: list[dict] = []
 
     for dep in manifest:
         capability = dep["capability"]
-        primary    = dep["primary"]
-        smoke_mod  = dep["smoke_test"]
+        primary = dep["primary"]
+        smoke_mod = dep["smoke_test"]
 
         if verbose:
             print(f"\n[INSTALL] {capability}")
@@ -33,11 +33,13 @@ def run_install(verbose: bool = True) -> bool:
             if resolved:
                 _promote_alternative(dep, resolved, verbose)
             else:
-                failures.append({
-                    "capability": capability,
-                    "primary":    primary["pip"],
-                    "tried":      [a["pip"] for a in dep.get("alternatives", [])],
-                })
+                failures.append(
+                    {
+                        "capability": capability,
+                        "primary": primary["pip"],
+                        "tried": [a["pip"] for a in dep.get("alternatives", [])],
+                    }
+                )
                 continue
 
         if verbose:
@@ -64,7 +66,8 @@ def _run_smoke(module_path: str) -> bool:
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "--tb=short", "-q", "--pyargs", module_path],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         return result.returncode == 0
     except Exception:  # noqa: BLE001
@@ -80,7 +83,9 @@ def _try_alternatives(dep: dict, verbose: bool) -> dict | None:
             if venv_python is None:
                 continue
             try:
-                subprocess.run([venv_python, "-m", "pip", "install", alt["pip"], "--quiet"], check=True)
+                subprocess.run(
+                    [venv_python, "-m", "pip", "install", alt["pip"], "--quiet"], check=True
+                )
                 ok = _run_smoke_in_venv(venv_python, dep["smoke_test"])
             except Exception:  # noqa: BLE001
                 ok = False
@@ -107,10 +112,13 @@ def _create_isolated_venv(base_dir: str) -> str | None:
 
 def _run_smoke_in_venv(python_path: str, module_path: str) -> bool:
     try:
-        subprocess.run([python_path, "-m", "pip", "install", "pytest", "agent-tester", "--quiet"], check=True)
+        subprocess.run(
+            [python_path, "-m", "pip", "install", "pytest", "agent-tester", "--quiet"], check=True
+        )
         result = subprocess.run(
             [python_path, "-m", "pytest", "--tb=short", "-q", "--pyargs", module_path],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         return result.returncode == 0
     except Exception:  # noqa: BLE001
@@ -120,14 +128,14 @@ def _run_smoke_in_venv(python_path: str, module_path: str) -> bool:
 def _promote_alternative(dep: dict, alt: dict, verbose: bool) -> None:
     _pip_install(alt["pip"])
     if _PYPROJECT.exists():
-        text    = _PYPROJECT.read_text(encoding="utf-8")
+        text = _PYPROJECT.read_text(encoding="utf-8")
         old_pkg = dep["primary"]["pip"].split(">=")[0].strip()
-        lines   = []
+        lines = []
         for line in text.splitlines():
             stripped = line.strip().strip('"').strip("'")
             if stripped.startswith(old_pkg + ">=") or stripped.startswith(old_pkg + "=="):
                 indent = line[: len(line) - len(line.lstrip())]
-                quote  = '"' if '"' in line else "'"
+                quote = '"' if '"' in line else "'"
                 lines.append(f'{indent}{quote}{alt["pip"]}{quote},')
             else:
                 lines.append(line)

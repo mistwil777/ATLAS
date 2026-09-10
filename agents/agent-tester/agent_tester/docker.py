@@ -13,7 +13,7 @@ _PIP_SYSTEM_EXTRAS: dict[str, list[str]] = {}
 
 
 def generate_dockerfile(output_path: Path | None = None) -> Path:
-    manifest    = get_manifest()
+    manifest = get_manifest()
     active_pips = [dep["primary"]["pip"] for dep in manifest]
     system_pkgs = []
     for spec in active_pips:

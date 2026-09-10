@@ -16,6 +16,7 @@ def _make_agent(tmp: str, files: dict[str, str]) -> Path:
 
 def test_missing_pyproject_fails():
     from agent_tester.contract import validate_contract
+
     with tempfile.TemporaryDirectory() as tmp:
         agent_path = Path(tmp) / "empty_agent"
         agent_path.mkdir()
@@ -26,6 +27,7 @@ def test_missing_pyproject_fails():
 
 def test_missing_tools_py_fails():
     from agent_tester.contract import validate_contract
+
     with tempfile.TemporaryDirectory() as tmp:
         files = {
             "pyproject.toml": '[project]\nname = "bad-agent"\nversion = "0.1.0"\nrequires-python = ">=3.10"\n',
@@ -40,6 +42,7 @@ def test_missing_tools_py_fails():
 
 def test_missing_smoke_tests_fails():
     from agent_tester.contract import validate_contract
+
     with tempfile.TemporaryDirectory() as tmp:
         files = {
             "pyproject.toml": '[project]\nname = "bad-agent"\nversion = "0.1.0"\nrequires-python = ">=3.10"\n',
@@ -54,6 +57,7 @@ def test_missing_smoke_tests_fails():
 
 def test_missing_check_command_fails():
     from agent_tester.contract import validate_contract
+
     with tempfile.TemporaryDirectory() as tmp:
         files = {
             "pyproject.toml": '[project]\nname = "bad-agent"\nversion = "0.1.0"\nrequires-python = ">=3.10"\n',

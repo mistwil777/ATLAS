@@ -29,15 +29,17 @@ def _make_fake_llm(agent_name: str = "text-classifier"):
     import json
 
     def fake_llm(prompt: str, llm_config: dict, max_tokens: int = 1024) -> str:
-        return json.dumps({
-            "agent_name":   agent_name,
-            "description":  "Classifies text documents.",
-            "input_type":   "raw text documents (TXT, PDF)",
-            "output_type":  "JSON with label and confidence score",
-            "domain":       "document classification",
-            "constraints":  ["offline", "no external API calls"],
-            "uses_llm":     False,
-        })
+        return json.dumps(
+            {
+                "agent_name": agent_name,
+                "description": "Classifies text documents.",
+                "input_type": "raw text documents (TXT, PDF)",
+                "output_type": "JSON with label and confidence score",
+                "domain": "document classification",
+                "constraints": ["offline", "no external API calls"],
+                "uses_llm": False,
+            }
+        )
 
     return fake_llm
 
@@ -67,7 +69,9 @@ def test_generate_from_spec_produces_expected_files():
 
 def test_generate_from_spec_passes_contract():
     """Step 2: validate_contract() returns passed=True."""
-    pytest.importorskip("agent_tester", reason="agent-tester not installed — skipping contract check")
+    pytest.importorskip(
+        "agent_tester", reason="agent-tester not installed — skipping contract check"
+    )
 
     from agent_tester.contract import validate_contract
 
@@ -100,6 +104,6 @@ def test_generate_from_spec_correct_name_in_pyproject():
 
         pyproject = output_dir / "text-classifier" / "pyproject.toml"
         content = pyproject.read_text(encoding="utf-8")
-        assert 'name = "text-classifier"' in content, (
-            f"Expected 'name = \"text-classifier\"' in pyproject.toml:\n{content}"
-        )
+        assert (
+            'name = "text-classifier"' in content
+        ), f"Expected 'name = \"text-classifier\"' in pyproject.toml:\n{content}"

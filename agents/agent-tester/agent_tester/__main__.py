@@ -24,14 +24,15 @@ def main() -> None:
     # run
     run_p = sub.add_parser("run", help="Validate an agent")
     run_p.add_argument("--agent", required=True, help="Path to the agent directory")
-    run_p.add_argument("--level", type=int, choices=[1, 2, 3],
-                       help="Run only this level (default: all levels)")
-    run_p.add_argument("--llm-provider",  default=None)
-    run_p.add_argument("--llm-model-id",  default=None)
+    run_p.add_argument(
+        "--level", type=int, choices=[1, 2, 3], help="Run only this level (default: all levels)"
+    )
+    run_p.add_argument("--llm-provider", default=None)
+    run_p.add_argument("--llm-model-id", default=None)
 
     # check / init / install
-    sub.add_parser("check",   help="Check own dependencies")
-    sub.add_parser("init",    help="Generate Dockerfile")
+    sub.add_parser("check", help="Check own dependencies")
+    sub.add_parser("init", help="Generate Dockerfile")
     sub.add_parser("install", help="Smart install with smoke tests")
 
     args = parser.parse_args()
@@ -50,6 +51,7 @@ def main() -> None:
 
 def _cmd_check() -> None:
     from agent_tester.tools import check_dependencies  # noqa: PLC0415
+
     result = check_dependencies()
     if not any(result.values()):
         print("All dependencies present and up to date.")
@@ -59,18 +61,22 @@ def _cmd_check() -> None:
     for item in result.get("deprecated", []):
         print(f"[DEPRECATED] {item['capability']} — replaced by: {item['replaced_by']}")
     for item in result.get("untested_versions", []):
-        print(f"[UNTESTED]  {item['capability']} — tested up to {item['tested_up_to']}, "
-              f"found {item['installed_version']}")
+        print(
+            f"[UNTESTED]  {item['capability']} — tested up to {item['tested_up_to']}, "
+            f"found {item['installed_version']}"
+        )
 
 
 def _cmd_init() -> None:
     from agent_tester.docker import generate_dockerfile  # noqa: PLC0415
+
     path = generate_dockerfile()
     print(f"Dockerfile generated: {path}")
 
 
 def _cmd_install() -> None:
     from agent_tester.install import run_install  # noqa: PLC0415
+
     ok = run_install(verbose=True)
     sys.exit(0 if ok else 1)
 
@@ -95,8 +101,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     contract_report = validate_contract(agent_path) if level in (None, 1) else None
-    prompt_report   = None
-    golden_report   = None
+    prompt_report = None
+    golden_report = None
 
     if level in (None, 2) and (contract_report is None or contract_report.passed):
         # Add agent path to sys.path so we can import its package
@@ -107,13 +113,17 @@ def _cmd_run(args: argparse.Namespace) -> None:
     if level in (None, 3):
         llm_config = None
         if args.llm_provider and args.llm_model_id:
-            llm_config = {"provider": args.llm_provider, "model_id": args.llm_model_id,
-                          "temperature": 0.1}
+            llm_config = {
+                "provider": args.llm_provider,
+                "model_id": args.llm_model_id,
+                "temperature": 0.1,
+            }
         golden_report = run_golden_tests(agent_path, pkg_name, llm_config)
 
     if contract_report is None:
         # Ran only level 2 or 3 — create a dummy passed contract report
         from agent_tester.contract import ContractReport  # noqa: PLC0415
+
         contract_report = ContractReport(agent_path, pkg_name, True)
 
     report = build_report(agent_path, contract_report, prompt_report, golden_report)

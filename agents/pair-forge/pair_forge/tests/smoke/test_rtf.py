@@ -16,6 +16,6 @@ def test_rtf_extraction_content():
 
     assert method == "rtf", f"Expected method 'rtf', got '{method}'"
     assert len(content) > 10, "Extracted content is too short"
-    assert "Java" in content or "Python" in content, (
-        f"Reference keywords not found: {content[:200]!r}"
-    )
+    assert (
+        "Java" in content or "Python" in content
+    ), f"Reference keywords not found: {content[:200]!r}"

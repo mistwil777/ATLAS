@@ -26,11 +26,12 @@ def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 1024) -> str |
         import boto3  # noqa: PLC0415
         from botocore.config import Config  # noqa: PLC0415
 
-        model_id    = llm_config.get("model_id", "us.amazon.nova-pro-v1:0")
+        model_id = llm_config.get("model_id", "us.amazon.nova-pro-v1:0")
         temperature = float(llm_config.get("temperature", 0.1))
-        region      = llm_config.get("region", "us-east-1")
+        region = llm_config.get("region", "us-east-1")
         client = boto3.client(
-            "bedrock-runtime", region_name=region,
+            "bedrock-runtime",
+            region_name=region,
             config=Config(connect_timeout=10, read_timeout=120, retries={"max_attempts": 2}),
         )
         response = client.converse(
@@ -45,8 +46,7 @@ def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 1024) -> str |
 
 
 def _default_log(level: str, message: str) -> None:
-    getattr(logging.getLogger("agent_forge"), level,
-            logging.getLogger("agent_forge").info)(message)
+    getattr(logging.getLogger("agent_forge"), level, logging.getLogger("agent_forge").info)(message)
 
 
 class AgentForgeAgent:
@@ -64,14 +64,14 @@ class AgentForgeAgent:
         self,
         output_dir: Path | None = None,
         config: dict | None = None,
-        llm_fn:  Callable[[str, dict, int], str | None] | None = None,
-        log_fn:  Callable[[str, str], None] | None = None,
+        llm_fn: Callable[[str, dict, int], str | None] | None = None,
+        log_fn: Callable[[str, str], None] | None = None,
     ) -> None:
         self.output_dir = Path(output_dir) if output_dir else Path("agents")
-        self.config     = config or {}
-        self.llm_cfg    = self.config.get("llm", {})
-        self._llm       = llm_fn or _default_llm
-        self._log       = log_fn or _default_log
+        self.config = config or {}
+        self.llm_cfg = self.config.get("llm", {})
+        self._llm = llm_fn or _default_llm
+        self._log = log_fn or _default_log
 
     # ── Public entry point ─────────────────────────────────────────────────────
 
@@ -107,12 +107,12 @@ class AgentForgeAgent:
                 yield self._warn(f"Contract violation: {v}")
 
         yield {
-            "summary":          True,
-            "agent_name":       spec_dict.get("agent_name", ""),
-            "output_path":      str(output_path),
-            "uses_llm":         spec_dict.get("uses_llm", False),
-            "contract_passed":  contract_passed,
-            "violations":       violations,
+            "summary": True,
+            "agent_name": spec_dict.get("agent_name", ""),
+            "output_path": str(output_path),
+            "uses_llm": spec_dict.get("uses_llm", False),
+            "contract_passed": contract_passed,
+            "violations": violations,
         }
 
     # ── CDC mode ───────────────────────────────────────────────────────────────
@@ -137,7 +137,11 @@ class AgentForgeAgent:
             return None
 
         # Normalize uses_llm to bool
-        spec_dict["uses_llm"] = str(spec_dict.get("uses_llm", "false")).lower() in ("true", "yes", "1")
+        spec_dict["uses_llm"] = str(spec_dict.get("uses_llm", "false")).lower() in (
+            "true",
+            "yes",
+            "1",
+        )
         return spec_dict
 
     # ── Interactive mode ───────────────────────────────────────────────────────
@@ -165,16 +169,16 @@ class AgentForgeAgent:
         from agent_forge import scaffold  # noqa: PLC0415
 
         agent_name = spec_dict.get("agent_name", "new-agent").lower().replace(" ", "-")
-        pkg_name   = agent_name.replace("-", "_")
+        pkg_name = agent_name.replace("-", "_")
 
         params = {
-            "agent_slug":  agent_name,
-            "pkg_name":    pkg_name,
+            "agent_slug": agent_name,
+            "pkg_name": pkg_name,
             "description": spec_dict.get("description", ""),
-            "input_type":  spec_dict.get("input_type", ""),
+            "input_type": spec_dict.get("input_type", ""),
             "output_type": spec_dict.get("output_type", ""),
-            "domain":      spec_dict.get("domain", ""),
-            "uses_llm":    bool(spec_dict.get("uses_llm", False)),
+            "domain": spec_dict.get("domain", ""),
+            "uses_llm": bool(spec_dict.get("uses_llm", False)),
         }
 
         yield self._info("Generating scaffolding...")
@@ -191,6 +195,7 @@ class AgentForgeAgent:
     def _validate(self, output_path: Path) -> tuple[bool, list[str]]:
         try:
             from agent_tester.contract import validate_contract  # noqa: PLC0415
+
             report = validate_contract(output_path)
             return report.passed, report.violations
         except ImportError:
@@ -201,9 +206,14 @@ class AgentForgeAgent:
 
     # ── Helpers ────────────────────────────────────────────────────────────────
 
-    def _info(self, msg: str)  -> dict: return {"level": "info",    "msg": msg}
-    def _warn(self, msg: str)  -> dict: return {"level": "warning", "msg": msg}
-    def _error(self, msg: str) -> dict: return {"level": "error",   "msg": msg}
+    def _info(self, msg: str) -> dict:
+        return {"level": "info", "msg": msg}
+
+    def _warn(self, msg: str) -> dict:
+        return {"level": "warning", "msg": msg}
+
+    def _error(self, msg: str) -> dict:
+        return {"level": "error", "msg": msg}
 
     @staticmethod
     def _strip_markdown(raw: str) -> str:
@@ -216,9 +226,9 @@ class AgentForgeAgent:
 
     def _parse_json_object(self, raw: str) -> dict | None:
         try:
-            raw   = self._strip_markdown(raw)
+            raw = self._strip_markdown(raw)
             start = raw.find("{")
-            end   = raw.rfind("}") + 1
+            end = raw.rfind("}") + 1
             return json.loads(raw[start:end]) if start != -1 and end > 0 else None
         except Exception:  # noqa: BLE001
             return None

@@ -25,18 +25,19 @@ _PYPROJECT = Path(__file__).parent.parent / "pyproject.toml"
 
 # ── Public entry point ─────────────────────────────────────────────────────────
 
+
 def run_install(verbose: bool = True) -> bool:
     """Install all dependencies with smoke tests and auto-replacement.
 
     Returns True if all capabilities are satisfied.
     """
-    manifest  = get_manifest()
+    manifest = get_manifest()
     failures: list[dict] = []
 
     for dep in manifest:
         capability = dep["capability"]
-        primary    = dep["primary"]
-        smoke_mod  = dep["smoke_test"]
+        primary = dep["primary"]
+        smoke_mod = dep["smoke_test"]
 
         if verbose:
             print(f"\n[INSTALL] {capability}")
@@ -53,11 +54,13 @@ def run_install(verbose: bool = True) -> bool:
             if resolved:
                 _promote_alternative(dep, resolved, verbose)
             else:
-                failures.append({
-                    "capability": capability,
-                    "primary":    primary["pip"],
-                    "tried":      [a["pip"] for a in dep.get("alternatives", [])],
-                })
+                failures.append(
+                    {
+                        "capability": capability,
+                        "primary": primary["pip"],
+                        "tried": [a["pip"] for a in dep.get("alternatives", [])],
+                    }
+                )
                 continue
 
         if verbose:
@@ -69,7 +72,9 @@ def run_install(verbose: bool = True) -> bool:
             print(f"  - {f['capability']}")
             print(f"    primary:  {f['primary']}")
             print(f"    tried:    {', '.join(f['tried']) or 'none'}")
-            print("    action:   add a working alternative to the manifest and re-run `pair-forge install`")
+            print(
+                "    action:   add a working alternative to the manifest and re-run `pair-forge install`"
+            )
         return False
 
     if verbose:
@@ -78,6 +83,7 @@ def run_install(verbose: bool = True) -> bool:
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
+
 
 def _pip_install(pip_spec: str) -> None:
     subprocess.run(
@@ -90,9 +96,9 @@ def _run_smoke(module_path: str) -> bool:
     """Run a smoke test module via pytest. Returns True if all tests pass."""
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", "--tb=short", "-q",
-             "--pyargs", module_path],
-            capture_output=True, text=True,
+            [sys.executable, "-m", "pytest", "--tb=short", "-q", "--pyargs", module_path],
+            capture_output=True,
+            text=True,
         )
         return result.returncode == 0
     except Exception:  # noqa: BLE001
@@ -150,7 +156,8 @@ def _run_smoke_in_venv(python_path: str, module_path: str) -> bool:
         )
         result = subprocess.run(
             [python_path, "-m", "pytest", "--tb=short", "-q", "--pyargs", module_path],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         return result.returncode == 0
     except Exception:  # noqa: BLE001
@@ -173,15 +180,15 @@ def _promote_alternative(dep: dict, alt: dict, verbose: bool) -> None:
 def _replace_dep_in_pyproject(old_pip: str, new_pip: str) -> None:
     text = _PYPROJECT.read_text(encoding="utf-8")
     old_pkg = old_pip.split(">=")[0].split("==")[0].strip()
-    lines   = text.splitlines()
-    out     = []
+    lines = text.splitlines()
+    out = []
     for line in lines:
         stripped = line.strip().strip('"').strip("'")
         if stripped.startswith(old_pkg + ">=") or stripped.startswith(old_pkg + "=="):
             # Preserve indentation and quoting style
-            indent  = line[: len(line) - len(line.lstrip())]
-            quote   = '"' if '"' in line else "'"
-            out.append(f'{indent}{quote}{new_pip}{quote},')
+            indent = line[: len(line) - len(line.lstrip())]
+            quote = '"' if '"' in line else "'"
+            out.append(f"{indent}{quote}{new_pip}{quote},")
         else:
             out.append(line)
     _PYPROJECT.write_text("\n".join(out) + "\n", encoding="utf-8")
@@ -198,15 +205,21 @@ def _git_commit_and_tag(capability: str, new_pip: str) -> None:
         # Increment patch version for the tag
         try:
             import importlib.metadata  # noqa: PLC0415
+
             current = importlib.metadata.version("pair-forge")
-            parts   = current.split(".")
+            parts = current.split(".")
             parts[-1] = str(int(parts[-1]) + 1)
             tag_version = ".".join(parts)
         except Exception:  # noqa: BLE001
             tag_version = "0.0.0"
         subprocess.run(
-            ["git", "tag", f"pair-forge/v{tag_version}", "-m",
-             f"Auto-replace {capability} dep → {pkg_name}"],
+            [
+                "git",
+                "tag",
+                f"pair-forge/v{tag_version}",
+                "-m",
+                f"Auto-replace {capability} dep → {pkg_name}",
+            ],
             check=True,
         )
     except subprocess.CalledProcessError:

@@ -13,21 +13,21 @@ _PIP_SYSTEM_EXTRAS: dict[str, list[str]] = {}
 
 
 def generate_dockerfile(output_path: Path | None = None) -> Path:
-    manifest    = get_manifest()
+    manifest = get_manifest()
     active_pips = _collect_active_pip_specs(manifest)
     system_pkgs = _collect_system_packages(active_pips)
-    content     = _render(active_pips, system_pkgs)
-    out         = output_path or _OUTPUT_PATH
+    content = _render(active_pips, system_pkgs)
+    out = output_path or _OUTPUT_PATH
     out.write_text(content, encoding="utf-8")
     return out
 
 
 def _collect_active_pip_specs(manifest: list[dict]) -> list[str]:
-    seen:  set[str] = set()
+    seen: set[str] = set()
     specs: list[str] = []
     for dep in manifest:
         spec = dep["primary"]["pip"]
-        pkg  = _pkg_name(spec)
+        pkg = _pkg_name(spec)
         if pkg not in seen:
             seen.add(pkg)
             specs.append(spec)

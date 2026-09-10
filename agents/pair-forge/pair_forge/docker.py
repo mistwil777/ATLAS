@@ -21,39 +21,40 @@ _OUTPUT_PATH = Path("Dockerfile.pair-forge")
 
 # System packages needed by pair-forge tools (brew name → apt name)
 _SYSTEM_APT: dict[str, str] = {
-    "tesseract":  "tesseract-ocr",
-    "pdftoppm":   "poppler-utils",
+    "tesseract": "tesseract-ocr",
+    "pdftoppm": "poppler-utils",
 }
 
 # Map pip package names to known system-level extras required at runtime
 _PIP_SYSTEM_EXTRAS: dict[str, list[str]] = {
     "pytesseract": ["tesseract-ocr"],
-    "pdf2image":   ["poppler-utils"],
+    "pdf2image": ["poppler-utils"],
 }
 
 
 def generate_dockerfile(output_path: Path | None = None) -> Path:
     """Generate a Dockerfile from the current manifest and write it to disk."""
-    manifest    = get_manifest()
+    manifest = get_manifest()
     active_pips = _collect_active_pip_specs(manifest)
     system_pkgs = _collect_system_packages(active_pips)
 
     content = _render(active_pips, system_pkgs)
-    out     = output_path or _OUTPUT_PATH
+    out = output_path or _OUTPUT_PATH
     out.write_text(content, encoding="utf-8")
     return out
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
+
 def _collect_active_pip_specs(manifest: list[dict]) -> list[str]:
     """Return pip specs for the active tool of each capability (no duplicates)."""
-    seen:  set[str] = set()
+    seen: set[str] = set()
     specs: list[str] = []
 
     for dep in manifest:
         spec = dep["primary"]["pip"]
-        pkg  = _pkg_name(spec)
+        pkg = _pkg_name(spec)
         if pkg not in seen:
             seen.add(pkg)
             specs.append(spec)

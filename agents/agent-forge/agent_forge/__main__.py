@@ -27,6 +27,7 @@ def main() -> None:
                 output_dir = Path(args[idx + 1])
 
         from agent_forge.agent import AgentForgeAgent  # noqa: PLC0415
+
         agent = AgentForgeAgent(output_dir=output_dir)
         for log in agent.run(spec_path=spec_path):
             if log.get("summary"):
@@ -41,6 +42,7 @@ def main() -> None:
 
     elif command == "check":
         from agent_forge.tools import check_dependencies  # noqa: PLC0415
+
         result = check_dependencies()
         if not any(result.values()):
             print("All dependencies present and up to date.")
@@ -50,15 +52,19 @@ def main() -> None:
         for item in result.get("deprecated", []):
             print(f"[DEPRECATED] {item['capability']} — replaced by: {item['replaced_by']}")
         for item in result.get("untested_versions", []):
-            print(f"[UNTESTED]  {item['capability']} — tested up to {item['tested_up_to']}, found {item['installed_version']}")
+            print(
+                f"[UNTESTED]  {item['capability']} — tested up to {item['tested_up_to']}, found {item['installed_version']}"
+            )
 
     elif command == "init":
         from agent_forge.docker import generate_dockerfile  # noqa: PLC0415
+
         path = generate_dockerfile()
         print(f"Dockerfile generated: {path}")
 
     elif command == "install":
         from agent_forge.install import run_install  # noqa: PLC0415
+
         run_install()
 
     else:

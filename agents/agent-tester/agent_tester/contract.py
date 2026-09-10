@@ -26,7 +26,11 @@ from pathlib import Path
 # ── Required fields per manifest entry ────────────────────────────────────────
 
 _REQUIRED_MANIFEST_FIELDS = {
-    "capability", "primary", "alternatives", "smoke_test", "tested_up_to",
+    "capability",
+    "primary",
+    "alternatives",
+    "smoke_test",
+    "tested_up_to",
 }
 
 _REQUIRED_PRIMARY_FIELDS = {"pip", "import", "system"}
@@ -42,7 +46,7 @@ class ContractReport:
     agent_name: str
     passed: bool
     violations: list[str] = field(default_factory=list)
-    warnings: list[str]   = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 def validate_contract(agent_path: Path) -> ContractReport:
@@ -51,9 +55,9 @@ def validate_contract(agent_path: Path) -> ContractReport:
     Returns a ContractReport with passed=True if all required checks pass.
     Warnings are informational — they do not fail the contract.
     """
-    path       = Path(agent_path).resolve()
+    path = Path(agent_path).resolve()
     violations: list[str] = []
-    warnings:   list[str] = []
+    warnings: list[str] = []
 
     # 1. pyproject.toml
     pyproject = path / "pyproject.toml"
@@ -90,6 +94,7 @@ def validate_contract(agent_path: Path) -> ContractReport:
 
 
 # ── Internal checkers ──────────────────────────────────────────────────────────
+
 
 def _check_pyproject(path: Path, violations: list, warnings: list) -> str | None:
     try:
@@ -131,8 +136,8 @@ def _check_tools_py(pkg_dir: Path, violations: list, warnings: list) -> None:
         return
 
     source = tools_py.read_text(encoding="utf-8")
-    tree   = ast.parse(source)
-    fns    = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    tree = ast.parse(source)
+    fns = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
 
     if "get_manifest" not in fns:
         violations.append(f"{pkg_dir.name}/tools.py missing function: get_manifest()")
@@ -152,7 +157,9 @@ def _check_smoke_tests(pkg_dir: Path, violations: list, warnings: list) -> None:
     else:
         fixtures = smoke_dir / "fixtures"
         if not fixtures.is_dir():
-            warnings.append(f"{pkg_dir.name}/tests/smoke/fixtures/ missing — smoke tests may lack reference files")
+            warnings.append(
+                f"{pkg_dir.name}/tests/smoke/fixtures/ missing — smoke tests may lack reference files"
+            )
 
 
 def _check_main_py(pkg_dir: Path, violations: list, warnings: list) -> None:
@@ -175,16 +182,15 @@ def _check_manifest_fields(tools_py: Path, violations: list, warnings: list) -> 
 
     for field_name in _REQUIRED_MANIFEST_FIELDS:
         if f'"{field_name}"' not in source and f"'{field_name}'" not in source:
-            violations.append(
-                f"tools.py manifest appears to be missing field: '{field_name}'"
-            )
+            violations.append(f"tools.py manifest appears to be missing field: '{field_name}'")
 
 
 def _check_cli_execution(pkg_dir: Path, pkg_name: str, violations: list, warnings: list) -> None:
     result = subprocess.run(
         [sys.executable, "-m", pkg_name, "check"],
         cwd=str(pkg_dir.parent),
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode not in (0, 1):
         violations.append(
