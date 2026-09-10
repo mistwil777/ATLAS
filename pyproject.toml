@@ -14,6 +14,7 @@ pair-forge    = { workspace = true }
 agent-tester  = { workspace = true }
 agent-forge   = { workspace = true }
 atlas-bus     = { workspace = true }
+atlas-memory  = { workspace = true }
 
 # ── Ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]

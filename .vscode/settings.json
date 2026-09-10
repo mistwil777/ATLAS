@@ -7,6 +7,7 @@
     "agents/pair-forge",
     "agents/agent-tester",
     "agents/agent-forge",
-    "agents/atlas-bus"
+    "agents/atlas-bus",
+    "agents/atlas-memory"
   ]
 }

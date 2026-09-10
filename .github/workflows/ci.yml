@@ -103,6 +103,29 @@ jobs:
       - name: Smoke tests — atlas-bus
         run: uv run pytest agents/atlas-bus/atlas_bus/tests/smoke/ -v
 
+  # ── atlas-memory ──────────────────────────────────────────────────────────
+  atlas-memory:
+    name: atlas-memory / smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install atlas-memory
+        run: uv pip install -e "agents/atlas-memory/[dev]"
+
+      - name: Dependency status
+        run: uv run python -m atlas_memory check
+        continue-on-error: true
+
+      - name: Smoke tests — atlas-memory
+        run: uv run pytest agents/atlas-memory/atlas_memory/tests/smoke/ -v
+
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: lint
