@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cdc-router"
+version = "1.0.0"
+description = "Autonomous agent: segments a CDC into agentic blocs, routes to existing ATLAS agents or proposes creation."
+requires-python = ">=3.10"
+dependencies = [
+    "boto3>=1.35,<2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+memory = ["atlas-memory"]
+
+[project.entry-points."atlas.agents"]
+cdc-router = "cdc_router.agent:CdcRouterAgent"
+
+[project.scripts]
+cdc-router = "cdc_router.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cdc_router*"]
+
+[tool.setuptools.package-data]
+"cdc_router.tests.smoke.fixtures" = ["*"]

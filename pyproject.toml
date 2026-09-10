@@ -15,6 +15,7 @@ agent-tester  = { workspace = true }
 agent-forge   = { workspace = true }
 atlas-bus     = { workspace = true }
 atlas-memory  = { workspace = true }
+cdc-router    = { workspace = true }
 
 # ── Ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]

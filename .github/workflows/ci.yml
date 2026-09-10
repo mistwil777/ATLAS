@@ -103,6 +103,29 @@ jobs:
       - name: Smoke tests — atlas-bus
         run: uv run pytest agents/atlas-bus/atlas_bus/tests/smoke/ -v
 
+  # ── cdc-router ────────────────────────────────────────────────────────────
+  cdc-router:
+    name: cdc-router / smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install cdc-router
+        run: uv pip install -e "agents/cdc-router/[dev]"
+
+      - name: Dependency status
+        run: uv run python -m cdc_router check
+        continue-on-error: true
+
+      - name: Smoke tests — cdc-router
+        run: uv run pytest agents/cdc-router/cdc_router/tests/smoke/ -v
+
   # ── atlas-memory ──────────────────────────────────────────────────────────
   atlas-memory:
     name: atlas-memory / smoke

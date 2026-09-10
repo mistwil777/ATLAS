@@ -8,6 +8,7 @@
     "agents/agent-tester",
     "agents/agent-forge",
     "agents/atlas-bus",
-    "agents/atlas-memory"
+    "agents/atlas-memory",
+    "agents/cdc-router"
   ]
 }

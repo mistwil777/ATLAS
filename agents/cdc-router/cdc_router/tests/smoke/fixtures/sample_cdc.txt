@@ -1,0 +1,17 @@
+## CDC — Système de gestion des tickets support
+
+### Objectif
+Automatiser le traitement des tickets support entrants pour réduire le temps de réponse.
+
+### Fonctionnalités
+
+1. **Réception des tickets** : Lire les emails entrants depuis la boîte support@company.com
+2. **Classification de l'urgence** : Analyser le contenu du ticket et le classer en Urgent / Normal / Faible
+3. **Extraction des informations client** : Identifier le nom du client, son numéro de contrat et le produit concerné depuis le texte libre du ticket
+4. **Enregistrement en base** : Sauvegarder le ticket enrichi dans la base PostgreSQL (schéma fixe : id, client_id, priority, product, created_at)
+5. **Notification** : Envoyer un email de confirmation au client avec le numéro de ticket généré (format : TKT-YYYYMMDD-XXXX)
+
+### Contraintes
+- Temps de traitement < 30 secondes par ticket
+- Disponibilité 24/7
+- Audit trail complet
