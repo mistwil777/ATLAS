@@ -149,6 +149,29 @@ jobs:
       - name: Smoke tests — atlas-memory
         run: uv run pytest agents/atlas-memory/atlas_memory/tests/smoke/ -v
 
+  # ── atlas-judge ───────────────────────────────────────────────────────────
+  atlas-judge:
+    name: atlas-judge / smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install atlas-judge + cdc-router (for criteria.py)
+        run: uv pip install -e "agents/atlas-judge/[dev]" -e "agents/cdc-router/"
+
+      - name: Dependency status
+        run: uv run python -m atlas_judge check
+        continue-on-error: true
+
+      - name: Smoke tests — atlas-judge
+        run: uv run pytest agents/atlas-judge/atlas_judge/tests/smoke/ -v
+
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: lint

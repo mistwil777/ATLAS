@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-judge"
+version = "1.0.0"
+description = "Autonomous agent: LLM-as-judge evaluator for all ATLAS agent outputs."
+requires-python = ">=3.10"
+dependencies = [
+    "boto3>=1.35,<2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+memory = ["atlas-memory"]
+
+[project.entry-points."atlas.agents"]
+atlas-judge = "atlas_judge.agent:AtlasJudgeAgent"
+
+[project.scripts]
+atlas-judge = "atlas_judge.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atlas_judge*"]
+
+[tool.setuptools.package-data]
+"atlas_judge.tests.smoke.fixtures" = ["*"]
