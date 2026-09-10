@@ -1,6 +1,6 @@
 # ATLAS
 
-Framework d'agents autonomes pour construire des solutions agentiques de bout en bout.
+Framework d'agents autonomes pour construire des solutions agentiques de bout en bout — architecture **Agentic Mesh** (agents pairs découverts dynamiquement, exécution isolée par subprocess, mémoire collective partagée, composabilité sans couplage fort).
 
 Chaque agent est un package Python indépendant : installable, testable et déployable seul. Les agents se composent via **atlas-bus** (isolation subprocess, découverte automatique par entry-points). **atlas-memory** fournit la mémoire partagée (RAG + Knowledge Graph) qui permet à chaque agent de s'améliorer dans le temps.
 
