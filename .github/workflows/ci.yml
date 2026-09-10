@@ -98,7 +98,7 @@ jobs:
           enable-cache: true
 
       - name: Install atlas-bus
-        run: uv pip install -e agents/atlas-bus/
+        run: uv pip install -e "agents/atlas-bus/[dev]"
 
       - name: Smoke tests — atlas-bus
         run: uv run pytest agents/atlas-bus/atlas_bus/tests/smoke/ -v
@@ -117,7 +117,7 @@ jobs:
           enable-cache: true
 
       - name: Install ruff
-        run: uv pip install ruff
+        run: uv pip install "ruff==0.7.4"
 
       - name: Ruff check
         run: uv run ruff check agents/
