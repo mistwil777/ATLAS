@@ -9,7 +9,7 @@ def test_contract_passed():
     from agent_tester.contract import validate_contract
     report = validate_contract(FAKE_AGENT)
     assert report.passed, (
-        f"fake_agent should pass the contract but got violations:\n"
+        "fake_agent should pass the contract but got violations:\n"
         + "\n".join(f"  - {v}" for v in report.violations)
     )
 

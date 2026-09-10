@@ -13,15 +13,12 @@ Flow per capability:
 
 from __future__ import annotations
 
-import importlib
-import json
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 from pair_forge.tools import get_manifest
-
 
 _PYPROJECT = Path(__file__).parent.parent / "pyproject.toml"
 
@@ -50,7 +47,7 @@ def run_install(verbose: bool = True) -> bool:
         # Check smoke test
         if smoke_mod and not _run_smoke(smoke_mod):
             if verbose:
-                print(f"  [FAIL] primary tool failed smoke test")
+                print("  [FAIL] primary tool failed smoke test")
 
             resolved = _try_alternatives(dep, verbose)
             if resolved:
@@ -64,7 +61,7 @@ def run_install(verbose: bool = True) -> bool:
                 continue
 
         if verbose:
-            print(f"  [OK]")
+            print("  [OK]")
 
     if failures:
         print("\n[BLOCKED] The following capabilities could not be installed:\n")
@@ -72,7 +69,7 @@ def run_install(verbose: bool = True) -> bool:
             print(f"  - {f['capability']}")
             print(f"    primary:  {f['primary']}")
             print(f"    tried:    {', '.join(f['tried']) or 'none'}")
-            print(f"    action:   add a working alternative to the manifest and re-run `pair-forge install`")
+            print("    action:   add a working alternative to the manifest and re-run `pair-forge install`")
         return False
 
     if verbose:

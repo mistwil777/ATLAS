@@ -20,7 +20,7 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install -e agents/pair-forge/ -e agents/agent-tester/
+        run: uv pip install --system -e agents/pair-forge/ -e agents/agent-tester/
 
       - name: Dependency status
         run: python -m pair_forge check
@@ -28,14 +28,14 @@ jobs:
 
       - name: Smoke tests (PDF / RTF / DOCX)
         run: |
-          uv run pytest \
+          python -m pytest \
             agents/pair-forge/pair_forge/tests/smoke/test_pdf.py \
             agents/pair-forge/pair_forge/tests/smoke/test_rtf.py \
             agents/pair-forge/pair_forge/tests/smoke/test_docx.py \
             -v
 
       - name: Smoke tests (OCR — optional)
-        run: uv run pytest agents/pair-forge/pair_forge/tests/smoke/test_ocr.py -v
+        run: python -m pytest agents/pair-forge/pair_forge/tests/smoke/test_ocr.py -v
         continue-on-error: true
 
   # ── agent-tester ──────────────────────────────────────────────────────────
@@ -52,16 +52,34 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install -e agents/pair-forge/ -e agents/agent-tester/
+        run: uv pip install --system -e agents/pair-forge/ -e agents/agent-tester/
 
       - name: Smoke tests — agent-tester
-        run: uv run pytest agents/agent-tester/agent_tester/tests/smoke/ -v
+        run: python -m pytest agents/agent-tester/agent_tester/tests/smoke/ -v
 
       - name: Validate pair-forge (level 1 — contract)
-        run: uv run python -m agent_tester run --agent agents/pair-forge --level 1
+        run: python -m agent_tester run --agent agents/pair-forge --level 1
 
       - name: Validate pair-forge (level 2 — prompt contracts)
-        run: uv run python -m agent_tester run --agent agents/pair-forge --level 2
+        run: python -m agent_tester run --agent agents/pair-forge --level 2
+
+  # ── agent-forge ───────────────────────────────────────────────────────────
+  agent-forge:
+    name: agent-forge / smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install agent-forge
+        run: uv pip install --system -e agents/agent-forge/ -e agents/agent-tester/
+
+      - name: Smoke tests — agent-forge
+        run: python -m pytest agents/agent-forge/agent_forge/tests/smoke/ -v
 
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
@@ -76,10 +94,10 @@ jobs:
           enable-cache: true
 
       - name: Install ruff
-        run: uv pip install ruff
+        run: uv pip install --system ruff
 
       - name: Ruff check
-        run: uv run ruff check agents/
+        run: python -m ruff check agents/
 
       - name: Ruff format check
-        run: uv run ruff format --check agents/
+        run: python -m ruff format --check agents/

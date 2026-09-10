@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 import unicodedata
 
-
 # ── Dispatch map: extraction method → ordered list of tools ───────────────────
 
 TOOLS_BY_METHOD: dict[str, list[str]] = {
@@ -93,8 +92,8 @@ def strip_page_artifacts(text: str) -> str:
         stripped = line.strip()
         if len(stripped) > 5:
             line_counts[stripped] = line_counts.get(stripped, 0) + 1
-    repeated = {l for l, c in line_counts.items() if c >= 3}
-    lines = [l for l in lines if l.strip() not in repeated]
+    repeated = {ln for ln, c in line_counts.items() if c >= 3}
+    lines = [ln for ln in lines if ln.strip() not in repeated]
     return normalize_whitespace("\n".join(lines))
 
 
@@ -355,8 +354,7 @@ def check_dependencies() -> dict[str, list[dict]]:
 
     An empty dict (all lists empty) means everything is up to date.
     """
-    import importlib.metadata  # noqa: PLC0415
-    import shutil              # noqa: PLC0415
+    import shutil  # noqa: PLC0415
 
     result: dict[str, list[dict]] = {"missing": [], "deprecated": [], "untested_versions": []}
 

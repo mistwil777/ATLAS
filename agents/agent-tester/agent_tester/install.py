@@ -120,7 +120,6 @@ def _run_smoke_in_venv(python_path: str, module_path: str) -> bool:
 def _promote_alternative(dep: dict, alt: dict, verbose: bool) -> None:
     _pip_install(alt["pip"])
     if _PYPROJECT.exists():
-        import re  # noqa: PLC0415
         text    = _PYPROJECT.read_text(encoding="utf-8")
         old_pkg = dep["primary"]["pip"].split(">=")[0].strip()
         lines   = []

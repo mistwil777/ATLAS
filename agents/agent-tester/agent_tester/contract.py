@@ -23,7 +23,6 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
 # ── Required fields per manifest entry ────────────────────────────────────────
 
 _REQUIRED_MANIFEST_FIELDS = {

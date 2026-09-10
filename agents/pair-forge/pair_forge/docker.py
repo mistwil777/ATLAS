@@ -17,7 +17,6 @@ from pathlib import Path
 
 from pair_forge.tools import get_manifest
 
-
 _OUTPUT_PATH = Path("Dockerfile.pair-forge")
 
 # System packages needed by pair-forge tools (brew name → apt name)
@@ -97,7 +96,7 @@ def _render(pip_specs: list[str], system_pkgs: list[str]) -> str:
 
     pip_args = " \\\n    ".join(f'"{s}"' for s in pip_specs)
     lines += [
-        f"RUN pip install --no-cache-dir \\",
+        "RUN pip install --no-cache-dir \\",
         f"    {pip_args}",
         "",
         "COPY . .",

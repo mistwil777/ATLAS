@@ -13,8 +13,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "reference.pdf"
 
 
 def test_ocr_imports():
+    import pdf2image  # noqa: F401
     import pytesseract  # noqa: F401
-    import pdf2image    # noqa: F401
 
 
 @pytest.mark.skipif(

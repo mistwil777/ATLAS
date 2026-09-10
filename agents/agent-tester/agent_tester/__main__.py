@@ -76,10 +76,10 @@ def _cmd_install() -> None:
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
-    from agent_tester.contract     import validate_contract   # noqa: PLC0415
-    from agent_tester.prompt_tests import run_prompt_tests    # noqa: PLC0415
-    from agent_tester.golden       import run_golden_tests    # noqa: PLC0415
-    from agent_tester.report       import build_report, print_report  # noqa: PLC0415
+    from agent_tester.contract import validate_contract  # noqa: PLC0415
+    from agent_tester.golden import run_golden_tests  # noqa: PLC0415
+    from agent_tester.prompt_tests import run_prompt_tests  # noqa: PLC0415
+    from agent_tester.report import build_report, print_report  # noqa: PLC0415
 
     agent_path = Path(args.agent).resolve()
     if not agent_path.exists():

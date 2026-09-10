@@ -83,12 +83,8 @@ def run_golden_tests(
 def _test_pair_generation(pkg_name: str, llm_config: dict, agent_path: Path) -> GoldenTestCase:
     name = "pair_generation_produces_valid_pairs"
     try:
-        from inspect_ai import Task, task  # noqa: PLC0415
-        from inspect_ai.dataset import Sample  # noqa: PLC0415
-        from inspect_ai.scorer import Score, scorer  # noqa: PLC0415
-        from inspect_ai.solver import Generate, solver  # noqa: PLC0415
-
         import importlib  # noqa: PLC0415
+
         mod       = importlib.import_module(pkg_name)
         agent_cls = next(
             getattr(mod, n) for n in dir(mod)

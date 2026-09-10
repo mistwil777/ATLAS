@@ -2,7 +2,7 @@
 
 
 def test_fake_agent_tools_importable():
-    from fake_agent.tools import get_manifest, check_dependencies  # noqa: F401
+    from fake_agent.tools import check_dependencies, get_manifest  # noqa: F401
 
 
 def test_fake_agent_manifest_not_empty():

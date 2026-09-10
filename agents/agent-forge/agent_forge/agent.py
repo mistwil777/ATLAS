@@ -162,41 +162,29 @@ class AgentForgeAgent:
     # ── Scaffolding ────────────────────────────────────────────────────────────
 
     def _generate_scaffolding(self, spec_dict: dict) -> Generator[dict, None, Path | None]:
-        try:
-            from cookiecutter.main import cookiecutter  # noqa: PLC0415
-        except ImportError:
-            yield self._error("cookiecutter not installed — run: pip install cookiecutter>=2.5")
-            return None
+        from agent_forge import scaffold  # noqa: PLC0415
 
-        template_dir = Path(__file__).parent / "template"
-        agent_name   = spec_dict.get("agent_name", "new-agent").lower().replace(" ", "-")
-        pkg_name     = agent_name.replace("-", "_")
-        uses_llm     = spec_dict.get("uses_llm", False)
+        agent_name = spec_dict.get("agent_name", "new-agent").lower().replace(" ", "-")
+        pkg_name   = agent_name.replace("-", "_")
 
-        extra = {
-            "agent_name":   agent_name,
-            "agent_slug":   agent_name,
-            "pkg_name":     pkg_name,
-            "description":  spec_dict.get("description", ""),
-            "input_type":   spec_dict.get("input_type", ""),
-            "output_type":  spec_dict.get("output_type", ""),
-            "domain":       spec_dict.get("domain", ""),
-            "uses_llm":     "true" if uses_llm else "false",
+        params = {
+            "agent_slug":  agent_name,
+            "pkg_name":    pkg_name,
+            "description": spec_dict.get("description", ""),
+            "input_type":  spec_dict.get("input_type", ""),
+            "output_type": spec_dict.get("output_type", ""),
+            "domain":      spec_dict.get("domain", ""),
+            "uses_llm":    bool(spec_dict.get("uses_llm", False)),
         }
 
-        yield self._info("Rendering Cookiecutter template...")
+        yield self._info("Generating scaffolding...")
         try:
-            output_path = cookiecutter(
-                str(template_dir),
-                extra_context=extra,
-                no_input=True,
-                output_dir=str(self.output_dir),
-            )
+            output_path = scaffold.generate(params, self.output_dir)
         except Exception as exc:  # noqa: BLE001
-            yield self._error(f"Cookiecutter failed: {exc}")
+            yield self._error(f"Scaffolding generation failed: {exc}")
             return None
 
-        return Path(output_path)
+        return output_path
 
     # ── Contract validation ────────────────────────────────────────────────────
 

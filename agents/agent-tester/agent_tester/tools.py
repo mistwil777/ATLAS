@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
-import re
 import shutil
-
 
 _DEPENDENCY_MANIFEST: list[dict] = [
     {

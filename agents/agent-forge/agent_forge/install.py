@@ -9,7 +9,6 @@ from pathlib import Path
 
 from agent_forge.tools import get_manifest
 
-
 _PYPROJECT = Path(__file__).parent.parent / "pyproject.toml"
 
 
@@ -33,7 +32,7 @@ def run_install(verbose: bool = True) -> bool:
 
         if smoke_mod and not _run_smoke(smoke_mod):
             if verbose:
-                print(f"  [FAIL] primary tool failed smoke test")
+                print("  [FAIL] primary tool failed smoke test")
             resolved = _try_alternatives(dep, verbose)
             if resolved:
                 _promote_alternative(dep, resolved, verbose)
@@ -46,7 +45,7 @@ def run_install(verbose: bool = True) -> bool:
                 continue
 
         if verbose:
-            print(f"  [OK]")
+            print("  [OK]")
 
     if failures:
         print("\n[BLOCKED] The following capabilities could not be installed:\n")
@@ -54,7 +53,7 @@ def run_install(verbose: bool = True) -> bool:
             print(f"  - {f['capability']}")
             print(f"    primary:  {f['primary']}")
             print(f"    tried:    {', '.join(f['tried']) or 'none'}")
-            print(f"    action:   add a working alternative to the manifest and re-run `agent-forge install`")
+            print("    action:   add a working alternative to the manifest and re-run `agent-forge install`")
         return False
 
     if verbose:

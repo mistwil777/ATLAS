@@ -7,8 +7,6 @@ The same assertions are checked regardless of which tool is installed.
 
 from pathlib import Path
 
-import pytest
-
 FIXTURE = Path(__file__).parent / "fixtures" / "reference.pdf"
 
 

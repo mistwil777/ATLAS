@@ -1,0 +1,5 @@
+{
+  "python.analysis.ignore": [
+    "agents/agent-forge/agent_forge/template"
+  ]
+}

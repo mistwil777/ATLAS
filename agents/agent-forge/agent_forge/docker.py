@@ -7,7 +7,6 @@ from pathlib import Path
 
 from agent_forge.tools import get_manifest
 
-
 _OUTPUT_PATH = Path("Dockerfile.agent-forge")
 
 _PIP_SYSTEM_EXTRAS: dict[str, list[str]] = {}

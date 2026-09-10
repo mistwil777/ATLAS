@@ -5,12 +5,11 @@ Provides both a machine-readable dict and a human-readable terminal output.
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 
-from agent_tester.contract     import ContractReport
+from agent_tester.contract import ContractReport
+from agent_tester.golden import GoldenReport
 from agent_tester.prompt_tests import PromptTestReport
-from agent_tester.golden       import GoldenReport
 
 
 def build_report(

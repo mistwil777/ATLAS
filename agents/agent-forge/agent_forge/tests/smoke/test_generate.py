@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE_SPEC = FIXTURES / "sample_spec.md"
 
@@ -55,7 +54,7 @@ def test_generate_from_spec_produces_expected_files():
         )
         logs = list(agent.run(spec_path=SAMPLE_SPEC))
 
-        summary = next((l for l in logs if l.get("summary")), None)
+        summary = next((log for log in logs if log.get("summary")), None)
         assert summary is not None, f"No summary in logs: {logs}"
 
         agent_dir = output_dir / "text-classifier"
@@ -70,8 +69,9 @@ def test_generate_from_spec_passes_contract():
     """Step 2: validate_contract() returns passed=True."""
     pytest.importorskip("agent_tester", reason="agent-tester not installed — skipping contract check")
 
-    from agent_forge.agent import AgentForgeAgent
     from agent_tester.contract import validate_contract
+
+    from agent_forge.agent import AgentForgeAgent
 
     with tempfile.TemporaryDirectory() as tmp:
         output_dir = Path(tmp)

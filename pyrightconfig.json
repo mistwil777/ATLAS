@@ -1,0 +1,5 @@
+{
+  "exclude": [
+    "agents/agent-forge/agent_forge/template"
+  ]
+}

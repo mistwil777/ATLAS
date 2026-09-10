@@ -26,7 +26,7 @@ def generate_dockerfile(output_path: Path | None = None) -> Path:
         "",
         "WORKDIR /app",
         "",
-        f"RUN pip install --no-cache-dir \\",
+        "RUN pip install --no-cache-dir \\",
         f"    {pip_args}",
         "",
         "COPY . .",

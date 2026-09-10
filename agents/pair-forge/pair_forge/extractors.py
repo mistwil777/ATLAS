@@ -10,10 +10,9 @@ Dispatch chain per extension:
 
 from __future__ import annotations
 
+import logging
 import zipfile
 from pathlib import Path
-
-import logging
 
 logger = logging.getLogger("pair_forge.extractors")
 

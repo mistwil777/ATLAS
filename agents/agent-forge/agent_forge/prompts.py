@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 SPEC_EXTRACTION = """\
 You are an ATLAS agent architect. Read the specification below and extract the agent parameters.
 

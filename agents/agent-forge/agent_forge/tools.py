@@ -2,22 +2,7 @@
 
 from __future__ import annotations
 
-
 _DEPENDENCY_MANIFEST: list[dict] = [
-    {
-        "capability":       "Agent scaffolding templating",
-        "trigger":          "every generate call",
-        "smoke_test":       "agent_forge.tests.smoke.test_generate",
-        "tested_up_to":     "2.6.0",
-        "deprecated_since": None,
-        "replaced_by":      None,
-        "primary": {
-            "pip":    "cookiecutter>=2.5,<3.0",
-            "import": "cookiecutter",
-            "system": [],
-        },
-        "alternatives": [],
-    },
     {
         "capability":       "LLM spec extraction (Bedrock)",
         "trigger":          "generate --spec <file>",
@@ -44,8 +29,6 @@ def check_dependencies() -> dict[str, list[dict]]:
 
     Returns dict with keys: missing, deprecated, untested_versions.
     """
-    import importlib
-    import importlib.metadata
 
     result: dict[str, list[dict]] = {"missing": [], "deprecated": [], "untested_versions": []}
 

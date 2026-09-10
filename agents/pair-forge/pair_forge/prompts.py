@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 PAIR_GENERATION = """\
 You are a training data specialist for a fine-tuning pipeline.
 
