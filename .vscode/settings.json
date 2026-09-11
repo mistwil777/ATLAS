@@ -10,6 +10,7 @@
     "agents/atlas-bus",
     "agents/atlas-memory",
     "agents/cdc-router",
-    "agents/atlas-judge"
+    "agents/atlas-judge",
+    "agents/atlas-orchestrator"
   ]
 }

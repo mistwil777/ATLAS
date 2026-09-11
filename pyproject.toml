@@ -16,7 +16,8 @@ agent-forge   = { workspace = true }
 atlas-bus     = { workspace = true }
 atlas-memory  = { workspace = true }
 cdc-router    = { workspace = true }
-atlas-judge   = { workspace = true }
+atlas-judge        = { workspace = true }
+atlas-orchestrator = { workspace = true }
 
 # ── Ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]

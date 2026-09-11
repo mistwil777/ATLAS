@@ -172,6 +172,34 @@ jobs:
       - name: Smoke tests — atlas-judge
         run: uv run pytest agents/atlas-judge/atlas_judge/tests/smoke/ -v
 
+  # ── atlas-orchestrator ────────────────────────────────────────────────────
+  atlas-orchestrator:
+    name: atlas-orchestrator / smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install atlas-orchestrator + deps
+        run: |
+          uv pip install \
+            -e "agents/atlas-orchestrator/[dev]" \
+            -e "agents/cdc-router/" \
+            -e "agents/atlas-judge/" \
+            -e "agents/atlas-bus/"
+
+      - name: Dependency status
+        run: uv run python -m atlas_orchestrator check
+        continue-on-error: true
+
+      - name: Smoke tests — atlas-orchestrator
+        run: uv run pytest agents/atlas-orchestrator/atlas_orchestrator/tests/smoke/ -v
+
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: lint

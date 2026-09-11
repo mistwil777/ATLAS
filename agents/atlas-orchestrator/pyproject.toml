@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-orchestrator"
+version = "1.0.0"
+description = "Chef d'orchestre de l'Agentic Mesh ATLAS — segmente un CDC et pilote le flow complet end-to-end"
+requires-python = ">=3.10"
+dependencies = ["boto3>=1.35,<2.0"]
+
+[project.optional-dependencies]
+dev     = ["pytest>=8.0"]
+routing = ["cdc-router"]
+judge   = ["atlas-judge"]
+memory  = ["atlas-memory"]
+full    = ["cdc-router", "atlas-judge", "atlas-memory", "atlas-bus"]
+
+[project.entry-points."atlas.agents"]
+atlas-orchestrator = "atlas_orchestrator.agent:AtlasOrchestratorAgent"
+
+[project.scripts]
+atlas-orchestrator = "atlas_orchestrator.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atlas_orchestrator*"]
