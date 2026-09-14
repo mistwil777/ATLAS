@@ -4,10 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 # ── UV workspace ──────────────────────────────────────────────────────────────
-# Each subdirectory under agents/ is an independent installable package.
-# `uv pip install -e agents/pair-forge/ -e agents/agent-tester/` to install all.
+# agents/ = autonomous agents, libs/ = shared libraries (no entry-point).
 [tool.uv.workspace]
-members = ["agents/*"]
+members = ["agents/*", "libs/*"]
 
 [tool.uv.sources]
 pair-forge    = { workspace = true }
@@ -15,6 +14,7 @@ agent-tester  = { workspace = true }
 agent-forge   = { workspace = true }
 atlas-bus     = { workspace = true }
 atlas-memory  = { workspace = true }
+atlas-core    = { workspace = true }
 cdc-router    = { workspace = true }
 atlas-judge        = { workspace = true }
 atlas-orchestrator = { workspace = true }
@@ -30,5 +30,5 @@ ignore = ["E501"]
 
 # ── Pytest ────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
-testpaths = ["agents"]
+testpaths = ["agents", "libs"]
 addopts   = "-q --tb=short"

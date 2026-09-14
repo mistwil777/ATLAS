@@ -49,18 +49,21 @@ def _mock_llm_always_fail(prompt: str, cfg: dict, max_tokens: int) -> str:
 def test_segmenter_with_mock_llm():
     from cdc_router.segmenter import segment
 
-    result = segment("Classify support tickets.", [], {}, _mock_llm_ok, {})
+    result, verdict, attempts = segment("Classify support tickets.", [], {}, _mock_llm_ok, {})
     assert result is not None
     assert "blocs" in result
     assert len(result["blocs"]) == 2
     assert result["blocs"][0]["type"] == "ia"
     assert result["blocs"][1]["type"] == "code"
+    assert attempts >= 1
 
 
 def test_segmenter_invalid_json_reprompt():
     from cdc_router.segmenter import segment
 
-    result = segment("Classify support tickets.", [], {}, _mock_llm_invalid_then_ok, {})
+    result, _verdict, _attempts = segment(
+        "Classify support tickets.", [], {}, _mock_llm_invalid_then_ok, {}
+    )
     assert result is not None
     assert "blocs" in result
 
@@ -68,7 +71,9 @@ def test_segmenter_invalid_json_reprompt():
 def test_segmenter_always_fails_returns_none():
     from cdc_router.segmenter import segment
 
-    result = segment("Classify support tickets.", [], {}, _mock_llm_always_fail, {})
+    result, _verdict, _attempts = segment(
+        "Classify support tickets.", [], {}, _mock_llm_always_fail, {}
+    )
     assert result is None
 
 

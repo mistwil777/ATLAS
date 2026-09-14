@@ -14,6 +14,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 memory = ["atlas-memory"]
+judge = ["atlas-core"]
 
 [project.entry-points."atlas.agents"]
 cdc-router = "cdc_router.agent:CdcRouterAgent"

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-core"
+version = "1.0.0"
+description = "Shared utilities for ATLAS agents (judge_retry, etc.)."
+requires-python = ">=3.10"
+dependencies = [
+    "atlas-judge",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atlas_core*"]

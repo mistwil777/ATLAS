@@ -39,6 +39,29 @@ Use "code" if ALL of these are true:
 }}
 """
 
+CORRECTION_PROMPT = """\
+Your previous segmentation was evaluated and failed on the following criteria:
+
+{failures}
+
+Here is your previous output:
+{previous_output}
+
+Fix ONLY what failed. Keep correct blocs unchanged.
+Return ONLY valid JSON, no markdown, no explanation.
+
+{{
+  "blocs": [
+    {{
+      "bloc": "...",
+      "type": "ia" or "code",
+      "agent_suggested": "..." or null,
+      "justification": "..."
+    }}
+  ]
+}}
+"""
+
 REPROMPT = """\
 Your previous response was not valid JSON. Return ONLY the JSON object, no markdown fences, no explanation.
 

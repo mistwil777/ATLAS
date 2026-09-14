@@ -6,7 +6,7 @@ import json
 import logging
 from collections.abc import Callable
 
-from cdc_router.prompts import REPROMPT, SEGMENTATION_PROMPT
+from cdc_router.prompts import CORRECTION_PROMPT, REPROMPT, SEGMENTATION_PROMPT
 
 _log = logging.getLogger("cdc_router")
 
@@ -17,10 +17,12 @@ def segment(
     kg_agents: dict,
     llm_fn: Callable[[str, dict, int], str | None],
     llm_cfg: dict,
-) -> dict | None:
-    """Call LLM to segment a CDC into typed blocs.
+) -> tuple[dict | None, dict | None, int]:
+    """Call LLM to segment a CDC into typed blocs, then validate with atlas-judge.
 
-    Returns parsed dict with key "blocs", or None on failure.
+    Returns (parsed_result, judge_verdict, attempts).
+    parsed_result is None on failure.
+    judge_verdict is None if atlas-judge is unavailable.
     Re-prompts once if the first response is not valid JSON.
     """
     prompt = SEGMENTATION_PROMPT.format(
@@ -32,19 +34,36 @@ def segment(
     raw = llm_fn(prompt, llm_cfg, 1024)
     if not raw:
         _log.warning("LLM returned no output")
-        return None
+        return None, None, 0
 
     result = _parse(raw)
-    if result is not None:
-        return result
+    if result is None:
+        _log.warning("First LLM response not valid JSON — re-prompting")
+        reprompt = REPROMPT.format(previous_response=raw[:500])
+        raw = llm_fn(reprompt, llm_cfg, 1024)
+        if not raw:
+            return None, None, 0
+        result = _parse(raw)
+        if result is None:
+            return None, None, 0
 
-    _log.warning("First LLM response not valid JSON — re-prompting")
-    reprompt = REPROMPT.format(previous_response=raw[:500])
-    raw2 = llm_fn(reprompt, llm_cfg, 1024)
-    if not raw2:
-        return None
+    try:
+        from atlas_core.judge_retry import judge_and_retry  # noqa: PLC0415
 
-    return _parse(raw2)
+        final, verdict, attempts = judge_and_retry(
+            output=json.dumps(result, ensure_ascii=False),
+            agent_name="cdc-router",
+            context=cdc_text,
+            llm_fn=llm_fn,
+            llm_cfg=llm_cfg,
+            reprompt_fn=_build_correction_prompt,
+            parse_fn=_parse,
+            max_attempts=2,
+        )
+        return final, verdict, attempts
+    except ImportError:
+        _log.warning("atlas-core not installed — skipping quality check")
+        return result, None, 1
 
 
 def _parse(raw: str) -> dict | None:
@@ -80,6 +99,14 @@ def _fmt_examples(examples: list[dict]) -> str:
                 f"  Segmentation: {json.dumps(payload['segmentation'], ensure_ascii=False)}"
             )
     return "\n".join(lines)
+
+
+def _build_correction_prompt(previous_output: str, failed_criteria: list[dict]) -> str:
+    failures = "\n".join(
+        f"- {c.get('criterion', '?')} (score {c.get('score', '?')}/5): {c.get('comment', '')}"
+        for c in failed_criteria
+    )
+    return CORRECTION_PROMPT.format(previous_output=previous_output, failures=failures)
 
 
 def _fmt_agents(kg_agents: dict) -> str:

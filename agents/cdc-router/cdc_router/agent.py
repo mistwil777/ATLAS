@@ -83,13 +83,25 @@ class CdcRouterAgent:
         yield self._info("Segmenting via LLM...")
         from cdc_router.segmenter import segment  # noqa: PLC0415
 
-        segmentation = segment(text, rag_examples, kg_graph, self._llm, self.llm_cfg)
+        segmentation, judge_verdict, attempts = segment(
+            text, rag_examples, kg_graph, self._llm, self.llm_cfg
+        )
         if segmentation is None:
             yield self._error("LLM segmentation failed — check LLM config or CDC content")
             return
 
         blocs = segmentation.get("blocs", [])
         yield self._info(f"Segmented into {len(blocs)} blocs")
+
+        if judge_verdict is not None:
+            passed = judge_verdict.get("passed", False)
+            score = judge_verdict.get("score")
+            yield self._info(
+                f"Quality check: {'passed' if passed else 'failed'}"
+                + (f" (score {score}/5" + (f", {attempts} attempt(s))" if attempts > 1 else ")") if score else "")
+            )
+        else:
+            yield self._info("Quality check: skipped (atlas-judge unavailable)")
 
         from cdc_router.router import route  # noqa: PLC0415
 
