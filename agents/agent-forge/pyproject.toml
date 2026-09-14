@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+collect = ["atlas-core"]
 dev = ["pytest>=8.0"]
 validate = ["agent-tester"]
 

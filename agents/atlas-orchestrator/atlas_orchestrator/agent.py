@@ -15,6 +15,7 @@ Dégradation gracieuse : chaque dépendance est optionnelle sauf cdc-router.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Generator
 from pathlib import Path
 
@@ -75,6 +76,9 @@ class AtlasOrchestratorAgent:
         cdc_path: str = "",
     ) -> Generator[dict, None, None]:
         """Orchestrate the full CDC → agents → judge pipeline. Yields log dicts then summary."""
+        from atlas_core import collect  # noqa: PLC0415
+
+        _t0 = time.monotonic()
         yield self._info("atlas-orchestrator: starting")
 
         text = cdc_text
@@ -112,6 +116,12 @@ class AtlasOrchestratorAgent:
 
         self._index_in_memory(text, report)
 
+        collect.emit_metrics("atlas-orchestrator", {
+            "duration_s": round(time.monotonic() - _t0, 3),
+            "status": "success",
+            "blocs_total": report.get("blocs_total"),
+            "blocs_passed": report.get("blocs_passed"),
+        })
         yield {"summary": True, **report}
 
     def _index_in_memory(self, cdc_text: str, report: dict) -> None:

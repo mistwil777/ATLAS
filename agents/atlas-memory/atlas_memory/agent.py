@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from collections.abc import Callable, Generator
 from pathlib import Path
 
@@ -56,6 +57,9 @@ class AtlasMemoryAgent:
 
     def run(self, operation: str = "get_graph", **kwargs: object) -> Generator[dict, None, None]:
         """Dispatch to the requested operation. Yields log dicts, then summary."""
+        from atlas_core import collect  # noqa: PLC0415
+
+        _t0 = time.monotonic()
         yield self._info(f"atlas-memory: {operation}")
 
         dispatch = {
@@ -78,6 +82,11 @@ class AtlasMemoryAgent:
             yield self._error(f"Operation failed: {exc}")
             return
 
+        collect.emit_metrics("atlas-memory", {
+            "duration_s": round(time.monotonic() - _t0, 3),
+            "status": "success",
+            "operation": operation,
+        })
         yield {"summary": True, "operation": operation, "result": result}
 
     def _op_index(

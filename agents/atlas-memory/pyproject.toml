@@ -13,6 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+collect = ["atlas-core"]
 dev = ["pytest>=8.0"]
 
 [project.entry-points."atlas.agents"]

@@ -11,6 +11,7 @@ Flow:
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Generator
 from pathlib import Path
 
@@ -65,6 +66,9 @@ class CdcRouterAgent:
         cdc_path: str = "",
     ) -> Generator[dict, None, None]:
         """Segment a CDC and produce a routing plan. Yields log dicts then summary."""
+        from atlas_core import collect  # noqa: PLC0415
+
+        _t0 = time.monotonic()
         yield self._info("cdc-router starting")
 
         text = self._load_cdc(cdc_text, cdc_path)
@@ -117,6 +121,12 @@ class CdcRouterAgent:
 
         self._index_in_memory(text, routing)
 
+        collect.emit_metrics("cdc-router", {
+            "duration_s": round(time.monotonic() - _t0, 3),
+            "status": "success",
+            "blocs": len(blocs),
+            "requires_creation": len(routing["requires_creation"]),
+        })
         yield {
             "summary": True,
             "blocs": routing["blocs"],

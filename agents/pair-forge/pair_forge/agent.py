@@ -128,6 +128,9 @@ class PairForgeAgent:
         adapter_name: str | None = None,
     ) -> Generator[dict, None, None]:
         """Yield log dicts throughout processing. Final dict contains key 'summary'."""
+        from atlas_core import collect  # noqa: PLC0415
+
+        _t0 = time.monotonic()
         adapter = self._resolve_adapter(adapter_name)
         yield self._info(f"Starting: {file_path.name}")
 
@@ -195,6 +198,13 @@ class PairForgeAgent:
         n_saved = self._save_pairs(validated, source, adapter)
         yield self._info(f"Saved {n_saved} pairs")
 
+        collect.emit_metrics("pair-forge", {
+            "duration_s": round(time.monotonic() - _t0, 3),
+            "status": "success",
+            "generated": len(pairs),
+            "validated": len(validated),
+            "rejected": len(rejected),
+        })
         yield {
             "summary": True,
             "generated": len(pairs),

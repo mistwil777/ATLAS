@@ -34,7 +34,7 @@ def generate(params: dict, output_dir: Path) -> Path:
     _write(pkg_dir / "__init__.py", _init(slug, desc))
     _write(pkg_dir / "__main__.py", _main(slug, pkg, cls))
     _write(pkg_dir / "agent.py", _agent(slug, pkg, cls, inp, out, domain, uses_llm))
-    _write(pkg_dir / "collect.py", _collect())
+    # collect.py no longer generated — agents import from atlas_core
     _write(pkg_dir / "docker.py", _docker(slug, pkg))
     _write(pkg_dir / "install.py", _install(slug, pkg))
     _write(pkg_dir / "prompts.py", _prompts(slug, domain, out))
@@ -220,7 +220,7 @@ class {cls}Agent:
 
     def run(self, input_path: Path) -> Generator[dict, None, None]:
         """Process input and yield log dicts. Final dict contains key 'summary'."""
-        import {pkg}.collect as collect  # noqa: PLC0415
+        from atlas_core import collect  # noqa: PLC0415
         t0 = time.monotonic()
         status = "success"
 
@@ -246,80 +246,6 @@ class {cls}Agent:
 '''
 
 
-def _collect() -> str:
-    return '''\
-"""ATLAS telemetry collector.
-
-Controlled by the ATLAS_COLLECT environment variable:
-  off      (default) — no collection
-  internal — execution metrics only
-  client   — metrics + anonymized outputs (requires signed B2B contract)
-
-Silent when ATLAS_COLLECT is absent or "off". No external dependency.
-
-See ATLAS_COLLECT_SPEC.md at the repo root for the full specification.
-"""
-
-from __future__ import annotations
-
-import json
-import logging
-import os
-from datetime import datetime, timezone
-
-_MODE = os.environ.get("ATLAS_COLLECT", "off")
-
-_STRIP_KEYS = {"email", "name", "user", "author", "source", "file", "path", "url"}
-
-_logger = logging.getLogger("atlas.collect")
-
-
-def is_active() -> bool:
-    return _MODE != "off"
-
-
-def get_mode() -> str:
-    return _MODE if _MODE in ("internal", "client") else "off"
-
-
-def emit_metrics(agent_name: str, metrics: dict) -> None:
-    """Emit execution metrics. No-op when ATLAS_COLLECT is off."""
-    if not is_active():
-        return
-    _emit({
-        "ts":      _now(),
-        "agent":   agent_name,
-        "mode":    get_mode(),
-        "type":    "metrics",
-        "metrics": metrics,
-    })
-
-
-def emit_output(agent_name: str, output: dict) -> None:
-    """Emit a validated output. Only active in client mode — anonymized before emit."""
-    if get_mode() != "client":
-        return
-    _emit({
-        "ts":     _now(),
-        "agent":  agent_name,
-        "mode":   "client",
-        "type":   "output",
-        "output": anonymize(output),
-    })
-
-
-def anonymize(data: dict) -> dict:
-    """Remove known identifying fields from a dict (shallow)."""
-    return {k: v for k, v in data.items() if k.lower() not in _STRIP_KEYS}
-
-
-def _emit(record: dict) -> None:
-    _logger.info(json.dumps(record, ensure_ascii=False))
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-'''
 
 
 def _docker(slug: str, pkg: str) -> str:
