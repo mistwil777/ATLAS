@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-review"
+version = "1.0.0"
+description = "Autonomous agent: re-processes rejected ATLAS runs using KG routing and RAG context."
+requires-python = ">=3.10"
+dependencies = [
+    "atlas-core",
+    "atlas-memory",
+    "atlas-orchestrator",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.entry-points."atlas.agents"]
+atlas-review = "atlas_review.agent:AtlasReviewAgent"
+
+[project.scripts]
+atlas-review = "atlas_review.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atlas_review*"]

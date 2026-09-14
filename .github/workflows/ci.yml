@@ -242,6 +242,31 @@ jobs:
       - name: Import check
         run: uv run python -c "from atlas_dashboard.app import app; print('OK')"
 
+  # ── atlas-review ──────────────────────────────────────────────────────────
+  atlas-review:
+    name: atlas-review / smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install atlas-review + deps
+        run: |
+          uv pip install \
+            -e libs/atlas-core/ \
+            -e "platform/atlas-memory/[dev]" \
+            -e "platform/atlas-orchestrator/[dev]" \
+            -e agents/cdc-router/ \
+            -e "agents/atlas-review/[dev]"
+
+      - name: Smoke tests — atlas-review
+        run: uv run pytest agents/atlas-review/atlas_review/tests/smoke/ -v
+
   # ── atlas-cli ─────────────────────────────────────────────────────────────
   atlas-cli:
     name: atlas-cli / import + help

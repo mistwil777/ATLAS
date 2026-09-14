@@ -82,7 +82,7 @@ def _segment(
         _log.error("cdc-router not installed — pip install cdc-router")
         return None
 
-    kwargs: dict = {"llm_fn": llm_fn, "llm_cfg": llm_cfg}
+    kwargs: dict = {"llm_fn": llm_fn, "config": {"llm": llm_cfg}}
     if memory_path:
         kwargs["memory_storage_path"] = memory_path
 
