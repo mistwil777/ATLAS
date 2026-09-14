@@ -18,6 +18,8 @@ dependencies = [
     "pair-forge",
     "atlas-dashboard",
     "tomli>=2.0; python_version < '3.11'",
+    "anthropic>=0.40,<1.0",
+    "openai>=1.0,<2.0",
 ]
 
 [project.scripts]
