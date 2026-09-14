@@ -20,6 +20,8 @@ atlas-bus          = { workspace = true }
 atlas-memory       = { workspace = true }
 atlas-judge        = { workspace = true }
 atlas-orchestrator = { workspace = true }
+atlas-audit        = { workspace = true }
+atlas-dashboard    = { workspace = true }
 
 # ── Ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]

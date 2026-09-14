@@ -1,0 +1,89 @@
+"""Run store — persists ATLAS execution runs and HITL review state."""
+
+from __future__ import annotations
+
+import json
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+class RunStore:
+    """File-backed store for ATLAS pipeline runs.
+
+    Each run is a JSON file under <store_dir>/<run_id>.json.
+    Schema:
+      run_id, created_at, status (pending|approved|rejected),
+      requires_review (bool), blocs (list of bloc results with judge info)
+    """
+
+    def __init__(self, store_dir: Path) -> None:
+        self._dir = store_dir
+        self._dir.mkdir(parents=True, exist_ok=True)
+
+    # ── write ──────────────────────────────────────────────────────────────────
+
+    def create_run(self, metadata: dict[str, Any] | None = None) -> str:
+        run_id = str(uuid.uuid4())
+        run = {
+            "run_id": run_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "pending",
+            "requires_review": False,
+            "blocs": [],
+            "metadata": metadata or {},
+        }
+        self._write(run_id, run)
+        return run_id
+
+    def append_bloc(self, run_id: str, bloc_result: dict[str, Any]) -> None:
+        run = self._read(run_id)
+        run["blocs"].append(bloc_result)
+        if bloc_result.get("requires_review"):
+            run["requires_review"] = True
+        self._write(run_id, run)
+
+    def set_review_decision(self, run_id: str, decision: str) -> None:
+        """decision: 'approved' | 'rejected'"""
+        if decision not in ("approved", "rejected"):
+            raise ValueError(f"Invalid decision: {decision!r}")
+        run = self._read(run_id)
+        run["status"] = decision
+        self._write(run_id, run)
+
+    # ── read ───────────────────────────────────────────────────────────────────
+
+    def get_run(self, run_id: str) -> dict[str, Any] | None:
+        path = self._path(run_id)
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def list_runs(self, only_review: bool = False) -> list[dict[str, Any]]:
+        runs = []
+        for p in sorted(self._dir.glob("*.json"), reverse=True):
+            try:
+                run = json.loads(p.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            if only_review and not run.get("requires_review"):
+                continue
+            runs.append(run)
+        return runs
+
+    # ── internals ──────────────────────────────────────────────────────────────
+
+    def _path(self, run_id: str) -> Path:
+        return self._dir / f"{run_id}.json"
+
+    def _read(self, run_id: str) -> dict[str, Any]:
+        path = self._path(run_id)
+        if not path.exists():
+            raise KeyError(f"Run {run_id!r} not found")
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _write(self, run_id: str, data: dict[str, Any]) -> None:
+        self._path(run_id).write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )

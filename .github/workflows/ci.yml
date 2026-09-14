@@ -201,6 +201,47 @@ jobs:
       - name: Smoke tests — atlas-orchestrator
         run: uv run pytest platform/atlas-orchestrator/atlas_orchestrator/tests/smoke/ -v
 
+  # ── atlas-audit ───────────────────────────────────────────────────────────
+  atlas-audit:
+    name: atlas-audit / smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install atlas-audit + atlas-memory
+        run: uv pip install -e libs/atlas-core/ -e "platform/atlas-memory/[dev]" -e tools/atlas-audit/
+
+      - name: Smoke tests — RunStore
+        run: uv run pytest platform/atlas-memory/atlas_memory/tests/smoke/test_run_store.py -v
+
+      - name: CLI help
+        run: uv run atlas-audit --help
+
+  # ── atlas-dashboard ───────────────────────────────────────────────────────
+  atlas-dashboard:
+    name: atlas-dashboard / import check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install atlas-dashboard + atlas-memory
+        run: uv pip install -e libs/atlas-core/ -e "platform/atlas-memory/[dev]" -e tools/atlas-dashboard/
+
+      - name: Import check
+        run: uv run python -c "from atlas_dashboard.app import app; print('OK')"
+
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: lint

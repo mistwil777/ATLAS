@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-dashboard"
+version = "1.0.0"
+description = "ATLAS HITL web dashboard — visualize and review pipeline runs."
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.111,<1.0",
+    "uvicorn[standard]>=0.29,<1.0",
+    "atlas-memory",
+]
+
+[project.scripts]
+atlas-dashboard = "atlas_dashboard.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atlas_dashboard*"]
+
+[tool.setuptools.package-data]
+"atlas_dashboard.templates" = ["*.html"]

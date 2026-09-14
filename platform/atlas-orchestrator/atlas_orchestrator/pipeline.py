@@ -1,4 +1,4 @@
-"""Orchestration logic — segment → execute → judge."""
+"""Orchestration logic — segment → execute → judge → HITL."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from pathlib import Path
 
 _log = logging.getLogger("atlas_orchestrator")
 
+_DEFAULT_RUN_STORE_DIR = Path.home() / ".atlas" / "runs"
+
 
 def orchestrate(
     cdc_text: str,
@@ -16,16 +18,18 @@ def orchestrate(
     memory_path: Path | None = None,
     bus_fn: Callable | None = None,
     judge_fn: Callable | None = None,
+    run_store_dir: Path | None = None,
 ) -> dict | None:
     """Run the full orchestration flow and return the raw report dict.
 
     Args:
-        cdc_text:    CDC content as plain text.
-        llm_fn:      LLM callable (prompt, cfg, max_tokens) -> str | None.
-        llm_cfg:     LLM config dict.
-        memory_path: Optional path for atlas-memory storage.
-        bus_fn:      Optional injectable Bus factory for tests (returns Bus instance).
-        judge_fn:    Optional injectable AtlasJudgeAgent factory for tests.
+        cdc_text:       CDC content as plain text.
+        llm_fn:         LLM callable (prompt, cfg, max_tokens) -> str | None.
+        llm_cfg:        LLM config dict.
+        memory_path:    Optional path for atlas-memory storage.
+        bus_fn:         Optional injectable Bus factory for tests (returns Bus instance).
+        judge_fn:       Optional injectable AtlasJudgeAgent factory for tests.
+        run_store_dir:  Directory for HITL run persistence (default: ~/.atlas/runs).
     """
     from atlas_orchestrator.report import build_report  # noqa: PLC0415
 
@@ -36,14 +40,34 @@ def orchestrate(
     blocs = routing_summary.get("blocs", [])
     _log.info("Routing complete — %d blocs", len(blocs))
 
-    bus = _get_bus(bus_fn)
-    bloc_results = [_process_bloc(bloc, cdc_text, bus, llm_fn, llm_cfg, judge_fn) for bloc in blocs]
+    run_store = _get_run_store(run_store_dir)
+    run_id = run_store.create_run(metadata={"cdc_preview": cdc_text[:200]}) if run_store else None
 
-    return build_report(
+    bus = _get_bus(bus_fn)
+    bloc_results = []
+    for bloc in blocs:
+        result = _process_bloc(bloc, cdc_text, bus, llm_fn, llm_cfg, judge_fn)
+        if run_store and run_id:
+            run_store.append_bloc(run_id, result)
+        bloc_results.append(result)
+
+    requires_review = any(r.get("requires_review") for r in bloc_results)
+    if run_store and run_id and requires_review:
+        _log.warning(
+            "Run %s requires human review — %d bloc(s) failed judge",
+            run_id,
+            sum(1 for r in bloc_results if r.get("requires_review")),
+        )
+
+    report = build_report(
         cdc_path=routing_summary.get("cdc_path", "inline"),
         routing_summary=routing_summary,
         bloc_results=bloc_results,
     )
+    if report is not None:
+        report["run_id"] = run_id
+        report["requires_review"] = requires_review
+    return report
 
 
 def _segment(
@@ -88,6 +112,7 @@ def _process_bloc(
         "judge_passed": None,
         "judge_score": None,
         "output_preview": "",
+        "requires_review": False,
     }
 
     if not agent_name:
@@ -116,6 +141,7 @@ def _process_bloc(
     )
     result["judge_passed"] = judge_passed
     result["judge_score"] = judge_score
+    result["requires_review"] = judge_passed is False
 
     return result
 
@@ -193,3 +219,13 @@ def _extract_output(summary: dict) -> str:
         if val:
             return str(val)
     return str(summary)
+
+
+def _get_run_store(run_store_dir: Path | None) -> object:
+    try:
+        from atlas_memory.run_store import RunStore  # noqa: PLC0415
+
+        return RunStore(run_store_dir or _DEFAULT_RUN_STORE_DIR)
+    except ImportError:
+        _log.warning("atlas-memory not installed — run persistence disabled")
+        return None
