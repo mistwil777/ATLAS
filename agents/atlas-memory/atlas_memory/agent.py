@@ -82,11 +82,14 @@ class AtlasMemoryAgent:
             yield self._error(f"Operation failed: {exc}")
             return
 
-        collect.emit_metrics("atlas-memory", {
-            "duration_s": round(time.monotonic() - _t0, 3),
-            "status": "success",
-            "operation": operation,
-        })
+        collect.emit_metrics(
+            "atlas-memory",
+            {
+                "duration_s": round(time.monotonic() - _t0, 3),
+                "status": "success",
+                "operation": operation,
+            },
+        )
         yield {"summary": True, "operation": operation, "result": result}
 
     def _op_index(

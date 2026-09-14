@@ -102,7 +102,11 @@ class CdcRouterAgent:
             score = judge_verdict.get("score")
             yield self._info(
                 f"Quality check: {'passed' if passed else 'failed'}"
-                + (f" (score {score}/5" + (f", {attempts} attempt(s))" if attempts > 1 else ")") if score else "")
+                + (
+                    f" (score {score}/5" + (f", {attempts} attempt(s))" if attempts > 1 else ")")
+                    if score
+                    else ""
+                )
             )
         else:
             yield self._info("Quality check: skipped (atlas-judge unavailable)")
@@ -121,12 +125,15 @@ class CdcRouterAgent:
 
         self._index_in_memory(text, routing)
 
-        collect.emit_metrics("cdc-router", {
-            "duration_s": round(time.monotonic() - _t0, 3),
-            "status": "success",
-            "blocs": len(blocs),
-            "requires_creation": len(routing["requires_creation"]),
-        })
+        collect.emit_metrics(
+            "cdc-router",
+            {
+                "duration_s": round(time.monotonic() - _t0, 3),
+                "status": "success",
+                "blocs": len(blocs),
+                "requires_creation": len(routing["requires_creation"]),
+            },
+        )
         yield {
             "summary": True,
             "blocs": routing["blocs"],

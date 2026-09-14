@@ -133,13 +133,16 @@ class AtlasJudgeAgent:
 
         self._index_in_memory(output or output_a, result, agent_name)
 
-        collect.emit_metrics("atlas-judge", {
-            "duration_s": round(time.monotonic() - _t0, 3),
-            "status": "success",
-            "operation": operation,
-            "passed": result.get("passed"),
-            "score": result.get("score"),
-        })
+        collect.emit_metrics(
+            "atlas-judge",
+            {
+                "duration_s": round(time.monotonic() - _t0, 3),
+                "status": "success",
+                "operation": operation,
+                "passed": result.get("passed"),
+                "score": result.get("score"),
+            },
+        )
         yield {"summary": True, **result}
 
     def _resolve_criteria(self, criteria: list[str] | None, agent_name: str) -> list[str]:

@@ -85,9 +85,7 @@ def judge_and_retry(
             _log.warning("Output did not pass atlas-judge after %d attempts", max_attempts)
             break
 
-        failed_criteria = [
-            c for c in verdict.get("criteria_scores", []) if c.get("score", 5) < 4
-        ]
+        failed_criteria = [c for c in verdict.get("criteria_scores", []) if c.get("score", 5) < 4]
         _log.info(
             "Judge failed on %d criteria — re-generating (attempt %d/%d)",
             len(failed_criteria),

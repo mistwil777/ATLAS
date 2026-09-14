@@ -21,7 +21,7 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install -e agents/pair-forge/ -e agents/agent-tester/
+        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e agents/agent-tester/
 
       - name: Dependency status
         run: uv run python -m pair_forge check
@@ -54,7 +54,7 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install -e agents/pair-forge/ -e agents/agent-tester/
+        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e agents/agent-tester/
 
       - name: Smoke tests — agent-tester
         run: uv run pytest agents/agent-tester/agent_tester/tests/smoke/ -v
@@ -79,7 +79,7 @@ jobs:
           enable-cache: true
 
       - name: Install agent-forge
-        run: uv pip install -e agents/agent-forge/ -e agents/agent-tester/
+        run: uv pip install -e libs/atlas-core/ -e agents/agent-forge/ -e agents/agent-tester/
 
       - name: Smoke tests — agent-forge
         run: uv run pytest agents/agent-forge/agent_forge/tests/smoke/ -v
@@ -98,7 +98,7 @@ jobs:
           enable-cache: true
 
       - name: Install atlas-bus
-        run: uv pip install -e "agents/atlas-bus/[dev]"
+        run: uv pip install -e libs/atlas-core/ -e "agents/atlas-bus/[dev]"
 
       - name: Smoke tests — atlas-bus
         run: uv run pytest agents/atlas-bus/atlas_bus/tests/smoke/ -v
@@ -117,7 +117,7 @@ jobs:
           enable-cache: true
 
       - name: Install cdc-router
-        run: uv pip install -e "agents/cdc-router/[dev]"
+        run: uv pip install -e libs/atlas-core/ -e "agents/cdc-router/[dev]"
 
       - name: Dependency status
         run: uv run python -m cdc_router check
@@ -140,7 +140,7 @@ jobs:
           enable-cache: true
 
       - name: Install atlas-memory
-        run: uv pip install -e "agents/atlas-memory/[dev]"
+        run: uv pip install -e libs/atlas-core/ -e "agents/atlas-memory/[dev]"
 
       - name: Dependency status
         run: uv run python -m atlas_memory check
@@ -163,7 +163,7 @@ jobs:
           enable-cache: true
 
       - name: Install atlas-judge + cdc-router (for criteria.py)
-        run: uv pip install -e "agents/atlas-judge/[dev]" -e "agents/cdc-router/"
+        run: uv pip install -e libs/atlas-core/ -e "agents/atlas-judge/[dev]" -e "agents/cdc-router/"
 
       - name: Dependency status
         run: uv run python -m atlas_judge check
@@ -188,6 +188,7 @@ jobs:
       - name: Install atlas-orchestrator + deps
         run: |
           uv pip install \
+            -e libs/atlas-core/ \
             -e "agents/atlas-orchestrator/[dev]" \
             -e "agents/cdc-router/" \
             -e "agents/atlas-judge/" \
@@ -217,7 +218,7 @@ jobs:
         run: uv pip install "ruff==0.7.4"
 
       - name: Ruff check
-        run: uv run ruff check agents/
+        run: uv run ruff check agents/ libs/
 
       - name: Ruff format check
-        run: uv run ruff format --check agents/
+        run: uv run ruff format --check agents/ libs/

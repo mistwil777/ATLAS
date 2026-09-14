@@ -116,12 +116,15 @@ class AtlasOrchestratorAgent:
 
         self._index_in_memory(text, report)
 
-        collect.emit_metrics("atlas-orchestrator", {
-            "duration_s": round(time.monotonic() - _t0, 3),
-            "status": "success",
-            "blocs_total": report.get("blocs_total"),
-            "blocs_passed": report.get("blocs_passed"),
-        })
+        collect.emit_metrics(
+            "atlas-orchestrator",
+            {
+                "duration_s": round(time.monotonic() - _t0, 3),
+                "status": "success",
+                "blocs_total": report.get("blocs_total"),
+                "blocs_passed": report.get("blocs_passed"),
+            },
+        )
         yield {"summary": True, **report}
 
     def _index_in_memory(self, cdc_text: str, report: dict) -> None:

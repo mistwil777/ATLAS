@@ -246,8 +246,6 @@ class {cls}Agent:
 '''
 
 
-
-
 def _docker(slug: str, pkg: str) -> str:
     return f'''\
 """Generate a Dockerfile from the {slug} dependency manifest."""

@@ -198,13 +198,16 @@ class PairForgeAgent:
         n_saved = self._save_pairs(validated, source, adapter)
         yield self._info(f"Saved {n_saved} pairs")
 
-        collect.emit_metrics("pair-forge", {
-            "duration_s": round(time.monotonic() - _t0, 3),
-            "status": "success",
-            "generated": len(pairs),
-            "validated": len(validated),
-            "rejected": len(rejected),
-        })
+        collect.emit_metrics(
+            "pair-forge",
+            {
+                "duration_s": round(time.monotonic() - _t0, 3),
+                "status": "success",
+                "generated": len(pairs),
+                "validated": len(validated),
+                "rejected": len(rejected),
+            },
+        )
         yield {
             "summary": True,
             "generated": len(pairs),
