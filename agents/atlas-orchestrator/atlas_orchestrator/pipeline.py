@@ -110,9 +110,12 @@ def _process_bloc(
     output_text = _extract_output(step.summary)
     result["output_preview"] = output_text[:300]
 
-    judge_result = _judge_bloc(output_text, agent_name, llm_fn, llm_cfg, judge_fn)
-    result["judge_passed"] = judge_result.get("passed")
-    result["judge_score"] = judge_result.get("score")
+    bloc_criteria = bloc.get("criteria") or []
+    judge_passed, judge_score = _judge_bloc(
+        output_text, agent_name, bloc_criteria, cdc_text, llm_fn, llm_cfg, judge_fn
+    )
+    result["judge_passed"] = judge_passed
+    result["judge_score"] = judge_score
 
     return result
 
@@ -128,7 +131,6 @@ def _execute_bloc(
         return None
 
     step = bus.run_agent(agent_name, {"cdc_bloc": content, "context": cdc_text})  # type: ignore[union-attr]
-    # Bus returns StepResult with error if agent not installed
     if step.error and "not found" in step.error:
         return None
     return step
@@ -137,28 +139,39 @@ def _execute_bloc(
 def _judge_bloc(
     output: str,
     agent_name: str,
+    criteria: list[str],
+    context: str,
     llm_fn: Callable,
     llm_cfg: dict,
     judge_fn: Callable | None,
-) -> dict:
+) -> tuple[bool | None, float | None]:
+    """Evaluate a bloc output using dynamic criteria from cdc-router."""
     try:
         if judge_fn is not None:
-            agent = judge_fn()
+            judge = judge_fn()
         else:
             from atlas_judge.agent import AtlasJudgeAgent  # noqa: PLC0415
 
-            agent = AtlasJudgeAgent(llm_fn=llm_fn, config={"llm": llm_cfg})
+            judge = AtlasJudgeAgent(llm_fn=llm_fn, config={"llm": llm_cfg})
 
-        events = list(agent.run(operation="pointwise", output=output, agent_name=agent_name))
+        events = list(
+            judge.run(
+                operation="pointwise",
+                output=output,
+                agent_name=agent_name,
+                criteria=criteria if criteria else None,
+                context=context,
+            )
+        )
         summary = next((e for e in events if e.get("summary")), None)
         if summary:
-            return {"passed": summary.get("passed"), "score": summary.get("score")}
+            return summary.get("passed"), summary.get("score")
     except ImportError:
         _log.warning("atlas-judge not installed — skipping evaluation")
     except Exception as exc:  # noqa: BLE001
         _log.warning("atlas-judge evaluation failed: %s", exc)
 
-    return {"passed": None, "score": None}
+    return None, None
 
 
 def _get_bus(bus_fn: Callable | None) -> object:
