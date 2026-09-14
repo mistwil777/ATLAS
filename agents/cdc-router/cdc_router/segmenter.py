@@ -81,6 +81,9 @@ def _parse(raw: str) -> dict | None:
         data = json.loads(raw[start:end])
         if "blocs" not in data or not isinstance(data["blocs"], list):
             return None
+        for bloc in data["blocs"]:
+            if not isinstance(bloc.get("criteria"), list):
+                bloc["criteria"] = []
         return data
     except json.JSONDecodeError:
         return None

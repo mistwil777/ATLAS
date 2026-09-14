@@ -8,7 +8,8 @@ CRITERIA = {
     ),
     "json_schema_valid": (
         "All required fields are present and correctly typed: "
-        "bloc (str), type ('ia'|'code'), agent_suggested (str|null), justification (str)."
+        "bloc (str), type ('ia'|'code'), agent_suggested (str|null), justification (str), "
+        "criteria (non-empty list of strings)."
     ),
     "justification_coherent": (
         "Each justification explicitly references the binary rule that was applied "
@@ -21,5 +22,11 @@ CRITERIA = {
     "completeness": (
         "All functional blocs described in the CDC are addressed in the output — "
         "nothing is silently skipped."
+    ),
+    "criteria_quality": (
+        "Each bloc contains 2 to 4 evaluation criteria. "
+        "Each criterion is a specific, verifiable assertion starting with a verb "
+        "(Output must, Response must, All fields must...). "
+        "Criteria are derived from the bloc content — never generic."
     ),
 }

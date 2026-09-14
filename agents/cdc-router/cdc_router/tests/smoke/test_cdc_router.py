@@ -15,12 +15,20 @@ _VALID_SEGMENTATION = json.dumps(
                 "type": "ia",
                 "agent_suggested": "ticket-classifier",
                 "justification": "unstructured natural language, semantic classification",
+                "criteria": [
+                    "Output must return a classification from: urgent, normal, low.",
+                    "Response must reference the ticket content to justify the classification.",
+                ],
             },
             {
                 "bloc": "save to PostgreSQL",
                 "type": "code",
                 "agent_suggested": None,
                 "justification": "deterministic write to known schema",
+                "criteria": [
+                    "Output must confirm successful write with row count.",
+                    "All required fields must be present before insert.",
+                ],
             },
         ]
     }
@@ -56,6 +64,17 @@ def test_segmenter_with_mock_llm():
     assert result["blocs"][0]["type"] == "ia"
     assert result["blocs"][1]["type"] == "code"
     assert attempts >= 1
+
+
+def test_segmenter_blocs_have_criteria():
+    from cdc_router.segmenter import segment
+
+    result, _verdict, _attempts = segment("Classify support tickets.", [], {}, _mock_llm_ok, {})
+    assert result is not None
+    for bloc in result["blocs"]:
+        assert "criteria" in bloc
+        assert isinstance(bloc["criteria"], list)
+        assert len(bloc["criteria"]) >= 1
 
 
 def test_segmenter_invalid_json_reprompt():

@@ -2,7 +2,8 @@
 
 SEGMENTATION_PROMPT = """\
 You are an expert software architect analyzing a functional specification (CDC).
-Your task: segment the CDC into functional blocs and decide for each whether it requires AI or deterministic code.
+Your task: segment the CDC into functional blocs, decide for each whether it requires AI or deterministic code, \
+and generate evaluation criteria that will be used by a judge agent to validate the output of each bloc.
 
 ## Decision rules — apply strictly, no exceptions
 
@@ -15,6 +16,14 @@ Use "code" if ALL of these are true:
 - Input format is known and parseable (CSV, JSON, XML, fixed schema, date, regex)
 - Task is a deterministic transformation (calculation, sort, format, lookup, rule validation)
 - Expected result is deterministic for a given input
+
+## Criteria generation rules
+
+For each bloc, generate 2 to 4 evaluation criteria as assertion strings.
+- For "code" blocs: assert output format, field presence, value constraints (deterministic, verifiable)
+- For "ia" blocs: assert semantic quality, completeness, absence of hallucination, alignment with CDC intent
+- Each criterion must be a single sentence starting with a verb ("Output must...", "Response must...", "All fields must...")
+- Criteria must be specific to the bloc content — never generic
 
 ## Available ATLAS agents
 {kg_agents}
@@ -33,7 +42,11 @@ Use "code" if ALL of these are true:
       "bloc": "<short description of the functional bloc>",
       "type": "ia" or "code",
       "agent_suggested": "<agent name if ia, null if code>",
-      "justification": "<one sentence applying the decision rule>"
+      "justification": "<one sentence applying the decision rule>",
+      "criteria": [
+        "<criterion 1>",
+        "<criterion 2>"
+      ]
     }}
   ]
 }}
@@ -48,6 +61,7 @@ Here is your previous output:
 {previous_output}
 
 Fix ONLY what failed. Keep correct blocs unchanged.
+Preserve the "criteria" field on each bloc — update it only if the failure is about criteria quality.
 Return ONLY valid JSON, no markdown, no explanation.
 
 {{
@@ -56,7 +70,8 @@ Return ONLY valid JSON, no markdown, no explanation.
       "bloc": "...",
       "type": "ia" or "code",
       "agent_suggested": "..." or null,
-      "justification": "..."
+      "justification": "...",
+      "criteria": ["...", "..."]
     }}
   ]
 }}
@@ -72,7 +87,8 @@ Expected format:
       "bloc": "...",
       "type": "ia" or "code",
       "agent_suggested": "..." or null,
-      "justification": "..."
+      "justification": "...",
+      "criteria": ["...", "..."]
     }}
   ]
 }}
