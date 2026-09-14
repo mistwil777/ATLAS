@@ -136,18 +136,49 @@ class AgentForgeAgent:
             yield self._error(f"Cannot read spec file: {exc}")
             return None
 
-        prompt = SPEC_EXTRACTION.format(spec_content=content)
         yield self._info("Extracting parameters from spec via LLM...")
+
+        prompt = SPEC_EXTRACTION.format(spec_content=content)
         raw = self._llm(prompt, self.llm_cfg, 512)
         if not raw:
             yield self._error("LLM returned no output for spec extraction")
             return None
 
-        spec_dict = self._parse_json_object(raw)
-        if not spec_dict:
-            yield self._error(f"Could not parse LLM output as JSON: {raw[:200]}")
+        try:
+            from atlas_core.judge_retry import judge_and_retry  # noqa: PLC0415
+
+            from agent_forge.criteria import CRITERIA  # noqa: PLC0415
+
+            def _reprompt(original: str, failed: list[dict]) -> str:
+                failed_lines = "\n".join(f"- {f['criterion']}" for f in failed)
+                return (
+                    f"{prompt}\n\n"
+                    f"Previous attempt did not satisfy:\n{failed_lines}\n"
+                    "Fix the output and return valid JSON only."
+                )
+
+            result, verdict, attempts = judge_and_retry(
+                output=raw,
+                context=content,
+                llm_fn=self._llm,
+                llm_cfg=self.llm_cfg,
+                reprompt_fn=_reprompt,
+                agent_name="agent-forge",
+                criteria=CRITERIA,
+                parse_fn=self._parse_json_object,
+                max_attempts=2,
+            )
+            if attempts > 1:
+                yield self._info(f"Spec extraction passed after {attempts} attempt(s)")
+            raw_parsed = result
+        except ImportError:
+            raw_parsed = self._parse_json_object(raw)
+
+        if not raw_parsed:
+            yield self._error("Could not extract valid spec parameters from LLM output")
             return None
 
+        spec_dict = raw_parsed
         # Normalize uses_llm to bool
         spec_dict["uses_llm"] = str(spec_dict.get("uses_llm", "false")).lower() in (
             "true",
