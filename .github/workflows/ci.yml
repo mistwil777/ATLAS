@@ -21,7 +21,7 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e agents/agent-tester/
+        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e platform/agent-tester/
 
       - name: Dependency status
         run: uv run python -m pair_forge check
@@ -54,10 +54,10 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e agents/agent-tester/
+        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e platform/agent-tester/
 
       - name: Smoke tests — agent-tester
-        run: uv run pytest agents/agent-tester/agent_tester/tests/smoke/ -v
+        run: uv run pytest platform/agent-tester/agent_tester/tests/smoke/ -v
 
       - name: Validate pair-forge (level 1 — contract)
         run: uv run python -m agent_tester run --agent agents/pair-forge --level 1
@@ -79,7 +79,7 @@ jobs:
           enable-cache: true
 
       - name: Install agent-forge
-        run: uv pip install -e libs/atlas-core/ -e agents/agent-forge/ -e agents/agent-tester/
+        run: uv pip install -e libs/atlas-core/ -e agents/agent-forge/ -e platform/agent-tester/
 
       - name: Smoke tests — agent-forge
         run: uv run pytest agents/agent-forge/agent_forge/tests/smoke/ -v
@@ -98,10 +98,10 @@ jobs:
           enable-cache: true
 
       - name: Install atlas-bus
-        run: uv pip install -e libs/atlas-core/ -e "agents/atlas-bus/[dev]"
+        run: uv pip install -e libs/atlas-core/ -e "platform/atlas-bus/[dev]"
 
       - name: Smoke tests — atlas-bus
-        run: uv run pytest agents/atlas-bus/atlas_bus/tests/smoke/ -v
+        run: uv run pytest platform/atlas-bus/atlas_bus/tests/smoke/ -v
 
   # ── cdc-router ────────────────────────────────────────────────────────────
   cdc-router:
@@ -140,14 +140,14 @@ jobs:
           enable-cache: true
 
       - name: Install atlas-memory
-        run: uv pip install -e libs/atlas-core/ -e "agents/atlas-memory/[dev]"
+        run: uv pip install -e libs/atlas-core/ -e "platform/atlas-memory/[dev]"
 
       - name: Dependency status
         run: uv run python -m atlas_memory check
         continue-on-error: true
 
       - name: Smoke tests — atlas-memory
-        run: uv run pytest agents/atlas-memory/atlas_memory/tests/smoke/ -v
+        run: uv run pytest platform/atlas-memory/atlas_memory/tests/smoke/ -v
 
   # ── atlas-judge ───────────────────────────────────────────────────────────
   atlas-judge:
@@ -163,14 +163,14 @@ jobs:
           enable-cache: true
 
       - name: Install atlas-judge + cdc-router (for criteria.py)
-        run: uv pip install -e libs/atlas-core/ -e "agents/atlas-judge/[dev]" -e "agents/cdc-router/"
+        run: uv pip install -e libs/atlas-core/ -e "platform/atlas-judge/[dev]" -e "agents/cdc-router/"
 
       - name: Dependency status
         run: uv run python -m atlas_judge check
         continue-on-error: true
 
       - name: Smoke tests — atlas-judge
-        run: uv run pytest agents/atlas-judge/atlas_judge/tests/smoke/ -v
+        run: uv run pytest platform/atlas-judge/atlas_judge/tests/smoke/ -v
 
   # ── atlas-orchestrator ────────────────────────────────────────────────────
   atlas-orchestrator:
@@ -189,17 +189,17 @@ jobs:
         run: |
           uv pip install \
             -e libs/atlas-core/ \
-            -e "agents/atlas-orchestrator/[dev]" \
+            -e "platform/atlas-orchestrator/[dev]" \
             -e "agents/cdc-router/" \
-            -e "agents/atlas-judge/" \
-            -e "agents/atlas-bus/"
+            -e "platform/atlas-judge/" \
+            -e "platform/atlas-bus/"
 
       - name: Dependency status
         run: uv run python -m atlas_orchestrator check
         continue-on-error: true
 
       - name: Smoke tests — atlas-orchestrator
-        run: uv run pytest agents/atlas-orchestrator/atlas_orchestrator/tests/smoke/ -v
+        run: uv run pytest platform/atlas-orchestrator/atlas_orchestrator/tests/smoke/ -v
 
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
@@ -218,7 +218,7 @@ jobs:
         run: uv pip install "ruff==0.7.4"
 
       - name: Ruff check
-        run: uv run ruff check agents/ libs/
+        run: uv run ruff check agents/ platform/ libs/
 
       - name: Ruff format check
-        run: uv run ruff format --check agents/ libs/
+        run: uv run ruff format --check agents/ platform/ libs/

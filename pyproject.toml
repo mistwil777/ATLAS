@@ -4,18 +4,20 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 # ── UV workspace ──────────────────────────────────────────────────────────────
-# agents/ = autonomous agents, libs/ = shared libraries (no entry-point).
+# agents/    = extractible business agents (agnostic, reusable per project)
+# platform/  = ATLAS infrastructure agents (orchestrator, judge, memory, bus, tooling)
+# libs/      = shared libraries (no entry-point, no LLM)
 [tool.uv.workspace]
-members = ["agents/*", "libs/*"]
+members = ["agents/*", "platform/*", "libs/*"]
 
 [tool.uv.sources]
 pair-forge    = { workspace = true }
-agent-tester  = { workspace = true }
 agent-forge   = { workspace = true }
-atlas-bus     = { workspace = true }
-atlas-memory  = { workspace = true }
-atlas-core    = { workspace = true }
 cdc-router    = { workspace = true }
+atlas-core         = { workspace = true }
+agent-tester       = { workspace = true }
+atlas-bus          = { workspace = true }
+atlas-memory       = { workspace = true }
 atlas-judge        = { workspace = true }
 atlas-orchestrator = { workspace = true }
 
@@ -30,5 +32,5 @@ ignore = ["E501"]
 
 # ── Pytest ────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
-testpaths = ["agents", "libs"]
+testpaths = ["agents", "platform", "libs"]
 addopts   = "-q --tb=short"
