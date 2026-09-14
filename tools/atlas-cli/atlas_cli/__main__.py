@@ -46,6 +46,7 @@ temperature = 0.1
 [dashboard]
 port = 8050
 auto_open = true
+# token = "your-secret-password"   # uncomment to enable authentication
 
 [collect]
 # off | internal | client
@@ -177,8 +178,12 @@ def cmd_run(args: argparse.Namespace) -> None:
 
 def _start_dashboard(port: int, cfg: dict) -> subprocess.Popen | None:
     try:
+        cmd = [sys.executable, "-m", "atlas_dashboard.__main__", "--port", str(port)]
+        token = cfg.get("dashboard", {}).get("token")
+        if token:
+            cmd += ["--token", token]
         proc = subprocess.Popen(
-            [sys.executable, "-m", "atlas_dashboard.__main__", "--port", str(port)],
+            cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

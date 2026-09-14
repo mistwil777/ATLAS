@@ -2,26 +2,101 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
+import secrets
 from pathlib import Path
 
 from atlas_memory.run_store import RunStore
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import Cookie, FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 _DEFAULT_RUN_STORE_DIR = Path.home() / ".atlas" / "runs"
 
 app = FastAPI(title="ATLAS Dashboard", version="1.0.0")
 _store: RunStore | None = None
 
+# Session store: cookie_value → True (in-memory, single-process)
+_sessions: set[str] = set()
+
+
+def _token() -> str | None:
+    """Return the configured token, or None if auth is disabled."""
+    return os.environ.get("ATLAS_DASHBOARD_TOKEN") or None
+
+
+def _check_session(atlas_session: str | None) -> bool:
+    if _token() is None:
+        return True
+    return atlas_session is not None and atlas_session in _sessions
+
+
+def _require_auth(request: Request, atlas_session: str | None = Cookie(default=None)):
+    if not _check_session(atlas_session):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
 
 def get_store() -> RunStore:
     global _store
     if _store is None:
-        store_dir = Path(
-            __import__("os").environ.get("ATLAS_RUN_STORE_DIR", str(_DEFAULT_RUN_STORE_DIR))
-        )
+        store_dir = Path(os.environ.get("ATLAS_RUN_STORE_DIR", str(_DEFAULT_RUN_STORE_DIR)))
         _store = RunStore(store_dir)
     return _store
+
+
+# ── Auth ───────────────────────────────────────────────────────────────────────
+
+
+@app.get("/login", response_class=HTMLResponse)
+def ui_login():
+    tpl = Path(__file__).parent / "templates" / "login.html"
+    return HTMLResponse(tpl.read_text(encoding="utf-8"))
+
+
+@app.post("/login")
+async def do_login(request: Request):
+    form = await request.form()
+    password = form.get("password", "")
+    token = _token()
+    if token is None or secrets.compare_digest(
+        hashlib.sha256(str(password).encode()).hexdigest(),
+        hashlib.sha256(token.encode()).hexdigest(),
+    ):
+        session_id = secrets.token_hex(32)
+        _sessions.add(session_id)
+        response = RedirectResponse(url="/", status_code=303)
+        response.set_cookie("atlas_session", session_id, httponly=True, samesite="lax")
+        return response
+    return HTMLResponse(
+        (Path(__file__).parent / "templates" / "login.html")
+        .read_text(encoding="utf-8")
+        .replace("<!--ERROR-->", '<p class="error">Invalid password.</p>'),
+        status_code=401,
+    )
+
+
+@app.get("/logout")
+def do_logout(atlas_session: str | None = Cookie(default=None)):
+    if atlas_session:
+        _sessions.discard(atlas_session)
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie("atlas_session")
+    return response
+
+
+# ── Auth middleware ────────────────────────────────────────────────────────────
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    public = {"/login", "/logout"}
+    if request.url.path in public:
+        return await call_next(request)
+    if _token() is not None:
+        session = request.cookies.get("atlas_session")
+        if session not in _sessions:
+            return RedirectResponse(url="/login", status_code=303)
+    return await call_next(request)
 
 
 # ── API ────────────────────────────────────────────────────────────────────────
@@ -101,7 +176,6 @@ def api_stats():
             if score is not None:
                 agent_stats[agent]["scores"].append(score)
 
-    # Compute pass rates and avg scores per agent
     by_agent = {}
     total_judged = 0
     total_passed = 0
