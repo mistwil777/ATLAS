@@ -13,56 +13,103 @@
       --aqua: #1baf7a;
       --red: #e66767;
       --yellow: #e8a600;
+      --violet: #9085e9;
       --ink: #c8c0d8;
       --ink-dim: #7a748a;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--ink); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; }
-    header { padding: 18px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+
+    header { padding: 14px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
     header h1 { font-size: 16px; color: var(--blue); letter-spacing: 0.08em; }
     header .tag { font-size: 11px; color: var(--ink-dim); background: var(--surface); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; }
-    .toolbar { padding: 12px 32px; display: flex; gap: 10px; border-bottom: 1px solid var(--border); }
-    .toolbar button { padding: 6px 14px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 12px; transition: border-color .15s; }
+
+    /* ── KPI bar ── */
+    .kpi-bar { display: flex; gap: 12px; padding: 14px 32px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 18px; min-width: 120px; }
+    .kpi .kpi-label { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .kpi .kpi-value { font-size: 20px; font-weight: bold; }
+    .kpi.blue  .kpi-value { color: var(--blue); }
+    .kpi.aqua  .kpi-value { color: var(--aqua); }
+    .kpi.red   .kpi-value { color: var(--red); }
+    .kpi.yellow .kpi-value { color: var(--yellow); }
+    .kpi.violet .kpi-value { color: var(--violet); }
+
+    /* ── Agent table ── */
+    .agent-table-wrap { padding: 10px 32px 0; border-bottom: 1px solid var(--border); }
+    .agent-table-wrap summary { font-size: 11px; color: var(--ink-dim); cursor: pointer; padding-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 10px; }
+    th { text-align: left; color: var(--ink-dim); padding: 4px 8px; border-bottom: 1px solid var(--border); font-weight: normal; text-transform: uppercase; letter-spacing: .05em; }
+    td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+    .rate-bar { display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle; margin-left: 6px; }
+
+    /* ── Toolbar ── */
+    .toolbar { padding: 10px 32px; display: flex; gap: 10px; border-bottom: 1px solid var(--border); }
+    .toolbar button { padding: 5px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 12px; transition: border-color .15s; }
     .toolbar button:hover { border-color: var(--blue); color: var(--blue); }
     .toolbar button.active { border-color: var(--blue); color: var(--blue); }
-    .layout { display: flex; height: calc(100vh - 100px); }
+
+    /* ── Layout ── */
+    .layout { display: flex; height: calc(100vh - 210px); }
     .run-list { width: 400px; border-right: 1px solid var(--border); overflow-y: auto; }
-    .run-item { padding: 14px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; }
+    .run-item { padding: 12px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; }
     .run-item:hover { background: var(--surface); }
     .run-item.selected { background: var(--surface); border-left: 2px solid var(--blue); }
     .run-item .run-id { font-size: 11px; color: var(--ink-dim); margin-bottom: 4px; }
     .run-item .run-meta { display: flex; gap: 8px; align-items: center; }
+
     .badge { font-size: 10px; padding: 2px 7px; border-radius: 3px; font-weight: bold; }
-    .badge-pending   { background: #2a2a14; color: var(--yellow); border: 1px solid var(--yellow); }
-    .badge-approved  { background: #0d2a1a; color: var(--aqua); border: 1px solid var(--aqua); }
-    .badge-rejected  { background: #2a0d0d; color: var(--red); border: 1px solid var(--red); }
-    .badge-review    { background: #1a1220; color: #9085e9; border: 1px solid #9085e9; }
-    .detail { flex: 1; overflow-y: auto; padding: 24px 32px; }
+    .badge-pending  { background: #2a2a14; color: var(--yellow); border: 1px solid var(--yellow); }
+    .badge-approved { background: #0d2a1a; color: var(--aqua);   border: 1px solid var(--aqua); }
+    .badge-rejected { background: #2a0d0d; color: var(--red);    border: 1px solid var(--red); }
+    .badge-review   { background: #1a1220; color: var(--violet); border: 1px solid var(--violet); }
+    .badge-success  { background: #0d2a1a; color: var(--aqua);   border: 1px solid var(--aqua); }
+    .badge-failed   { background: #2a0d0d; color: var(--red);    border: 1px solid var(--red); }
+    .badge-skipped  { background: #1a1a1a; color: var(--ink-dim); border: 1px solid var(--border); }
+
+    .detail { flex: 1; overflow-y: auto; padding: 22px 32px; }
     .detail-empty { color: var(--ink-dim); margin-top: 40px; text-align: center; }
-    .detail h2 { font-size: 14px; color: var(--blue); margin-bottom: 16px; }
-    .actions { display: flex; gap: 10px; margin-bottom: 20px; }
-    .btn-approve { padding: 8px 20px; background: var(--aqua); color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
-    .btn-reject  { padding: 8px 20px; background: var(--red); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
+    .detail h2 { font-size: 14px; color: var(--blue); margin-bottom: 14px; }
+    .actions { display: flex; gap: 10px; margin-bottom: 18px; }
+    .btn-approve { padding: 7px 18px; background: var(--aqua); color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
+    .btn-reject  { padding: 7px 18px; background: var(--red);  color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
     .btn-approve:disabled, .btn-reject:disabled { opacity: .4; cursor: default; }
-    .bloc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin-bottom: 12px; }
+    .bloc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 10px; }
     .bloc-card .bloc-header { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
     .bloc-card .bloc-agent { color: var(--blue); font-size: 12px; }
     .bloc-card .bloc-score { font-size: 11px; color: var(--ink-dim); }
     .bloc-card .bloc-preview { font-size: 11px; color: var(--ink-dim); white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; }
-    .meta-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 12px; overflow-x: auto; font-size: 11px; color: var(--ink); }
+    .meta-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
+
 <header>
   <h1>ATLAS Dashboard</h1>
   <span class="tag">HITL Review</span>
 </header>
 
+<div class="kpi-bar" id="kpi-bar">
+  <div class="kpi blue"><div class="kpi-label">Total runs</div><div class="kpi-value" id="kpi-total">—</div></div>
+  <div class="kpi yellow"><div class="kpi-label">Pending</div><div class="kpi-value" id="kpi-pending">—</div></div>
+  <div class="kpi aqua"><div class="kpi-label">Approved</div><div class="kpi-value" id="kpi-approved">—</div></div>
+  <div class="kpi red"><div class="kpi-label">Rejected</div><div class="kpi-value" id="kpi-rejected">—</div></div>
+  <div class="kpi violet"><div class="kpi-label">Review rate</div><div class="kpi-value" id="kpi-review-rate">—</div></div>
+  <div class="kpi aqua"><div class="kpi-label">Judge pass rate</div><div class="kpi-value" id="kpi-judge-rate">—</div></div>
+</div>
+
+<details class="agent-table-wrap" id="agent-table-wrap">
+  <summary>Judge pass rate by agent ▸</summary>
+  <table id="agent-table">
+    <thead><tr><th>Agent</th><th>Blocs</th><th>Pass rate</th><th>Avg score</th></tr></thead>
+    <tbody id="agent-tbody"></tbody>
+  </table>
+</details>
+
 <div class="toolbar">
   <button id="btn-all" class="active" onclick="loadRuns(false)">All runs</button>
   <button id="btn-review" onclick="loadRuns(true)">Needs review</button>
-  <button onclick="loadRuns(currentFilter)">Refresh</button>
+  <button onclick="refresh()">Refresh</button>
 </div>
 
 <div class="layout">
@@ -78,6 +125,47 @@
   let currentFilter = false;
   let selectedId = null;
 
+  function pct(v) { return v != null ? (v * 100).toFixed(1) + '%' : '—'; }
+  function score(v) { return v != null ? v.toFixed(2) : '—'; }
+
+  function rateColor(v) {
+    if (v == null) return 'var(--ink-dim)';
+    if (v >= 0.8) return 'var(--aqua)';
+    if (v >= 0.5) return 'var(--yellow)';
+    return 'var(--red)';
+  }
+
+  async function loadStats() {
+    const s = await fetch('/api/stats').then(r => r.json());
+    document.getElementById('kpi-total').textContent = s.total_runs;
+    document.getElementById('kpi-pending').textContent = s.pending;
+    document.getElementById('kpi-approved').textContent = s.approved;
+    document.getElementById('kpi-rejected').textContent = s.rejected;
+    document.getElementById('kpi-review-rate').textContent = pct(s.review_rate);
+    document.getElementById('kpi-judge-rate').textContent = pct(s.judge_pass_rate);
+
+    const tbody = document.getElementById('agent-tbody');
+    const agents = Object.entries(s.by_agent || {});
+    if (!agents.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--ink-dim)">No agent data yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = agents.map(([agent, d]) => {
+      const rate = d.judge_pass_rate;
+      const barW = rate != null ? Math.round(rate * 80) : 0;
+      const col = rateColor(rate);
+      return `<tr>
+        <td style="color:var(--blue)">${agent}</td>
+        <td>${d.total_blocs}</td>
+        <td>
+          <span style="color:${col}">${pct(rate)}</span>
+          <span class="rate-bar" style="width:${barW}px;background:${col}"></span>
+        </td>
+        <td style="color:var(--ink-dim)">${score(d.avg_score)}</td>
+      </tr>`;
+    }).join('');
+  }
+
   async function loadRuns(reviewOnly) {
     currentFilter = reviewOnly;
     document.getElementById('btn-all').classList.toggle('active', !reviewOnly);
@@ -85,7 +173,10 @@
     const url = reviewOnly ? '/api/runs?review=true' : '/api/runs';
     const runs = await fetch(url).then(r => r.json());
     const list = document.getElementById('run-list');
-    if (!runs.length) { list.innerHTML = '<div style="padding:20px;color:var(--ink-dim)">No runs.</div>'; return; }
+    if (!runs.length) {
+      list.innerHTML = '<div style="padding:20px;color:var(--ink-dim)">No runs.</div>';
+      return;
+    }
     list.innerHTML = runs.map(r => `
       <div class="run-item${r.run_id === selectedId ? ' selected' : ''}" onclick="showRun('${r.run_id}')">
         <div class="run-id">${r.run_id}</div>
@@ -99,12 +190,12 @@
 
   async function showRun(runId) {
     selectedId = runId;
-    document.querySelectorAll('.run-item').forEach(el => el.classList.remove('selected'));
-    document.querySelectorAll('.run-item').forEach(el => { if (el.querySelector('.run-id').textContent === runId) el.classList.add('selected'); });
+    document.querySelectorAll('.run-item').forEach(el => {
+      el.classList.toggle('selected', el.querySelector('.run-id').textContent === runId);
+    });
     const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
     const canDecide = run.requires_review && run.status === 'pending';
-    const detail = document.getElementById('detail');
-    detail.innerHTML = `
+    document.getElementById('detail').innerHTML = `
       <h2>Run ${run.run_id}</h2>
       <div class="meta-row">
         <span class="badge badge-${run.status}">${run.status}</span>
@@ -115,11 +206,11 @@
         <button class="btn-approve" ${canDecide ? '' : 'disabled'} onclick="decide('${runId}','approve')">Approve</button>
         <button class="btn-reject"  ${canDecide ? '' : 'disabled'} onclick="decide('${runId}','reject')">Reject</button>
       </div>
-      ${run.blocs.map(b => `
+      ${(run.blocs || []).map(b => `
         <div class="bloc-card">
           <div class="bloc-header">
             <span class="bloc-agent">${b.agent || '—'}</span>
-            <span class="badge badge-${b.status}">${b.status}</span>
+            <span class="badge badge-${b.status || 'skipped'}">${b.status || 'skipped'}</span>
             ${b.requires_review ? '<span class="badge badge-review">review</span>' : ''}
             <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
           </div>
@@ -129,12 +220,16 @@
   }
 
   async function decide(runId, action) {
-    await fetch(`/api/runs/${runId}/${action}`, {method: 'POST'});
-    await loadRuns(currentFilter);
+    await fetch(`/api/runs/${runId}/${action}`, { method: 'POST' });
+    await refresh();
     await showRun(runId);
   }
 
-  loadRuns(false);
+  async function refresh() {
+    await Promise.all([loadStats(), loadRuns(currentFilter)]);
+  }
+
+  refresh();
 </script>
 </body>
 </html>

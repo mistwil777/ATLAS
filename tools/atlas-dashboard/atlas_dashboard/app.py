@@ -58,6 +58,74 @@ def api_reject(run_id: str):
     return {"status": "rejected"}
 
 
+# ── Stats ──────────────────────────────────────────────────────────────────────
+
+
+@app.get("/api/stats")
+def api_stats():
+    runs = get_store().list_runs()
+    total = len(runs)
+    if total == 0:
+        return {
+            "total_runs": 0,
+            "pending": 0,
+            "approved": 0,
+            "rejected": 0,
+            "review_rate": 0.0,
+            "judge_pass_rate": 0.0,
+            "by_agent": {},
+        }
+
+    status_counts: dict[str, int] = {"pending": 0, "approved": 0, "rejected": 0}
+    review_count = 0
+    agent_stats: dict[str, dict] = {}
+
+    for run in runs:
+        status_counts[run.get("status", "pending")] = (
+            status_counts.get(run.get("status", "pending"), 0) + 1
+        )
+        if run.get("requires_review"):
+            review_count += 1
+
+        for bloc in run.get("blocs", []):
+            agent = bloc.get("agent") or "unknown"
+            if agent not in agent_stats:
+                agent_stats[agent] = {"total": 0, "passed": 0, "failed": 0, "scores": []}
+            agent_stats[agent]["total"] += 1
+            jp = bloc.get("judge_passed")
+            if jp is True:
+                agent_stats[agent]["passed"] += 1
+            elif jp is False:
+                agent_stats[agent]["failed"] += 1
+            score = bloc.get("judge_score")
+            if score is not None:
+                agent_stats[agent]["scores"].append(score)
+
+    # Compute pass rates and avg scores per agent
+    by_agent = {}
+    total_judged = 0
+    total_passed = 0
+    for agent, s in agent_stats.items():
+        judged = s["passed"] + s["failed"]
+        total_judged += judged
+        total_passed += s["passed"]
+        by_agent[agent] = {
+            "total_blocs": s["total"],
+            "judge_pass_rate": round(s["passed"] / judged, 3) if judged else None,
+            "avg_score": round(sum(s["scores"]) / len(s["scores"]), 3) if s["scores"] else None,
+        }
+
+    return {
+        "total_runs": total,
+        "pending": status_counts.get("pending", 0),
+        "approved": status_counts.get("approved", 0),
+        "rejected": status_counts.get("rejected", 0),
+        "review_rate": round(review_count / total, 3) if total else 0.0,
+        "judge_pass_rate": round(total_passed / total_judged, 3) if total_judged else None,
+        "by_agent": by_agent,
+    }
+
+
 # ── UI ─────────────────────────────────────────────────────────────────────────
 
 
