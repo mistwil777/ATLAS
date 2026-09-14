@@ -21,7 +21,7 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e platform/agent-tester/
+        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e runners/contract-validator/
 
       - name: Dependency status
         run: uv run python -m pair_forge check
@@ -39,9 +39,9 @@ jobs:
         run: uv run pytest agents/pair-forge/pair_forge/tests/smoke/test_ocr.py -v
         continue-on-error: true
 
-  # ── agent-tester ──────────────────────────────────────────────────────────
-  agent-tester:
-    name: agent-tester / smoke + validate pair-forge
+  # ── contract-validator ──────────────────────────────────────────────────────────
+  contract-validator:
+    name: contract-validator / smoke + validate pair-forge
     runs-on: ubuntu-latest
     needs: pair-forge
     steps:
@@ -54,16 +54,16 @@ jobs:
           enable-cache: true
 
       - name: Install agents
-        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e platform/agent-tester/
+        run: uv pip install -e libs/atlas-core/ -e agents/pair-forge/ -e runners/contract-validator/
 
-      - name: Smoke tests — agent-tester
-        run: uv run pytest platform/agent-tester/agent_tester/tests/smoke/ -v
+      - name: Smoke tests — contract-validator
+        run: uv run pytest runners/contract-validator/contract_validator/tests/smoke/ -v
 
       - name: Validate pair-forge (level 1 — contract)
-        run: uv run python -m agent_tester run --agent agents/pair-forge --level 1
+        run: uv run python -m contract_validator run --agent agents/pair-forge --level 1
 
       - name: Validate pair-forge (level 2 — prompt contracts)
-        run: uv run python -m agent_tester run --agent agents/pair-forge --level 2
+        run: uv run python -m contract_validator run --agent agents/pair-forge --level 2
 
   # ── agent-forge ───────────────────────────────────────────────────────────
   agent-forge:
@@ -79,7 +79,7 @@ jobs:
           enable-cache: true
 
       - name: Install agent-forge
-        run: uv pip install -e libs/atlas-core/ -e agents/agent-forge/ -e platform/agent-tester/
+        run: uv pip install -e libs/atlas-core/ -e agents/agent-forge/ -e runners/contract-validator/
 
       - name: Smoke tests — agent-forge
         run: uv run pytest agents/agent-forge/agent_forge/tests/smoke/ -v
@@ -218,7 +218,7 @@ jobs:
         run: uv pip install "ruff==0.7.4"
 
       - name: Ruff check
-        run: uv run ruff check agents/ platform/ libs/
+        run: uv run ruff check agents/ platform/ runners/ tools/ libs/
 
       - name: Ruff format check
-        run: uv run ruff format --check agents/ platform/ libs/
+        run: uv run ruff format --check agents/ platform/ runners/ tools/ libs/

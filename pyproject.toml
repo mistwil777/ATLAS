@@ -8,14 +8,14 @@ requires-python = ">=3.10"
 # platform/  = ATLAS infrastructure agents (orchestrator, judge, memory, bus, tooling)
 # libs/      = shared libraries (no entry-point, no LLM)
 [tool.uv.workspace]
-members = ["agents/*", "platform/*", "libs/*"]
+members = ["agents/*", "platform/*", "runners/*", "tools/*", "libs/*"]
 
 [tool.uv.sources]
 pair-forge    = { workspace = true }
 agent-forge   = { workspace = true }
 cdc-router    = { workspace = true }
 atlas-core         = { workspace = true }
-agent-tester       = { workspace = true }
+contract-validator = { workspace = true }
 atlas-bus          = { workspace = true }
 atlas-memory       = { workspace = true }
 atlas-judge        = { workspace = true }
@@ -32,5 +32,5 @@ ignore = ["E501"]
 
 # ── Pytest ────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
-testpaths = ["agents", "platform", "libs"]
+testpaths = ["agents", "platform", "runners", "tools", "libs"]
 addopts   = "-q --tb=short"
