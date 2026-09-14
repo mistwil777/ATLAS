@@ -17,7 +17,7 @@ import sys
 import webbrowser
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(name)s  %(levelname)s  %(message)s")
 _log = logging.getLogger("atlas")
 
 _TOML_TEMPLATE = """\
