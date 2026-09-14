@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from atlas_memory.run_store import RunStore
 
@@ -25,7 +26,9 @@ def test_create_run(store: RunStore) -> None:
 
 def test_append_bloc_no_review(store: RunStore) -> None:
     run_id = store.create_run()
-    store.append_bloc(run_id, {"agent": "agent-forge", "judge_passed": True, "requires_review": False})
+    store.append_bloc(
+        run_id, {"agent": "agent-forge", "judge_passed": True, "requires_review": False}
+    )
     run = store.get_run(run_id)
     assert len(run["blocs"]) == 1
     assert run["requires_review"] is False
@@ -33,7 +36,9 @@ def test_append_bloc_no_review(store: RunStore) -> None:
 
 def test_append_bloc_triggers_review(store: RunStore) -> None:
     run_id = store.create_run()
-    store.append_bloc(run_id, {"agent": "agent-forge", "judge_passed": False, "requires_review": True})
+    store.append_bloc(
+        run_id, {"agent": "agent-forge", "judge_passed": False, "requires_review": True}
+    )
     run = store.get_run(run_id)
     assert run["requires_review"] is True
 
@@ -51,7 +56,7 @@ def test_reject(store: RunStore) -> None:
 
 
 def test_list_runs(store: RunStore) -> None:
-    id1 = store.create_run()
+    store.create_run()
     id2 = store.create_run()
     store.append_bloc(id2, {"requires_review": True})
     all_runs = store.list_runs()
