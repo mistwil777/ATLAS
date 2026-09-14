@@ -29,17 +29,17 @@ def test_kg_register_and_query():
             tags=["nlp", "document"],
         )
         kg.register_agent(
-            "agent-tester",
+            "contract-validator",
             capabilities=["contract validation"],
             inputs=["agent_path"],
             outputs=["report"],
             tags=["validation"],
         )
-        kg.add_edge("pair-forge", "agent-tester", "CHAINS_WITH")
+        kg.add_edge("pair-forge", "contract-validator", "CHAINS_WITH")
 
         composable = kg.query_composable("pair-forge")
         assert len(composable) == 1
-        assert composable[0]["name"] == "agent-tester"
+        assert composable[0]["name"] == "contract-validator"
         assert composable[0]["relation"] == "CHAINS_WITH"
 
 
@@ -56,20 +56,20 @@ def test_kg_edge_and_graph():
             tags=[],
         )
         kg.register_agent(
-            "agent-tester",
+            "contract-validator",
             capabilities=["validate"],
             inputs=["agent_path"],
             outputs=["report"],
             tags=[],
         )
-        kg.add_edge("agent-forge", "agent-tester", "PRODUCES")
+        kg.add_edge("agent-forge", "contract-validator", "PRODUCES")
 
         graph = kg.get_graph()
         assert "nodes" in graph
         assert "links" in graph
         names = [n["id"] for n in graph["nodes"]]
         assert "agent-forge" in names
-        assert "agent-tester" in names
+        assert "contract-validator" in names
 
 
 def test_kg_persistence():

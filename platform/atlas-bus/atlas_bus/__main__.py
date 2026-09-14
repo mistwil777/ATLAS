@@ -63,7 +63,7 @@ def _cmd_run(args: list[str]) -> None:
     """Run a pipeline: atlas-bus run agent1,agent2,agent3 [key=value ...]"""
     if not args:
         print("Usage: atlas-bus run <agent1,agent2,...> [key=value ...]")
-        print("Example: atlas-bus run agent-forge,agent-tester spec_path=my_spec.md")
+        print("Example: atlas-bus run agent-forge,contract-validator spec_path=my_spec.md")
         sys.exit(1)
 
     from atlas_bus.bus import Bus  # noqa: PLC0415

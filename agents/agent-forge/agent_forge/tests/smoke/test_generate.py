@@ -70,10 +70,10 @@ def test_generate_from_spec_produces_expected_files():
 def test_generate_from_spec_passes_contract():
     """Step 2: validate_contract() returns passed=True."""
     pytest.importorskip(
-        "agent_tester", reason="agent-tester not installed — skipping contract check"
+        "contract_validator", reason="contract-validator not installed — skipping contract check"
     )
 
-    from agent_tester.contract import validate_contract
+    from contract_validator.contract import validate_contract
 
     from agent_forge.agent import AgentForgeAgent
 

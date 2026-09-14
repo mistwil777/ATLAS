@@ -5,7 +5,7 @@ interactive CLI dialogue (interactive mode).
 
 Flow:
   parse spec / ask questions → extract params → render scaffold (scaffold.py)
-  → validate contract (agent-tester level 1) → yield summary
+  → validate contract (contract-validator level 1) → yield summary
 
 LLM and logging backends are injected at construction time.
 Default LLM: AWS Bedrock (same pattern as pair-forge).
@@ -206,12 +206,12 @@ class AgentForgeAgent:
 
     def _validate(self, output_path: Path) -> tuple[bool, list[str]]:
         try:
-            from agent_tester.contract import validate_contract  # noqa: PLC0415
+            from contract_validator.contract import validate_contract  # noqa: PLC0415
 
             report = validate_contract(output_path)
             return report.passed, report.violations
         except ImportError:
-            self._log("warning", "agent-tester not installed — skipping contract validation")
+            self._log("warning", "contract-validator not installed — skipping contract validation")
             return True, []
         except Exception as exc:  # noqa: BLE001
             return False, [str(exc)]

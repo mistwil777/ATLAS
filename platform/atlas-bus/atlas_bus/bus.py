@@ -25,7 +25,7 @@ class Bus:
         bus = Bus()
         result = bus.run_pipeline([
             ("agent-forge", {"spec_path": "my_spec.md"}),
-            ("agent-tester", {}),
+            ("contract-validator", {}),
         ])
     """
 
