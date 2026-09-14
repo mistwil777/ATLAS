@@ -242,6 +242,39 @@ jobs:
       - name: Import check
         run: uv run python -c "from atlas_dashboard.app import app; print('OK')"
 
+  # ── atlas-cli ─────────────────────────────────────────────────────────────
+  atlas-cli:
+    name: atlas-cli / import + help
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install atlas-cli + core deps
+        run: |
+          uv pip install \
+            -e libs/atlas-core/ \
+            -e platform/atlas-memory/ \
+            -e platform/atlas-bus/ \
+            -e platform/atlas-judge/ \
+            -e platform/atlas-orchestrator/ \
+            -e agents/cdc-router/ \
+            -e agents/agent-forge/ \
+            -e agents/pair-forge/ \
+            -e tools/atlas-dashboard/ \
+            -e tools/atlas-cli/
+
+      - name: CLI help
+        run: uv run atlas --help
+
+      - name: CLI check (agents import)
+        run: uv run atlas check || true
+
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: lint

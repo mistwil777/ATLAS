@@ -22,6 +22,7 @@ atlas-judge        = { workspace = true }
 atlas-orchestrator = { workspace = true }
 atlas-audit        = { workspace = true }
 atlas-dashboard    = { workspace = true }
+atlas-cli          = { workspace = true }
 
 # ── Ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]
