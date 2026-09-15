@@ -80,6 +80,27 @@
     .bloc-card .bloc-score { font-size: 11px; color: var(--ink-dim); }
     .bloc-card .bloc-preview { font-size: 11px; color: var(--ink-dim); white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; }
     .meta-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+
+    /* ── Agents to Create panel ── */
+    .create-panel { margin-top: 22px; }
+    .create-panel h3 { font-size: 12px; color: var(--violet); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+    .agent-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; flex-direction: column; }
+    .agent-row-header { display: flex; align-items: center; gap: 10px; width: 100%; }
+    .agent-row-name { color: var(--violet); font-size: 13px; flex: 1; }
+    .btn-scaffold { padding: 5px 14px; background: transparent; border: 1px solid var(--violet); color: var(--violet); border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-scaffold:hover { background: var(--violet); color: #000; }
+    .btn-scaffold:disabled { opacity: .4; cursor: default; }
+    .btn-install { padding: 5px 14px; background: transparent; border: 1px solid var(--aqua); color: var(--aqua); border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-install:hover { background: var(--aqua); color: #000; }
+    .btn-download { padding: 5px 14px; background: transparent; border: 1px solid var(--blue); color: var(--blue); border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; }
+    .btn-download:hover { background: var(--blue); color: #fff; }
+    .btn-rerun { padding: 7px 18px; background: var(--blue); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; margin-top: 12px; }
+    .btn-rerun:hover { opacity: .85; }
+    .code-viewer { margin-top: 8px; width: 100%; }
+    .code-viewer select { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 4px; font-size: 11px; margin-bottom: 6px; }
+    .code-viewer pre { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 10px; font-size: 11px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--violet); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -217,7 +238,133 @@
           </div>
           <div class="bloc-preview">${(b.output_preview || b.bloc || '').slice(0, 400)}</div>
         </div>`).join('')}
+      ${buildCreatePanel(run)}
     `;
+  }
+
+  // ── Agents to Create ─────────────────────────────────────────────────────────
+
+  const _scaffoldState = {}; // runId+agentName → {state, files, outputPath}
+
+  function _stateKey(runId, agent) { return `${runId}::${agent}`; }
+
+  function buildCreatePanel(run) {
+    const agents = run.requires_creation || [];
+    if (!agents.length) return '';
+    const scaffolded = run.scaffolded || {};
+    const allInstalled = agents.every(a => scaffolded[a]?.installed);
+
+    const rows = agents.map(agent => {
+      const sc = scaffolded[agent];
+      const key = _stateKey(run.run_id, agent);
+      const state = _scaffoldState[key] || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
+
+      let controls = '';
+      if (state === 'pending') {
+        controls = `<button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')">Scaffold</button>`;
+      } else if (state === 'scaffolding') {
+        controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Scaffolding…</span>`;
+      } else if (state === 'scaffolded') {
+        const files = _scaffoldState[key]?.files || {};
+        const fileNames = Object.keys(files);
+        const selectOpts = fileNames.map(f => `<option value="${f}">${f}</option>`).join('');
+        const firstContent = fileNames.length ? escHtml(files[fileNames[0]]) : '';
+        controls = `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
+            <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
+          </div>
+          <div class="code-viewer" id="viewer-${agent}">
+            <select onchange="switchFile('${agent}',this.value,${JSON.stringify(JSON.stringify(files))})">${selectOpts}</select>
+            <pre id="code-${agent}">${firstContent}</pre>
+          </div>`;
+      } else if (state === 'installing') {
+        controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
+      } else if (state === 'installed') {
+        const files = _scaffoldState[key]?.files || sc?.spec ? {} : {};
+        controls = `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span class="badge badge-approved">installed</span>
+            <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
+          </div>`;
+      }
+      return `
+        <div class="agent-row" id="agent-row-${agent}">
+          <div class="agent-row-header">
+            <span class="agent-row-name">${agent}</span>
+            ${controls}
+          </div>
+        </div>`;
+    }).join('');
+
+    const rerunBtn = allInstalled
+      ? `<button class="btn-rerun" onclick="rerun('${run.run_id}')">Re-run Pipeline</button>`
+      : '';
+
+    return `<div class="create-panel"><h3>Agents to Create (${agents.length})</h3>${rows}${rerunBtn}</div>`;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function switchFile(agent, fname, filesJson) {
+    const files = JSON.parse(filesJson);
+    document.getElementById(`code-${agent}`).textContent = files[fname] || '';
+  }
+
+  async function scaffold(runId, agentName) {
+    const key = _stateKey(runId, agentName);
+    _scaffoldState[key] = { state: 'scaffolding' };
+    await showRun(runId);
+    try {
+      const res = await fetch(`/api/runs/${runId}/scaffold/${agentName}`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Scaffold failed: ' + (err.detail || JSON.stringify(err)));
+        _scaffoldState[key] = { state: 'pending' };
+      } else {
+        const data = await res.json();
+        _scaffoldState[key] = { state: 'scaffolded', files: data.files, outputPath: data.output_path };
+      }
+    } catch(e) {
+      alert('Scaffold error: ' + e.message);
+      _scaffoldState[key] = { state: 'pending' };
+    }
+    await showRun(runId);
+  }
+
+  async function installAgent(runId, agentName) {
+    const key = _stateKey(runId, agentName);
+    const prev = _scaffoldState[key] || {};
+    _scaffoldState[key] = { ...prev, state: 'installing' };
+    await showRun(runId);
+    try {
+      const res = await fetch(`/api/runs/${runId}/install/${agentName}`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Install failed: ' + (err.detail || JSON.stringify(err)));
+        _scaffoldState[key] = { ...prev, state: 'scaffolded' };
+      } else {
+        _scaffoldState[key] = { ...prev, state: 'installed' };
+      }
+    } catch(e) {
+      alert('Install error: ' + e.message);
+      _scaffoldState[key] = { ...prev, state: 'scaffolded' };
+    }
+    await showRun(runId);
+  }
+
+  async function rerun(runId) {
+    const res = await fetch(`/api/runs/${runId}/rerun`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json();
+      alert('Re-run failed: ' + (err.detail || JSON.stringify(err)));
+      return;
+    }
+    const data = await res.json();
+    await refresh();
+    if (data.new_run_id) await showRun(data.new_run_id);
   }
 
   async function decide(runId, action) {

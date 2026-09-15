@@ -78,7 +78,7 @@ class AtlasMemoryAgent:
         try:
             result = handler(**kwargs)
         except Exception as exc:  # noqa: BLE001
-            logging.getLogger("atlas_memory").exception("Operation failed")
+            logging.getLogger("atlas_memory").warning("Operation '%s' failed: %s", operation, exc)
             yield self._error(f"Operation failed: {exc}")
             return
 

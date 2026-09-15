@@ -24,9 +24,20 @@ _MODEL = "BAAI/bge-small-en-v1.5"
 
 
 def _fastembed(texts: list[str]) -> list[list[float]]:
+    import logging  # noqa: PLC0415
+
     from fastembed import TextEmbedding  # noqa: PLC0415
 
-    model = TextEmbedding(model_name=_MODEL)
+    try:
+        model = TextEmbedding(model_name=_MODEL)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_memory").warning(
+            "fastembed model unavailable (%s) — RAG search disabled. "
+            "Run: python -m fastembed download --model %s",
+            exc.__class__.__name__,
+            _MODEL,
+        )
+        raise
     return [list(v) for v in model.embed(texts)]
 
 

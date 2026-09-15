@@ -38,10 +38,17 @@ def orchestrate(
         return None
 
     blocs = routing_summary.get("blocs", [])
-    _log.info("Routing complete — %d blocs", len(blocs))
+    requires_creation = routing_summary.get("requires_creation", [])
+    _log.info("Routing complete — %d blocs, %d to create", len(blocs), len(requires_creation))
 
     run_store = _get_run_store(run_store_dir)
-    run_id = run_store.create_run(metadata={"cdc_preview": cdc_text[:200]}) if run_store else None
+    run_id = (
+        run_store.create_run(metadata={"cdc_preview": cdc_text[:200], "cdc_full": cdc_text})
+        if run_store
+        else None
+    )
+    if run_store and run_id and requires_creation:
+        run_store.set_requires_creation(run_id, requires_creation)
 
     bus = _get_bus(bus_fn)
     bloc_results = []

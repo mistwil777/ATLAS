@@ -31,6 +31,8 @@ class RunStore:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "status": "pending",
             "requires_review": False,
+            "requires_creation": [],
+            "scaffolded": {},
             "blocs": [],
             "metadata": metadata or {},
         }
@@ -42,6 +44,27 @@ class RunStore:
         run["blocs"].append(bloc_result)
         if bloc_result.get("requires_review"):
             run["requires_review"] = True
+        self._write(run_id, run)
+
+    def set_requires_creation(self, run_id: str, agents: list[str]) -> None:
+        run = self._read(run_id)
+        run["requires_creation"] = agents
+        self._write(run_id, run)
+
+    def set_scaffold_result(
+        self, run_id: str, agent_name: str, output_path: str, spec: dict[str, Any]
+    ) -> None:
+        run = self._read(run_id)
+        run.setdefault("scaffolded", {})[agent_name] = {
+            "output_path": output_path,
+            "installed": False,
+            "spec": spec,
+        }
+        self._write(run_id, run)
+
+    def set_agent_installed(self, run_id: str, agent_name: str) -> None:
+        run = self._read(run_id)
+        run.setdefault("scaffolded", {}).setdefault(agent_name, {})["installed"] = True
         self._write(run_id, run)
 
     def set_review_decision(self, run_id: str, decision: str) -> None:
