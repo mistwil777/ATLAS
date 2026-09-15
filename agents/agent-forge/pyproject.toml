@@ -16,7 +16,7 @@ collect = ["atlas-core"]
 dev = ["pytest>=8.0"]
 validate = ["contract-validator"]
 
-[project.entry-points."atlas.agents"]
+[project.entry-points."atlas.tools"]
 agent-forge = "agent_forge.agent:AgentForgeAgent"
 
 [project.scripts]

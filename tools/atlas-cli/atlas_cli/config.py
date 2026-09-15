@@ -39,8 +39,12 @@ def llm_fn_from_config(cfg: dict):
         return _openai_fn(llm_cfg), llm_cfg
     if provider == "anthropic":
         return _anthropic_fn(llm_cfg), llm_cfg
+    if provider == "groq":
+        return _groq_fn(llm_cfg), llm_cfg
+    if provider == "auto":
+        return _auto_fn(llm_cfg), llm_cfg
 
-    raise ValueError(f"Unknown LLM provider: {provider!r}. Supported: bedrock, openai, anthropic")
+    raise ValueError(f"Unknown LLM provider: {provider!r}. Supported: bedrock, openai, anthropic, groq, auto")
 
 
 # ── Provider implementations ───────────────────────────────────────────────────
@@ -98,12 +102,64 @@ def _openai_fn(llm_cfg: dict):
     return call
 
 
+def _auto_fn(llm_cfg: dict):
+    """Try Anthropic (auth_token) first, fall back to Groq (GROQ_API_KEY)."""
+    anthropic_fn = _anthropic_fn(llm_cfg)
+    groq_fn = _groq_fn(llm_cfg)
+
+    def call(prompt: str, cfg: dict, max_tokens: int = 1024) -> str | None:
+        import logging
+
+        result = anthropic_fn(prompt, cfg, max_tokens)
+        if result is not None:
+            return result
+        logging.getLogger("atlas_cli").warning("Anthropic failed, trying Groq fallback")
+        return groq_fn(prompt, cfg, max_tokens)
+
+    return call
+
+
+def _groq_fn(llm_cfg: dict):
+    def call(prompt: str, cfg: dict, max_tokens: int = 1024) -> str | None:
+        try:
+            import os
+
+            import openai
+
+            api_key = cfg.get("api_key") or os.environ.get("GROQ_API_KEY")
+            client = openai.OpenAI(
+                api_key=api_key,
+                base_url="https://api.groq.com/openai/v1",
+            )
+            resp = client.chat.completions.create(
+                model=cfg.get("model", "llama-3.3-70b-versatile"),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=float(cfg.get("temperature", 0.1)),
+            )
+            return resp.choices[0].message.content
+        except Exception as exc:  # noqa: BLE001
+            import logging
+
+            logging.getLogger("atlas_cli").error("Groq call failed: %s", exc)
+            return None
+
+    return call
+
+
 def _anthropic_fn(llm_cfg: dict):
     def call(prompt: str, cfg: dict, max_tokens: int = 1024) -> str | None:
         try:
+            import os
+
             import anthropic
 
-            client = anthropic.Anthropic(api_key=cfg.get("api_key"))
+            api_key = cfg.get("api_key")
+            auth_token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            if auth_token and not api_key:
+                client = anthropic.Anthropic(auth_token=auth_token)
+            else:
+                client = anthropic.Anthropic(api_key=api_key)
             msg = client.messages.create(
                 model=cfg.get("model", "claude-haiku-4-5-20251001"),
                 max_tokens=max_tokens,
@@ -113,7 +169,7 @@ def _anthropic_fn(llm_cfg: dict):
         except Exception as exc:  # noqa: BLE001
             import logging
 
-            logging.getLogger("atlas_cli").warning("Anthropic call failed: %s", exc)
+            logging.getLogger("atlas_cli").error("Anthropic call failed: %s", exc)
             return None
 
     return call

@@ -28,7 +28,7 @@ dependencies = [
 collect = ["atlas-core"]
 dev = ["pytest>=8.0"]
 
-[project.entry-points."atlas.agents"]
+[project.entry-points."atlas.tools"]
 pair-forge = "pair_forge.agent:PairForgeAgent"
 
 [project.scripts]

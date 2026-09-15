@@ -88,6 +88,11 @@ def _segment(
 
     agent = CdcRouterAgent(**kwargs)
     events = list(agent.run(cdc_text=cdc_text))
+    for e in events:
+        if e.get("level") == "error":
+            _log.error("cdc-router: %s", e.get("msg"))
+        elif e.get("level") == "info":
+            _log.debug("cdc-router: %s", e.get("msg"))
     summary = next((e for e in events if e.get("summary")), None)
     return summary
 
