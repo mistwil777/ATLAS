@@ -194,6 +194,7 @@
     document.getElementById('btn-review').classList.toggle('active', reviewOnly);
     const url = reviewOnly ? '/api/runs?review=true' : '/api/runs';
     const runs = await fetch(url).then(r => r.json());
+    runs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     const list = document.getElementById('run-list');
     if (!runs.length) {
       list.innerHTML = '<div style="padding:20px;color:var(--ink-dim)">No runs.</div>';
@@ -381,6 +382,7 @@
 
   async function refresh() {
     await Promise.all([loadStats(), loadRuns(currentFilter)]);
+    if (selectedId) await showRun(selectedId);
   }
 
   refresh();

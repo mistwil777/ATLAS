@@ -44,7 +44,9 @@ def llm_fn_from_config(cfg: dict):
     if provider == "auto":
         return _auto_fn(llm_cfg), llm_cfg
 
-    raise ValueError(f"Unknown LLM provider: {provider!r}. Supported: bedrock, openai, anthropic, groq, auto")
+    raise ValueError(
+        f"Unknown LLM provider: {provider!r}. Supported: bedrock, openai, anthropic, groq, auto"
+    )
 
 
 # ── Provider implementations ───────────────────────────────────────────────────
