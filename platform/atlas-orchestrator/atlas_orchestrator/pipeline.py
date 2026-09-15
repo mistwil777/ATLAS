@@ -45,12 +45,14 @@ def orchestrate(
 
     run_store = _get_run_store(run_store_dir)
     run_id = (
-        run_store.create_run(metadata={
-            "cdc_preview": cdc_text[:200],
-            "cdc_full": cdc_text,
-            "project_dir": project_dir or "",
-            "project_owner": project_owner,
-        })
+        run_store.create_run(
+            metadata={
+                "cdc_preview": cdc_text[:200],
+                "cdc_full": cdc_text,
+                "project_dir": project_dir or "",
+                "project_owner": project_owner,
+            }
+        )
         if run_store
         else None
     )

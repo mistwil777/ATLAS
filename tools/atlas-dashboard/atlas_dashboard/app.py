@@ -346,10 +346,8 @@ def _fix_entry_point(output_path: _Path, agent_name: str) -> None:
     # Replace any existing entry-point key under [atlas.agents] with agent_name
     text = re.sub(
         r'(\[project\.entry-points\."atlas\.agents"\]\s*\n)[^\[]+',
-        lambda m: m.group(1) + next(
-            (f'{agent_name} = "{v}"\n' for v in re.findall(r'= "([^"]+)"', m.group(0))),
-            ""
-        ),
+        lambda m: m.group(1)
+        + next((f'{agent_name} = "{v}"\n' for v in re.findall(r'= "([^"]+)"', m.group(0))), ""),
         text,
     )
     pyproject.write_text(text, encoding="utf-8")

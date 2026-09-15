@@ -149,8 +149,12 @@ def _agent(slug: str, pkg: str, cls: str, inp: str, out: str, domain: str, uses_
         else ""
     )
     llm_param_init = "        llm_fn=None,\n" if uses_llm else ""
-    llm_cfg_init   = "        llm_cfg=None,\n" if uses_llm else ""
-    llm_self       = "        self._llm     = llm_fn\n        self._llm_cfg = llm_cfg or {{}}\n" if uses_llm else ""
+    llm_cfg_init = "        llm_cfg=None,\n" if uses_llm else ""
+    llm_self = (
+        "        self._llm     = llm_fn\n        self._llm_cfg = llm_cfg or {{}}\n"
+        if uses_llm
+        else ""
+    )
 
     llm_call = ""
     if uses_llm:
