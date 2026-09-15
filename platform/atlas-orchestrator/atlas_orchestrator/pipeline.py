@@ -136,6 +136,8 @@ def _process_bloc(
         "judge_score": None,
         "output_preview": "",
         "requires_review": False,
+        "judge_criteria": [],
+        "judge_feedback": "",
     }
 
     if not agent_name:
@@ -159,11 +161,13 @@ def _process_bloc(
     result["output_preview"] = output_text[:300]
 
     bloc_criteria = bloc.get("criteria") or []
-    judge_passed, judge_score = _judge_bloc(
+    judge_passed, judge_score, judge_criteria, judge_feedback = _judge_bloc(
         output_text, agent_name, bloc_criteria, cdc_text, llm_fn, llm_cfg, judge_fn
     )
     result["judge_passed"] = judge_passed
     result["judge_score"] = judge_score
+    result["judge_criteria"] = judge_criteria
+    result["judge_feedback"] = judge_feedback
     result["requires_review"] = judge_passed is False
 
     return result
@@ -193,7 +197,7 @@ def _judge_bloc(
     llm_fn: Callable,
     llm_cfg: dict,
     judge_fn: Callable | None,
-) -> tuple[bool | None, float | None]:
+) -> tuple[bool | None, float | None, list, str]:
     """Evaluate a bloc output using dynamic criteria from cdc-router."""
     try:
         if judge_fn is not None:
@@ -214,13 +218,18 @@ def _judge_bloc(
         )
         summary = next((e for e in events if e.get("summary")), None)
         if summary:
-            return summary.get("passed"), summary.get("score")
+            return (
+                summary.get("passed"),
+                summary.get("score"),
+                summary.get("criteria_scores", []),
+                summary.get("feedback", ""),
+            )
     except ImportError:
         _log.warning("atlas-judge not installed — skipping evaluation")
     except Exception as exc:  # noqa: BLE001
         _log.warning("atlas-judge evaluation failed: %s", exc)
 
-    return None, None
+    return None, None, [], ""
 
 
 def _get_bus(bus_fn: Callable | None) -> object:

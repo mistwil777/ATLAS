@@ -84,6 +84,15 @@
     .bloc-criteria { margin-top: 6px; font-size: 11px; color: var(--ink-dim); }
     .bloc-criteria ul { margin: 4px 0 0 16px; padding: 0; }
     .bloc-criteria li { margin-bottom: 2px; }
+    .judge-detail { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+    .judge-criterion { display: flex; align-items: baseline; gap: 8px; font-size: 11px; margin-bottom: 4px; }
+    .judge-criterion .crit-name { color: var(--ink); flex: 1; }
+    .judge-criterion .crit-score { font-weight: 700; width: 24px; text-align: right; flex-shrink: 0; }
+    .judge-criterion .crit-comment { color: var(--ink-dim); font-size: 10px; flex: 2; }
+    .score-5,.score-4 { color: var(--aqua); }
+    .score-3 { color: var(--yellow); }
+    .score-2,.score-1 { color: var(--red); }
+    .judge-feedback { font-size: 11px; color: var(--ink-dim); margin-top: 6px; font-style: italic; }
     .meta-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 
     /* ── Progress banner ── */
@@ -263,9 +272,31 @@
           <div class="bloc-preview">${(b.output_preview || b.bloc || '').slice(0, 400)}</div>
           ${b.justification ? `<div class="bloc-why"><span class="bloc-why-label">Décision</span> ${escHtml(b.justification)}</div>` : ''}
           ${b.criteria && b.criteria.length ? `<div class="bloc-criteria"><span class="bloc-why-label">Critères d'évaluation</span><ul>${b.criteria.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>` : ''}
+          ${buildJudgeDetail(b)}
         </div>`).join('')}
       ${buildCreatePanel(run)}
     `;
+  }
+
+  // ── Judge criteria detail ────────────────────────────────────────────────────
+
+  function buildJudgeDetail(b) {
+    const criteria = b.judge_criteria || [];
+    const feedback = b.judge_feedback || '';
+    if (!criteria.length && !feedback) return '';
+    const rows = criteria.map(c => {
+      const sc = Math.round(c.score || 0);
+      return `<div class="judge-criterion">
+        <span class="crit-name">${escHtml(c.criterion || '')}</span>
+        <span class="crit-score score-${sc}">${sc}/5</span>
+        <span class="crit-comment">${escHtml(c.comment || '')}</span>
+      </div>`;
+    }).join('');
+    const fb = feedback ? `<div class="judge-feedback">${escHtml(feedback)}</div>` : '';
+    return `<div class="judge-detail">
+      ${rows}
+      ${fb}
+    </div>`;
   }
 
   // ── Progress banner ──────────────────────────────────────────────────────────
