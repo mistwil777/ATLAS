@@ -120,6 +120,8 @@ def _process_bloc(
         "bloc": content,
         "type": bloc_type,
         "agent": agent_name,
+        "justification": bloc.get("justification", ""),
+        "criteria": bloc.get("criteria") or [],
         "status": "skipped",
         "judge_passed": None,
         "judge_score": None,

@@ -79,6 +79,11 @@
     .bloc-card .bloc-agent { color: var(--blue); font-size: 12px; }
     .bloc-card .bloc-score { font-size: 11px; color: var(--ink-dim); }
     .bloc-card .bloc-preview { font-size: 11px; color: var(--ink-dim); white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; }
+    .bloc-why { margin-top: 8px; font-size: 11px; color: var(--ink-dim); border-top: 1px solid var(--border); padding-top: 8px; }
+    .bloc-why-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--violet); margin-right: 6px; }
+    .bloc-criteria { margin-top: 6px; font-size: 11px; color: var(--ink-dim); }
+    .bloc-criteria ul { margin: 4px 0 0 16px; padding: 0; }
+    .bloc-criteria li { margin-bottom: 2px; }
     .meta-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 
     /* ── Agents to Create panel ── */
@@ -239,6 +244,8 @@
             <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
           </div>
           <div class="bloc-preview">${(b.output_preview || b.bloc || '').slice(0, 400)}</div>
+          ${b.justification ? `<div class="bloc-why"><span class="bloc-why-label">Décision</span> ${escHtml(b.justification)}</div>` : ''}
+          ${b.criteria && b.criteria.length ? `<div class="bloc-criteria"><span class="bloc-why-label">Critères d'évaluation</span><ul>${b.criteria.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>` : ''}
         </div>`).join('')}
       ${buildCreatePanel(run)}
     `;
