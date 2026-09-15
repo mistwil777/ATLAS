@@ -19,6 +19,8 @@ def orchestrate(
     bus_fn: Callable | None = None,
     judge_fn: Callable | None = None,
     run_store_dir: Path | None = None,
+    project_dir: str | None = None,
+    project_owner: str = "client",
 ) -> dict | None:
     """Run the full orchestration flow and return the raw report dict.
 
@@ -43,7 +45,12 @@ def orchestrate(
 
     run_store = _get_run_store(run_store_dir)
     run_id = (
-        run_store.create_run(metadata={"cdc_preview": cdc_text[:200], "cdc_full": cdc_text})
+        run_store.create_run(metadata={
+            "cdc_preview": cdc_text[:200],
+            "cdc_full": cdc_text,
+            "project_dir": project_dir or "",
+            "project_owner": project_owner,
+        })
         if run_store
         else None
     )

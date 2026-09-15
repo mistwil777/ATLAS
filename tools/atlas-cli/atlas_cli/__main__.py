@@ -23,6 +23,12 @@ _log = logging.getLogger("atlas")
 _TOML_TEMPLATE = """\
 # atlas.toml — ATLAS project configuration
 
+[project]
+# owner: client | capgemini
+# client    → agents scaffoldés dans <project_dir>/agents/  (propriété du projet)
+# capgemini → agents scaffoldés dans ~/.atlas/scaffolded/   (catalogue ATLAS global)
+owner = "client"
+
 [llm]
 # provider: bedrock | openai | anthropic
 provider = "bedrock"
@@ -152,7 +158,15 @@ def cmd_run(args: argparse.Namespace) -> None:
         from atlas_orchestrator.pipeline import orchestrate  # noqa: PLC0415
 
         cdc_text = cdc_path.read_text(encoding="utf-8")
-        report = orchestrate(cdc_text=cdc_text, llm_fn=llm_fn, llm_cfg=llm_cfg)
+        project_dir = str(Path.cwd())
+        project_owner = cfg.get("project", {}).get("owner", "client")
+        report = orchestrate(
+            cdc_text=cdc_text,
+            llm_fn=llm_fn,
+            llm_cfg=llm_cfg,
+            project_dir=project_dir,
+            project_owner=project_owner,
+        )
     except ImportError:
         _log.error("atlas-orchestrator not installed")
         sys.exit(1)

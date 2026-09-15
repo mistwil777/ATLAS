@@ -268,7 +268,13 @@ def api_scaffold(run_id: str, agent_name: str):
         f.write(f"# Agent: {agent_name}\n\n{cdc_full}")
         spec_path = _Path(f.name)
 
-    output_dir = _Path.home() / ".atlas" / "scaffolded"
+    meta = run.get("metadata", {})
+    project_dir = meta.get("project_dir", "")
+    project_owner = meta.get("project_owner", "client")
+    if project_owner == "capgemini" or not project_dir:
+        output_dir = _Path.home() / ".atlas" / "scaffolded"
+    else:
+        output_dir = _Path(project_dir) / "agents"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
