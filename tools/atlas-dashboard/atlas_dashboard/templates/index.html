@@ -152,6 +152,7 @@
   <button id="btn-all" class="active" onclick="loadRuns(false)">All runs</button>
   <button id="btn-review" onclick="loadRuns(true)">Needs review</button>
   <button onclick="refresh()">Refresh</button>
+  <button onclick="bulkDeleteSkipped()" style="margin-left:auto;border-color:var(--red);color:var(--red)" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
 </div>
 
 <div class="layout">
@@ -454,6 +455,21 @@
     await fetch(`/api/runs/${runId}`, { method: 'DELETE' });
     selectedId = null;
     document.getElementById('detail').innerHTML = '<div style="padding:20px;color:var(--ink-dim)">Select a run.</div>';
+    await refresh();
+  }
+
+  async function bulkDeleteSkipped() {
+    const runs = await fetch('/api/runs').then(r => r.json());
+    const toDelete = runs.filter(r =>
+      r.blocs && r.blocs.length > 0 && r.blocs.every(b => b.status === 'skipped')
+    );
+    if (!toDelete.length) { alert('No all-skipped runs to delete.'); return; }
+    if (!confirm(`Delete ${toDelete.length} debug run(s) where all blocs are skipped?`)) return;
+    await Promise.all(toDelete.map(r => fetch(`/api/runs/${r.run_id}`, { method: 'DELETE' })));
+    if (toDelete.some(r => r.run_id === selectedId)) {
+      selectedId = null;
+      document.getElementById('detail').innerHTML = '<div class="detail-empty">Select a run to inspect it.</div>';
+    }
     await refresh();
   }
 
