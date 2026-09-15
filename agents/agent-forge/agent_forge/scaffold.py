@@ -151,7 +151,7 @@ def _agent(slug: str, pkg: str, cls: str, inp: str, out: str, domain: str, uses_
     llm_param_init = "        llm_fn=None,\n" if uses_llm else ""
     llm_cfg_init = "        llm_cfg=None,\n" if uses_llm else ""
     llm_self = (
-        "        self._llm     = llm_fn\n        self._llm_cfg = llm_cfg or {{}}\n"
+        "        self._llm     = llm_fn\n        self._llm_cfg = llm_cfg or {}\n"
         if uses_llm
         else ""
     )
@@ -220,7 +220,7 @@ class {cls}Agent:
         Final dict must contain key "summary": True.
         """
         yield self._info(f"Starting {cls}Agent")
-        {llm_call}
+{llm_call}
 
     def _info(self, msg: str)  -> dict: return {{"level": "info",    "msg": msg}}
     def _warn(self, msg: str)  -> dict: return {{"level": "warning", "msg": msg}}
