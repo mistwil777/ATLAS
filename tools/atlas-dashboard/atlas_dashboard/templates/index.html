@@ -217,7 +217,7 @@
       el.classList.toggle('selected', el.querySelector('.run-id').textContent === runId);
     });
     const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
-    const canDecide = run.requires_review && run.status === 'pending';
+    const isPending = run.status === 'pending';
     document.getElementById('detail').innerHTML = `
       <h2>Run ${run.run_id}</h2>
       <div class="meta-row">
@@ -226,8 +226,9 @@
         <span style="color:var(--ink-dim);font-size:11px">${run.created_at}</span>
       </div>
       <div class="actions">
-        <button class="btn-approve" ${canDecide ? '' : 'disabled'} onclick="decide('${runId}','approve')">Approve</button>
-        <button class="btn-reject"  ${canDecide ? '' : 'disabled'} onclick="decide('${runId}','reject')">Reject</button>
+        <button class="btn-approve" ${isPending ? '' : 'disabled'} onclick="decide('${runId}','approve')">Approve</button>
+        <button class="btn-reject"  ${isPending ? '' : 'disabled'} onclick="decide('${runId}','reject')">Reject</button>
+        <button class="btn-reject" style="margin-left:auto;background:transparent;border:1px solid var(--red);color:var(--red)" onclick="deleteRun('${runId}')">Delete</button>
       </div>
       ${(run.blocs || []).map(b => `
         <div class="bloc-card">
@@ -377,7 +378,14 @@
   async function decide(runId, action) {
     await fetch(`/api/runs/${runId}/${action}`, { method: 'POST' });
     await refresh();
-    await showRun(runId);
+  }
+
+  async function deleteRun(runId) {
+    if (!confirm('Delete this run?')) return;
+    await fetch(`/api/runs/${runId}`, { method: 'DELETE' });
+    selectedId = null;
+    document.getElementById('detail').innerHTML = '<div style="padding:20px;color:var(--ink-dim)">Select a run.</div>';
+    await refresh();
   }
 
   async function refresh() {

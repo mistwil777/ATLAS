@@ -140,6 +140,16 @@ def api_reject(run_id: str):
     return {"status": "rejected"}
 
 
+@app.delete("/api/runs/{run_id}")
+def api_delete_run(run_id: str):
+    store = get_store()
+    path = store._path(run_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Run not found")
+    path.unlink()
+    return {"status": "deleted"}
+
+
 # ── Stats ──────────────────────────────────────────────────────────────────────
 
 
