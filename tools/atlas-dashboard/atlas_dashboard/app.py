@@ -211,37 +211,19 @@ def api_stats():
 
 
 def _llm_fn_for_dashboard():
-    """Build an LLM callable from environment — mirrors atlas-cli logic."""
-    import os  # noqa: PLC0415
+    """Build LLM callable from atlas.toml (CWD) — same logic as atlas-cli."""
+    try:
+        from atlas_cli.config import llm_fn_from_config, load  # noqa: PLC0415
 
-    base_url = os.environ.get("ANTHROPIC_BASE_URL", "")
-    auth_token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    model = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+        cfg = load()
+        return llm_fn_from_config(cfg)
+    except Exception as exc:  # noqa: BLE001
+        import logging  # noqa: PLC0415
 
-    def call(prompt: str, cfg: dict, max_tokens: int = 1024) -> str | None:
-        try:
-            import anthropic  # noqa: PLC0415
-
-            kwargs: dict = {
-                "model": cfg.get("model", model),
-                "max_tokens": max_tokens,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-            if auth_token and not api_key:
-                client = anthropic.Anthropic(auth_token=auth_token, base_url=base_url or None)
-            else:
-                client = anthropic.Anthropic(api_key=api_key, base_url=base_url or None)
-            msg = client.messages.create(**kwargs)
-            return msg.content[0].text
-        except Exception as exc:  # noqa: BLE001
-            import logging  # noqa: PLC0415
-
-            logging.getLogger("atlas_dashboard").error("LLM call failed: %s", exc)
-            return None
-
-    llm_cfg = {"model": model}
-    return call, llm_cfg
+        logging.getLogger("atlas_dashboard").error(
+            "Cannot build LLM fn (is atlas.toml present in CWD?): %s", exc
+        )
+        raise HTTPException(status_code=500, detail=f"LLM not configured: {exc}") from exc
 
 
 @app.post("/api/runs/{run_id}/scaffold/{agent_name}")
