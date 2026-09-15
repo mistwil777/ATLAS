@@ -78,8 +78,6 @@ class AgentForgeAgent:
 
     def run(self, spec_path: Path | None = None) -> Generator[dict, None, None]:
         """Yield log dicts throughout scaffolding. Final dict contains key 'summary'."""
-        from atlas_core import collect  # noqa: PLC0415
-
         _t0 = time.monotonic()
         yield self._info("agent-forge starting")
 
@@ -110,14 +108,6 @@ class AgentForgeAgent:
             for v in violations:
                 yield self._warn(f"Contract violation: {v}")
 
-        collect.emit_metrics(
-            "agent-forge",
-            {
-                "duration_s": round(time.monotonic() - _t0, 3),
-                "status": "success",
-                "contract_passed": contract_passed,
-            },
-        )
         yield {
             "summary": True,
             "agent_name": spec_dict.get("agent_name", ""),

@@ -30,7 +30,7 @@ def generate(params: dict, output_dir: Path) -> Path:
     test_dir = pkg_dir / "tests" / "smoke" / "fixtures"
     test_dir.mkdir(parents=True, exist_ok=True)
 
-    _write(root / "pyproject.toml", _pyproject(slug, pkg, desc, uses_llm))
+    _write(root / "pyproject.toml", _pyproject(slug, pkg, cls, desc))
     _write(pkg_dir / "__init__.py", _init(slug, desc))
     _write(pkg_dir / "__main__.py", _main(slug, pkg, cls))
     _write(pkg_dir / "agent.py", _agent(slug, pkg, cls, inp, out, domain, uses_llm))
@@ -54,8 +54,7 @@ def _write(path: Path, content: str) -> None:
 # ── Templates ─────────────────────────────────────────────────────────────────
 
 
-def _pyproject(slug: str, pkg: str, desc: str, uses_llm: bool) -> str:
-    boto_dep = '    "boto3>=1.35,<2.0",\n' if uses_llm else ""
+def _pyproject(slug: str, pkg: str, cls: str, desc: str) -> str:
     return f"""\
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -66,14 +65,16 @@ name = "{slug}"
 version = "0.1.0"
 description = "{desc}"
 requires-python = ">=3.10"
-dependencies = [
-{boto_dep}]
+dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 
 [project.scripts]
 {slug} = "{pkg}.__main__:main"
+
+[project.entry-points."atlas.agents"]
+{cls} = "{pkg}.agent:{cls}Agent"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -142,103 +143,80 @@ if __name__ == "__main__":
 
 def _agent(slug: str, pkg: str, cls: str, inp: str, out: str, domain: str, uses_llm: bool) -> str:
     llm_import = f"from {pkg}.prompts import MAIN_PROMPT\n" if uses_llm else ""
-
-    llm_fn_def = ""
-    if uses_llm:
-        llm_fn_def = f"""\
-
-def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 2048) -> str | None:
-    try:
-        import boto3  # noqa: PLC0415
-        from botocore.config import Config  # noqa: PLC0415
-
-        model_id    = llm_config.get("model_id", "us.amazon.nova-pro-v1:0")
-        temperature = float(llm_config.get("temperature", 0.1))
-        region      = llm_config.get("region", "us-east-1")
-        client = boto3.client(
-            "bedrock-runtime", region_name=region,
-            config=Config(connect_timeout=10, read_timeout=120, retries={{"max_attempts": 2}}),
-        )
-        response = client.converse(
-            modelId=model_id,
-            messages=[{{"role": "user", "content": [{{"text": prompt}}]}}],
-            inferenceConfig={{"maxTokens": max_tokens, "temperature": temperature}},
-        )
-        return response["output"]["message"]["content"][0]["text"].strip()
-    except Exception as exc:  # noqa: BLE001
-        logging.getLogger("{pkg}").warning("LLM call failed: %s", exc)
-        return None
-
-"""
-
     llm_param_doc = (
-        "        llm_fn:  callable(prompt, llm_config, max_tokens) -> str | None\n"
+        "        llm_fn:  callable(prompt, cfg, max_tokens) -> str | None  — injected by ATLAS Bus\n"
         if uses_llm
         else ""
     )
     llm_param_init = "        llm_fn=None,\n" if uses_llm else ""
-    llm_self = "        self._llm = llm_fn or _default_llm\n" if uses_llm else ""
+    llm_cfg_init   = "        llm_cfg=None,\n" if uses_llm else ""
+    llm_self       = "        self._llm     = llm_fn\n        self._llm_cfg = llm_cfg or {{}}\n" if uses_llm else ""
+
+    llm_call = ""
+    if uses_llm:
+        llm_call = """\
+        if self._llm is None:
+            yield self._error("llm_fn not provided — agent requires an LLM")
+            return
+        prompt   = MAIN_PROMPT.format(input=cdc_bloc)
+        response = self._llm(prompt, self._llm_cfg, 1024)
+        if not response:
+            yield self._error("LLM returned no output")
+            return
+        yield {"summary": True, "output": response}"""
+    else:
+        llm_call = """\
+        # TODO: implement agent logic here using cdc_bloc and context
+        yield {"summary": True, "output": cdc_bloc}"""
 
     return f'''\
-"""{slug} — core agent logic.
+"""{slug} — ATLAS Bus-compatible agent.
 
 Input:  {inp}
 Output: {out}
 Domain: {domain}
+
+Bus contract: run(cdc_bloc, context) → Iterator[dict]
+Final dict must contain key "summary": True.
 """
 
 from __future__ import annotations
 
 import logging
-import time
-from collections.abc import Generator
-from pathlib import Path
+from collections.abc import Iterator
 
-{llm_import}from {pkg}.tools import check_dependencies
-{llm_fn_def}
-
+{llm_import}
 def _default_log(level: str, message: str) -> None:
     getattr(logging.getLogger("{pkg}"), level,
             logging.getLogger("{pkg}").info)(message)
 
 
 class {cls}Agent:
-    """{domain} agent.
+    """{domain} agent — ATLAS Bus-compatible.
 
     Args:
-        config:  Configuration dict.
+        config:  Configuration dict (forwarded from atlas.toml [llm] section).
 {llm_param_doc}        log_fn:  callable(level, message) -> None
     """
 
     def __init__(
         self,
         config: dict | None = None,
-{llm_param_init}        log_fn=None,
+{llm_param_init}{llm_cfg_init}        log_fn=None,
     ) -> None:
         self.config  = config or {{}}
 {llm_self}        self._log    = log_fn or _default_log
 
-    def run(self, input_path: Path) -> Generator[dict, None, None]:
-        """Process input and yield log dicts. Final dict contains key 'summary'."""
-        from atlas_core import collect  # noqa: PLC0415
-        t0 = time.monotonic()
-        status = "success"
+    def run(self, cdc_bloc: str, context: str = "") -> Iterator[dict]:
+        """Process a CDC bloc and yield log dicts.
 
-        yield self._info(f"Starting: {{input_path.name}}")
-
-        dep_status = check_dependencies()
-        for item in dep_status.get("missing", []):
-            yield self._warn(f"Capability unavailable: {{item['capability']}} — {{item['install_hint']}}")
-
-        # TODO: implement agent logic here
-
-        collect.emit_metrics("{slug}", {{
-            "duration_s": round(time.monotonic() - t0, 3),
-            "status":     status,
-            "input":      input_path.name,
-        }})
-
-        yield {{"summary": True, "input": str(input_path)}}
+        Args:
+            cdc_bloc: The CDC bloc text assigned to this agent.
+            context:  Full CDC text for additional context.
+        Final dict must contain key "summary": True.
+        """
+        yield self._info(f"Starting {cls}Agent")
+        {llm_call}
 
     def _info(self, msg: str)  -> dict: return {{"level": "info",    "msg": msg}}
     def _warn(self, msg: str)  -> dict: return {{"level": "warning", "msg": msg}}

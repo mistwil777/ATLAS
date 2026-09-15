@@ -289,6 +289,9 @@ def api_scaffold(run_id: str, agent_name: str):
                 with contextlib.suppress(Exception):
                     files[str(p.relative_to(output_path))] = p.read_text(encoding="utf-8")
 
+        # Ensure the entry-point key matches agent_name (cdc-router PascalCase name)
+        _fix_entry_point(_Path(output_path), agent_name)
+
         store.set_scaffold_result(run_id, agent_name, output_path, spec)
         return {"agent_name": agent_name, "output_path": output_path, "spec": spec, "files": files}
     finally:
@@ -324,6 +327,26 @@ def api_install(run_id: str, agent_name: str):
 
     store.set_agent_installed(run_id, agent_name)
     return {"status": "installed", "agent_name": agent_name}
+
+
+def _fix_entry_point(output_path: _Path, agent_name: str) -> None:
+    """Patch pyproject.toml so the atlas.agents entry-point key matches agent_name."""
+    import re  # noqa: PLC0415
+
+    pyproject = output_path / "pyproject.toml"
+    if not pyproject.exists():
+        return
+    text = pyproject.read_text(encoding="utf-8")
+    # Replace any existing entry-point key under [atlas.agents] with agent_name
+    text = re.sub(
+        r'(\[project\.entry-points\."atlas\.agents"\]\s*\n)[^\[]+',
+        lambda m: m.group(1) + next(
+            (f'{agent_name} = "{v}"\n' for v in re.findall(r'= "([^"]+)"', m.group(0))),
+            ""
+        ),
+        text,
+    )
+    pyproject.write_text(text, encoding="utf-8")
 
 
 def _register_agent_in_kg(agent_name: str, output_path: str) -> None:
