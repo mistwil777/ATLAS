@@ -151,7 +151,7 @@ def _agent(slug: str, pkg: str, cls: str, inp: str, out: str, domain: str, uses_
     llm_param_init = "        llm_fn=None,\n" if uses_llm else ""
     llm_cfg_init = "        llm_cfg=None,\n" if uses_llm else ""
     llm_self = (
-        "        self._llm     = llm_fn\n        self._llm_cfg = llm_cfg or {}\n"
+        "        self._llm     = llm_fn or _default_llm\n        self._llm_cfg = llm_cfg or {}\n"
         if uses_llm
         else ""
     )
@@ -159,9 +159,6 @@ def _agent(slug: str, pkg: str, cls: str, inp: str, out: str, domain: str, uses_
     llm_call = ""
     if uses_llm:
         llm_call = """\
-        if self._llm is None:
-            yield self._error("llm_fn not provided — agent requires an LLM")
-            return
         prompt   = MAIN_PROMPT.format(input=cdc_bloc)
         response = self._llm(prompt, self._llm_cfg, 1024)
         if not response:
@@ -172,6 +169,23 @@ def _agent(slug: str, pkg: str, cls: str, inp: str, out: str, domain: str, uses_
         llm_call = """\
         # TODO: implement agent logic here using cdc_bloc and context
         yield {"summary": True, "output": cdc_bloc}"""
+
+    llm_default_fn = ""
+    if uses_llm:
+        llm_default_fn = '''\
+def _default_llm(prompt: str, cfg: dict, max_tokens: int = 1024) -> str | None:
+    """Read atlas.toml from CWD and call the configured LLM provider."""
+    try:
+        from atlas_cli.config import llm_fn_from_config, load  # type: ignore[import]
+        fn, _cfg = llm_fn_from_config(load())
+        return fn(prompt, _cfg, max_tokens)
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger(__name__).warning("_default_llm failed: %s", exc)
+        return None
+
+
+'''
 
     return f'''\
 """{slug} — ATLAS Bus-compatible agent.
@@ -190,7 +204,7 @@ import logging
 from collections.abc import Iterator
 
 {llm_import}
-def _default_log(level: str, message: str) -> None:
+{llm_default_fn}def _default_log(level: str, message: str) -> None:
     getattr(logging.getLogger("{pkg}"), level,
             logging.getLogger("{pkg}").info)(message)
 
