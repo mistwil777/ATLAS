@@ -309,8 +309,38 @@ def api_install(run_id: str, agent_name: str):
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=f"pip install failed: {result.stderr[:500]}")
 
+    # Register the new agent in the KG so cdc-router can find it at re-run
+    _register_agent_in_kg(agent_name, output_path)
+
     store.set_agent_installed(run_id, agent_name)
     return {"status": "installed", "agent_name": agent_name}
+
+
+def _register_agent_in_kg(agent_name: str, output_path: str) -> None:
+    """Add the freshly installed agent to atlas-memory KG."""
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+        mem = AtlasMemoryAgent()
+        events = list(
+            mem.run(
+                operation="register_agent",
+                name=agent_name,
+                capabilities=[f"Handles {agent_name} tasks as defined in CDC"],
+                tags=["scaffolded"],
+            )
+        )
+        err = next((e for e in events if e.get("level") == "error"), None)
+        if err:
+            logging.getLogger("atlas_dashboard").warning(
+                "KG registration warning for %s: %s", agent_name, err.get("msg")
+            )
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "KG registration failed for %s (non-blocking): %s", agent_name, exc
+        )
 
 
 @app.post("/api/runs/{run_id}/rerun")

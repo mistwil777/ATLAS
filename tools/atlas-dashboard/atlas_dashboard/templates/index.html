@@ -356,15 +356,21 @@
   }
 
   async function rerun(runId) {
-    const res = await fetch(`/api/runs/${runId}/rerun`, { method: 'POST' });
-    if (!res.ok) {
-      const err = await res.json();
-      alert('Re-run failed: ' + (err.detail || JSON.stringify(err)));
-      return;
+    const btn = document.querySelector('.btn-rerun');
+    if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
+    try {
+      const res = await fetch(`/api/runs/${runId}/rerun`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Re-run failed: ' + (err.detail || JSON.stringify(err)));
+        return;
+      }
+      const data = await res.json();
+      await refresh();
+      if (data.new_run_id) await showRun(data.new_run_id);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Re-run Pipeline'; }
     }
-    const data = await res.json();
-    await refresh();
-    if (data.new_run_id) await showRun(data.new_run_id);
   }
 
   async function decide(runId, action) {
