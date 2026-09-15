@@ -246,6 +246,14 @@ def api_scaffold(run_id: str, agent_name: str):
 
     llm_fn, llm_cfg = _llm_fn_for_dashboard()
 
+    # Smoke-test the LLM before handing it to agent-forge
+    _probe = llm_fn("Reply OK", llm_cfg, 8)
+    if not _probe:
+        raise HTTPException(
+            status_code=500,
+            detail="LLM probe failed — check atlas.toml [llm] config and credentials",
+        )
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
         f.write(f"# Agent: {agent_name}\n\n{cdc_full}")
         spec_path = _Path(f.name)
