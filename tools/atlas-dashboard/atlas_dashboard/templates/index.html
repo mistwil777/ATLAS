@@ -86,6 +86,21 @@
     .bloc-criteria li { margin-bottom: 2px; }
     .meta-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 
+    /* ── Progress banner ── */
+    .progress-banner { display: flex; align-items: center; gap: 0; margin-bottom: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; overflow-x: auto; }
+    .progress-step { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .progress-step .step-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .progress-step .step-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+    .progress-step.done .step-dot { background: var(--aqua); }
+    .progress-step.done .step-label { color: var(--aqua); }
+    .progress-step.current .step-dot { background: var(--violet); box-shadow: 0 0 0 3px rgba(144,133,233,.25); }
+    .progress-step.current .step-label { color: var(--violet); }
+    .progress-step.todo .step-dot { background: var(--border); }
+    .progress-step.todo .step-label { color: var(--ink-dim); }
+    .progress-connector { flex: 0 0 24px; height: 1px; background: var(--border); margin: 0 4px; }
+    .progress-connector.done { background: var(--aqua); }
+    .progress-hint { margin-left: auto; font-size: 11px; color: var(--violet); padding-left: 16px; white-space: nowrap; }
+
     /* ── Agents to Create panel ── */
     .create-panel { margin-top: 22px; }
     .create-panel h3 { font-size: 12px; color: var(--violet); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
@@ -230,6 +245,7 @@
         ${run.requires_review ? '<span class="badge badge-review">requires review</span>' : ''}
         <span style="color:var(--ink-dim);font-size:11px">${run.created_at}</span>
       </div>
+      ${buildProgressBanner(run)}
       <div class="actions">
         <button class="btn-approve" ${isPending ? '' : 'disabled'} onclick="decide('${runId}','approve')">Approve</button>
         <button class="btn-reject"  ${isPending ? '' : 'disabled'} onclick="decide('${runId}','reject')">Reject</button>
@@ -249,6 +265,52 @@
         </div>`).join('')}
       ${buildCreatePanel(run)}
     `;
+  }
+
+  // ── Progress banner ──────────────────────────────────────────────────────────
+
+  function buildProgressBanner(run) {
+    const agents = run.requires_creation || [];
+    const scaffolded = run.scaffolded || {};
+
+    // Determine stage completion
+    const routingDone = true;
+    const scaffoldDone = agents.length === 0 || agents.every(a => !!scaffolded[a]);
+    const installDone  = agents.length === 0 || agents.every(a => scaffolded[a]?.installed);
+    const hasSkipped   = (run.blocs || []).every(b => b.status === 'skipped');
+    const rerunDone    = installDone && !hasSkipped;
+    const valideDone   = run.status === 'approved';
+
+    const steps = [
+      { label: 'Routing',  done: routingDone },
+      { label: 'Scaffold', done: scaffoldDone },
+      { label: 'Install',  done: installDone },
+      { label: 'Re-run',   done: rerunDone },
+      { label: 'Validé',   done: valideDone },
+    ];
+
+    // First not-done step is current
+    let currentIdx = steps.findIndex(s => !s.done);
+    if (currentIdx === -1) currentIdx = steps.length - 1; // all done → last
+
+    const hints = [
+      null,
+      'Scaffoldez les agents manquants',
+      'Installez les agents générés',
+      'Relancez le pipeline',
+      'Approuvez le run',
+    ];
+
+    const html = steps.map((s, i) => {
+      const cls = s.done ? 'done' : (i === currentIdx ? 'current' : 'todo');
+      const connector = i < steps.length - 1
+        ? `<div class="progress-connector${steps[i].done && steps[i+1].done ? ' done' : (steps[i].done ? ' done' : '')}"></div>`
+        : '';
+      return `<div class="progress-step ${cls}"><div class="step-dot"></div><span class="step-label">${s.label}</span></div>${connector}`;
+    }).join('');
+
+    const hint = hints[currentIdx] ? `<span class="progress-hint">→ ${hints[currentIdx]}</span>` : '';
+    return `<div class="progress-banner">${html}${hint}</div>`;
   }
 
   // ── Agents to Create ─────────────────────────────────────────────────────────
