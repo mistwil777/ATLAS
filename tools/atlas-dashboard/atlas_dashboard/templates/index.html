@@ -259,7 +259,7 @@
     const rows = agents.map(agent => {
       const sc = scaffolded[agent];
       const key = _stateKey(run.run_id, agent);
-      const state = _scaffoldState[key] || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
+      const state = _scaffoldState[key]?.state || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
 
       let controls = '';
       if (state === 'pending') {
