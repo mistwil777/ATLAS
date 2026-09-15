@@ -41,7 +41,7 @@ For each bloc, generate 2 to 4 evaluation criteria as assertion strings.
     {{
       "bloc": "<short description of the functional bloc>",
       "type": "ia" or "code",
-      "agent_suggested": "<agent name if ia, null if code>",
+      "agent_suggested": "<PascalCase functional name, e.g. TicketClassifier, SentimentAnalyzer — NOT a model name like Claude or GPT>",
       "justification": "<one sentence applying the decision rule>",
       "criteria": [
         "<criterion 1>",
@@ -69,7 +69,7 @@ Return ONLY valid JSON, no markdown, no explanation.
     {{
       "bloc": "...",
       "type": "ia" or "code",
-      "agent_suggested": "..." or null,
+      "agent_suggested": "<PascalCase functional name> or null",
       "justification": "...",
       "criteria": ["...", "..."]
     }}
@@ -86,7 +86,7 @@ Expected format:
     {{
       "bloc": "...",
       "type": "ia" or "code",
-      "agent_suggested": "..." or null,
+      "agent_suggested": "<PascalCase functional name> or null",
       "justification": "...",
       "criteria": ["...", "..."]
     }}
