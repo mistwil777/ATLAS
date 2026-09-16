@@ -61,8 +61,11 @@ For each bloc, generate 2 to 4 evaluation criteria as assertion strings.
 
 IMPORTANT for agent_suggested and called_by:
 - type "ia"   → agent_suggested REQUIRED (PascalCase agent name). called_by: null.
-- type "tool" → agent_suggested REQUIRED (PascalCase tool name). called_by REQUIRED: PascalCase name of the "ia" agent that will call this tool (from blocs above).
+- type "tool" → agent_suggested REQUIRED (PascalCase tool name). called_by REQUIRED: exact agent_suggested value of the "ia" bloc that will call this tool. NEVER empty string — if unsure pick the closest "ia" bloc.
 - type "code" → agent_suggested: null. called_by: null.
+
+Example: if bloc "ia" has agent_suggested="PriorityClassifier" and uses an OutputFormatter tool,
+then the "tool" bloc for OutputFormatter must have called_by="PriorityClassifier".
 
 {{
   "blocs": [
@@ -70,7 +73,7 @@ IMPORTANT for agent_suggested and called_by:
       "bloc": "<short description of the functional bloc>",
       "type": "ia" or "tool" or "code",
       "agent_suggested": "<PascalCase name — REQUIRED for ia and tool, null ONLY for code>",
-      "called_by": "<PascalCase agent name — REQUIRED for tool (who calls this tool), null for ia and code>",
+      "called_by": "<exact agent_suggested of the calling ia bloc — REQUIRED for tool, null for ia and code, NEVER empty string>",
       "justification": "<one sentence applying the decision rule>",
       "criteria": [
         "<criterion 1>",
