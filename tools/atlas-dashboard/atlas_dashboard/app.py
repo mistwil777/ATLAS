@@ -264,18 +264,23 @@ def api_scaffold(run_id: str, agent_name: str):
             detail="LLM probe failed — check atlas.toml [llm] config and credentials",
         )
 
+    import re as _re  # noqa: PLC0415
+
+    agent_slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
-        f.write(f"# Agent: {agent_name}\n\n{cdc_full}")
+        f.write(f"agent_name: {agent_slug}\n\n" f"# Agent: {agent_name}\n\n" f"{cdc_full}")
         spec_path = _Path(f.name)
 
     meta = run.get("metadata", {})
     project_dir = meta.get("project_dir", "")
     project_owner = meta.get("project_owner", "client")
     if project_owner == "capgemini" or not project_dir:
-        output_dir = _Path.home() / ".atlas" / "scaffolded"
+        base_output_dir = _Path.home() / ".atlas" / "scaffolded"
     else:
-        output_dir = _Path(project_dir) / "agents"
-    output_dir.mkdir(parents=True, exist_ok=True)
+        base_output_dir = _Path(project_dir) / "agents"
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = base_output_dir
 
     try:
         agent = AgentForgeAgent(output_dir=output_dir, config={"llm": llm_cfg}, llm_fn=llm_fn)
@@ -285,18 +290,27 @@ def api_scaffold(run_id: str, agent_name: str):
             errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
             raise HTTPException(status_code=500, detail=f"Scaffolding failed: {errors}")
 
-        output_path = summary["output_path"]
+        generated_path = _Path(summary["output_path"])
+        # Rename to agent_slug if agent-forge derived a different slug from the CDC
+        target_path = base_output_dir / agent_slug
+        if generated_path != target_path and generated_path.exists():
+            if target_path.exists():
+                import shutil as _shutil  # noqa: PLC0415
+
+                _shutil.rmtree(target_path)
+            generated_path.rename(target_path)
+        output_path = str(target_path)
         spec = summary
 
         # Read generated files
         files: dict[str, str] = {}
-        for p in _Path(output_path).rglob("*"):
+        for p in target_path.rglob("*"):
             if p.is_file() and p.suffix in (".py", ".toml", ".md", ".json", ".txt"):
                 with contextlib.suppress(Exception):
-                    files[str(p.relative_to(output_path))] = p.read_text(encoding="utf-8")
+                    files[str(p.relative_to(target_path))] = p.read_text(encoding="utf-8")
 
         # Ensure the entry-point key matches agent_name (cdc-router PascalCase name)
-        _fix_entry_point(_Path(output_path), agent_name)
+        _fix_entry_point(target_path, agent_name)
 
         store.set_scaffold_result(run_id, agent_name, output_path, spec)
         return {"agent_name": agent_name, "output_path": output_path, "spec": spec, "files": files}
