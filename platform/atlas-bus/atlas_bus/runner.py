@@ -38,24 +38,6 @@ def run_agent(agent_name: str, entry: str, inputs: dict) -> StepResult:
     # Serialize Path values to strings for JSON transport
     serialized_inputs = _serialize_inputs(inputs)
 
-    script = textwrap.dedent(f"""
-        import json, sys
-        from {module_path} import {class_name}
-        agent = {class_name}()
-        inputs = json.loads({json.dumps(json.dumps(serialized_inputs))!r})
-        _inputs = _deserialize(inputs)
-        for event in agent.run(**_inputs):
-            print(json.dumps(event, default=str), flush=True)
-
-        def _deserialize(data):
-            from pathlib import Path
-            return {{
-                k: Path(v) if isinstance(v, str) and k.endswith("_path") else v
-                for k, v in data.items()
-            }}
-    """)
-
-    # Rewrite with correct deserialize placement
     script = textwrap.dedent(f"""\
         import json, sys
         from pathlib import Path
@@ -68,7 +50,7 @@ def run_agent(agent_name: str, entry: str, inputs: dict) -> StepResult:
             }}
 
         agent = {class_name}()
-        raw_inputs = json.loads({json.dumps(json.dumps(serialized_inputs))!r})
+        raw_inputs = json.loads({json.dumps(serialized_inputs)!r})
         inputs = _deserialize(raw_inputs)
         for event in agent.run(**inputs):
             print(json.dumps(event, default=str), flush=True)
