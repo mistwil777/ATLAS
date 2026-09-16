@@ -58,6 +58,11 @@ class RunStore:
         run["requires_tools"] = tools
         self._write(run_id, run)
 
+    def set_tool_installed(self, run_id: str, tool_name: str) -> None:
+        run = self._read(run_id)
+        run.setdefault("tools_built", {}).setdefault(tool_name, {})["installed"] = True
+        self._write(run_id, run)
+
     def set_tool_result(
         self, run_id: str, tool_name: str, output_path: str, spec: dict[str, Any]
     ) -> None:
@@ -67,6 +72,7 @@ class RunStore:
             "module_name": spec.get("module_name", ""),
             "functions": spec.get("functions", []),
             "description": spec.get("description", ""),
+            "installed": False,
         }
         self._write(run_id, run)
 

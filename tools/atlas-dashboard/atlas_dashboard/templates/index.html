@@ -387,7 +387,7 @@
     const rows = tools.map(name => {
       const key = _toolKey(run.run_id, name);
       const existing = built[name];
-      const state = _toolState[key]?.state || (existing ? 'built' : 'pending');
+      const state = _toolState[key]?.state || (existing?.installed ? 'installed' : existing ? 'built' : 'pending');
 
       let controls = '';
       if (state === 'pending') {
@@ -404,12 +404,23 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <span class="badge badge-approved">built</span>
             ${fns.length ? `<span style="font-size:11px;color:var(--ink-dim)">${fns.join(', ')}</span>` : ''}
+            <button class="btn-install" onclick="installTool('${run.run_id}','${name}')">Install</button>
             <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
           </div>
           ${fileNames.length ? `<div class="code-viewer">
             <select onchange="switchFile('tool-${name}',this.value,${JSON.stringify(JSON.stringify(files))})">${selectOpts}</select>
             <pre id="code-tool-${name}">${firstContent}</pre>
           </div>` : ''}`;
+      } else if (state === 'installing') {
+        controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
+      } else if (state === 'installed') {
+        const fns = _toolState[key]?.functions || existing?.functions || [];
+        controls = `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span class="badge badge-approved">installed</span>
+            ${fns.length ? `<span style="font-size:11px;color:var(--ink-dim)">${fns.join(', ')}</span>` : ''}
+            <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
+          </div>`;
       }
 
       return `
@@ -423,6 +434,27 @@
     }).join('');
 
     return `<div class="tools-panel"><h3>Tools to Build (${tools.length})</h3>${rows}</div>`;
+  }
+
+  async function installTool(runId, toolName) {
+    const key = _toolKey(runId, toolName);
+    const prev = _toolState[key] || {};
+    _toolState[key] = { ...prev, state: 'installing' };
+    await showRun(runId);
+    try {
+      const res = await fetch(`/api/runs/${runId}/install-tool/${toolName}`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Install failed: ' + (err.detail || JSON.stringify(err)));
+        _toolState[key] = { ...prev, state: 'built' };
+      } else {
+        _toolState[key] = { ...prev, state: 'installed' };
+      }
+    } catch(e) {
+      alert('Install error: ' + e.message);
+      _toolState[key] = { ...prev, state: 'built' };
+    }
+    await showRun(runId);
   }
 
   async function buildTool(runId, toolName) {

@@ -471,6 +471,30 @@ def api_build_tool(run_id: str, tool_name: str):
     }
 
 
+@app.post("/api/runs/{run_id}/install-tool/{tool_name}")
+def api_install_tool(run_id: str, tool_name: str):
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    built = run.get("tools_built", {}).get(tool_name)
+    if not built:
+        raise HTTPException(status_code=400, detail="Tool not built yet")
+    output_path = built["output_path"]
+    if not _Path(output_path).exists():
+        raise HTTPException(status_code=400, detail=f"Tool path not found: {output_path}")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-e", output_path, "-q"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=f"pip install failed: {result.stderr[:500]}")
+    store.set_tool_installed(run_id, tool_name)
+    return {"status": "installed", "tool_name": tool_name}
+
+
 @app.post("/api/runs/{run_id}/install/{agent_name}")
 def api_install(run_id: str, agent_name: str):
     store = get_store()
