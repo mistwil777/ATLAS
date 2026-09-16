@@ -87,7 +87,10 @@ def _openai_fn(llm_cfg: dict):
         try:
             import openai
 
-            client = openai.OpenAI(api_key=cfg.get("api_key"))
+            client = openai.OpenAI(
+                api_key=cfg.get("api_key"),
+                base_url=cfg.get("base_url") or None,
+            )
             resp = client.chat.completions.create(
                 model=cfg.get("model", "gpt-4o-mini"),
                 messages=[{"role": "user", "content": prompt}],
