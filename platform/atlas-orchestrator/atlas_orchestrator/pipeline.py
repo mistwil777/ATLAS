@@ -169,6 +169,7 @@ def _process_bloc(
         "bloc": content,
         "type": bloc_type,
         "agent": agent_name,
+        "called_by": bloc.get("called_by", ""),
         "justification": bloc.get("justification", ""),
         "criteria": bloc.get("criteria") or [],
         "status": "skipped",
