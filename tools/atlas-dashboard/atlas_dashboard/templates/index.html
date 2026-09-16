@@ -113,9 +113,13 @@
     /* ── Tools to Build panel ── */
     .tools-panel { margin-top: 16px; }
     .tools-panel h3 { font-size: 12px; color: var(--yellow); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
-    .tool-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; }
+    .tool-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; flex-direction: column; }
+    .tool-row-header { display: flex; align-items: center; gap: 10px; width: 100%; }
     .tool-row-name { color: var(--yellow); font-size: 13px; flex: 1; }
     .tool-row-type { font-size: 10px; color: var(--ink-dim); background: #1a1800; border: 1px solid var(--yellow); padding: 2px 6px; border-radius: 3px; }
+    .btn-build-tool { padding: 5px 14px; background: transparent; border: 1px solid var(--yellow); color: var(--yellow); border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-build-tool:hover { background: var(--yellow); color: #000; }
+    .btn-build-tool:disabled { opacity: .4; cursor: default; }
 
     /* ── Agents to Create panel ── */
     .create-panel { margin-top: 22px; }
@@ -371,15 +375,75 @@
 
   // ── Tools to Build ───────────────────────────────────────────────────────────
 
+  const _toolState = {}; // runId+toolName → {state, files, outputPath, functions}
+
+  function _toolKey(runId, name) { return `${runId}::tool::${name}`; }
+
   function buildToolsPanel(run) {
     const tools = run.requires_tools || [];
     if (!tools.length) return '';
-    const rows = tools.map(name => `
-      <div class="tool-row">
-        <span class="tool-row-name">${escHtml(name)}</span>
-        <span class="tool-row-type">tool → libs/</span>
-      </div>`).join('');
+    const built = run.tools_built || {};
+
+    const rows = tools.map(name => {
+      const key = _toolKey(run.run_id, name);
+      const existing = built[name];
+      const state = _toolState[key]?.state || (existing ? 'built' : 'pending');
+
+      let controls = '';
+      if (state === 'pending') {
+        controls = `<button class="btn-build-tool" onclick="buildTool('${run.run_id}','${name}')">Build</button>`;
+      } else if (state === 'building') {
+        controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Building…</span>`;
+      } else if (state === 'built') {
+        const files = _toolState[key]?.files || {};
+        const fns = _toolState[key]?.functions || existing?.functions || [];
+        const fileNames = Object.keys(files);
+        const selectOpts = fileNames.map(f => `<option value="${f}">${f}</option>`).join('');
+        const firstContent = fileNames.length ? escHtml(files[fileNames[0]]) : '';
+        controls = `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span class="badge badge-approved">built</span>
+            ${fns.length ? `<span style="font-size:11px;color:var(--ink-dim)">${fns.join(', ')}</span>` : ''}
+            <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
+          </div>
+          ${fileNames.length ? `<div class="code-viewer">
+            <select onchange="switchFile('tool-${name}',this.value,${JSON.stringify(JSON.stringify(files))})">${selectOpts}</select>
+            <pre id="code-tool-${name}">${firstContent}</pre>
+          </div>` : ''}`;
+      }
+
+      return `
+        <div class="tool-row" id="tool-row-${name}">
+          <div class="tool-row-header">
+            <span class="tool-row-name">${escHtml(name)}</span>
+            <span class="tool-row-type">tool → libs/</span>
+            ${controls}
+          </div>
+        </div>`;
+    }).join('');
+
     return `<div class="tools-panel"><h3>Tools to Build (${tools.length})</h3>${rows}</div>`;
+  }
+
+  async function buildTool(runId, toolName) {
+    const key = _toolKey(runId, toolName);
+    _toolState[key] = { state: 'building' };
+    await showRun(runId);
+    try {
+      const res = await fetch(`/api/runs/${runId}/build-tool/${toolName}`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Build failed: ' + (err.detail || JSON.stringify(err)));
+        _toolState[key] = { state: 'pending' };
+      } else {
+        const data = await res.json();
+        _toolState[key] = { state: 'built', files: data.files, functions: data.functions, outputPath: data.output_path };
+      }
+    } catch(e) {
+      alert('Build error: ' + e.message);
+      _toolState[key] = { state: 'pending' };
+    }
+    await showRun(runId);
   }
 
   // ── Agents to Create ─────────────────────────────────────────────────────────

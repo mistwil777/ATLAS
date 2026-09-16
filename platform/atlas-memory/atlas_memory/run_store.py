@@ -34,6 +34,7 @@ class RunStore:
             "requires_creation": [],
             "requires_tools": [],
             "scaffolded": {},
+            "tools_built": {},
             "blocs": [],
             "metadata": metadata or {},
         }
@@ -55,6 +56,18 @@ class RunStore:
     def set_requires_tools(self, run_id: str, tools: list[str]) -> None:
         run = self._read(run_id)
         run["requires_tools"] = tools
+        self._write(run_id, run)
+
+    def set_tool_result(
+        self, run_id: str, tool_name: str, output_path: str, spec: dict[str, Any]
+    ) -> None:
+        run = self._read(run_id)
+        run.setdefault("tools_built", {})[tool_name] = {
+            "output_path": output_path,
+            "module_name": spec.get("module_name", ""),
+            "functions": spec.get("functions", []),
+            "description": spec.get("description", ""),
+        }
         self._write(run_id, run)
 
     def set_scaffold_result(

@@ -405,6 +405,72 @@ def api_scaffold(
         pass  # attempt_spec_path is cleaned up inside the loop
 
 
+@app.post("/api/runs/{run_id}/build-tool/{tool_name}")
+def api_build_tool(run_id: str, tool_name: str):
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if tool_name not in (run.get("requires_tools") or []):
+        raise HTTPException(
+            status_code=400, detail=f"{tool_name} is not in requires_tools for this run"
+        )
+
+    try:
+        from tool_forge.agent import ToolForgeAgent  # noqa: PLC0415
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail="tool-forge not installed") from exc
+
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+
+    # Build spec from the matching bloc + CDC context
+    cdc_full = run.get("metadata", {}).get("cdc_full", "")
+    tool_bloc = next(
+        (
+            b
+            for b in run.get("blocs", [])
+            if b.get("agent_suggested") == tool_name and b.get("type") == "tool"
+        ),
+        None,
+    )
+    spec_lines = [f"# {tool_name}", ""]
+    if tool_bloc:
+        spec_lines.append(tool_bloc.get("bloc", ""))
+        criteria = tool_bloc.get("criteria", [])
+        if criteria:
+            spec_lines += ["", "## Requirements"] + [f"- {c}" for c in criteria]
+    if cdc_full:
+        spec_lines += ["", "## CDC context (for reference)", cdc_full[:600]]
+    spec_text = "\n".join(spec_lines)
+
+    meta = run.get("metadata", {})
+    project_dir = meta.get("project_dir", "")
+    project_owner = meta.get("project_owner", "client")
+    if project_owner == "capgemini" or not project_dir:
+        libs_dir = _Path.home() / ".atlas" / "libs"
+    else:
+        libs_dir = _Path(project_dir) / "libs"
+    libs_dir.mkdir(parents=True, exist_ok=True)
+
+    agent = ToolForgeAgent(output_dir=libs_dir, config={"llm": llm_cfg}, llm_fn=llm_fn)
+    events = list(agent.run(spec_text=spec_text))
+    summary = next((e for e in events if e.get("summary")), None)
+    if summary is None:
+        errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
+        raise HTTPException(status_code=500, detail=f"Tool generation failed: {errors}")
+
+    store.set_tool_result(run_id, tool_name, summary["output_path"], summary)
+
+    files = _read_generated_files(_Path(summary["output_path"]))
+    return {
+        "tool_name": tool_name,
+        "output_path": summary["output_path"],
+        "module_name": summary["module_name"],
+        "functions": summary["functions"],
+        "files": files,
+    }
+
+
 @app.post("/api/runs/{run_id}/install/{agent_name}")
 def api_install(run_id: str, agent_name: str):
     store = get_store()
@@ -634,6 +700,31 @@ def api_rerun(run_id: str):
         raise HTTPException(status_code=500, detail="Orchestration failed")
 
     return {"new_run_id": report.get("run_id"), "requires_review": report.get("requires_review")}
+
+
+@app.get("/api/runs/{run_id}/tools/{tool_name}/download")
+def api_download_tool(run_id: str, tool_name: str):
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    built = run.get("tools_built", {}).get(tool_name)
+    if not built:
+        raise HTTPException(status_code=400, detail="Tool not built yet")
+    output_path = _Path(built["output_path"])
+    if not output_path.exists():
+        raise HTTPException(status_code=404, detail="Tool directory not found")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in output_path.rglob("*"):
+            if p.is_file():
+                zf.write(p, p.relative_to(output_path.parent))
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{tool_name}.zip"'},
+    )
 
 
 @app.get("/api/runs/{run_id}/agents/{agent_name}/download")
