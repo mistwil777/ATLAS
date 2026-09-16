@@ -268,10 +268,6 @@ def api_scaffold(run_id: str, agent_name: str):
 
     agent_slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
-        f.write(f"agent_name: {agent_slug}\n\n" f"# Agent: {agent_name}\n\n" f"{cdc_full}")
-        spec_path = _Path(f.name)
-
     meta = run.get("metadata", {})
     project_dir = meta.get("project_dir", "")
     project_owner = meta.get("project_owner", "client")
@@ -282,40 +278,108 @@ def api_scaffold(run_id: str, agent_name: str):
     base_output_dir.mkdir(parents=True, exist_ok=True)
     output_dir = base_output_dir
 
-    try:
-        agent = AgentForgeAgent(output_dir=output_dir, config={"llm": llm_cfg}, llm_fn=llm_fn)
-        events = list(agent.run(spec_path=spec_path))
-        summary = next((e for e in events if e.get("summary")), None)
-        if summary is None:
-            errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
-            raise HTTPException(status_code=500, detail=f"Scaffolding failed: {errors}")
+    _SCAFFOLD_MAX_ATTEMPTS = 3
+    _SCAFFOLD_QUALITY_THRESHOLD = 4.0
 
-        generated_path = _Path(summary["output_path"])
-        # Rename to agent_slug if agent-forge derived a different slug from the CDC
-        target_path = base_output_dir / agent_slug
-        if generated_path != target_path and generated_path.exists():
-            if target_path.exists():
+    attempts_log: list[dict] = []
+    last_output_path: str = ""
+    last_files: dict[str, str] = {}
+    last_spec: dict = {}
+
+    try:
+        for attempt in range(1, _SCAFFOLD_MAX_ATTEMPTS + 1):
+            # Enrich spec with feedback from previous failed attempts
+            constraints = ""
+            if attempts_log:
+                lines = []
+                for a in attempts_log:
+                    for cs in a.get("criteria_scores", []):
+                        if cs.get("score", 5) < 4:
+                            lines.append(f"- {cs['criterion']}: {cs.get('comment', '')}")
+                if lines:
+                    constraints = (
+                        "\n\n# Constraints from previous attempts — must fix:\n" + "\n".join(lines)
+                    )
+
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".md", delete=False, encoding="utf-8"
+            ) as f:
+                f.write(
+                    f"agent_name: {agent_slug}\n\n"
+                    f"# Agent: {agent_name}\n\n"
+                    f"{cdc_full}"
+                    f"{constraints}"
+                )
+                attempt_spec_path = _Path(f.name)
+
+            try:
+                forge = AgentForgeAgent(
+                    output_dir=output_dir, config={"llm": llm_cfg}, llm_fn=llm_fn
+                )
+                events = list(forge.run(spec_path=attempt_spec_path))
+            finally:
+                attempt_spec_path.unlink(missing_ok=True)
+
+            summary = next((e for e in events if e.get("summary")), None)
+            if summary is None:
+                errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
+                raise HTTPException(status_code=500, detail=f"Scaffolding failed: {errors}")
+
+            generated_path = _Path(summary["output_path"])
+            target_path = base_output_dir / agent_slug
+            if generated_path != target_path and generated_path.exists():
                 import shutil as _shutil  # noqa: PLC0415
 
-                _shutil.rmtree(target_path)
-            generated_path.rename(target_path)
-        output_path = str(target_path)
-        spec = summary
+                if target_path.exists():
+                    _shutil.rmtree(target_path)
+                generated_path.rename(target_path)
 
-        # Read generated files
-        files: dict[str, str] = {}
-        for p in target_path.rglob("*"):
-            if p.is_file() and p.suffix in (".py", ".toml", ".md", ".json", ".txt"):
-                with contextlib.suppress(Exception):
-                    files[str(p.relative_to(target_path))] = p.read_text(encoding="utf-8")
+            _fix_entry_point(target_path, agent_name)
 
-        # Ensure the entry-point key matches agent_name (cdc-router PascalCase name)
-        _fix_entry_point(target_path, agent_name)
+            # Install and evaluate with judge
+            _pip_install(target_path)
 
-        store.set_scaffold_result(run_id, agent_name, output_path, spec)
-        return {"agent_name": agent_name, "output_path": output_path, "spec": spec, "files": files}
+            judge_score, judge_criteria, judge_feedback = _judge_scaffold(
+                target_path, agent_name, cdc_full, llm_fn, llm_cfg
+            )
+            attempts_log.append(
+                {
+                    "attempt": attempt,
+                    "criteria_scores": judge_criteria,
+                    "feedback": judge_feedback,
+                }
+            )
+
+            last_output_path = str(target_path)
+            last_spec = summary
+            last_files = _read_generated_files(target_path)
+
+            if judge_score is not None and judge_score >= _SCAFFOLD_QUALITY_THRESHOLD:
+                store.set_scaffold_result(run_id, agent_name, last_output_path, last_spec)
+                return {
+                    "agent_name": agent_name,
+                    "output_path": last_output_path,
+                    "spec": last_spec,
+                    "files": last_files,
+                    "attempts": attempt,
+                    "judge_score": judge_score,
+                }
+
+        # All attempts failed — run diagnose
+        diagnosis = _run_diagnose(attempts_log, agent_name, cdc_full, llm_fn, llm_cfg)
+        store.set_scaffold_result(run_id, agent_name, last_output_path, last_spec)
+        store.set_scaffold_diagnosis(run_id, agent_name, diagnosis)
+        return {
+            "agent_name": agent_name,
+            "output_path": last_output_path,
+            "spec": last_spec,
+            "files": last_files,
+            "attempts": _SCAFFOLD_MAX_ATTEMPTS,
+            "diagnosis": diagnosis,
+        }
+
     finally:
-        spec_path.unlink(missing_ok=True)
+        pass  # attempt_spec_path is cleaned up inside the loop
 
 
 @app.post("/api/runs/{run_id}/install/{agent_name}")
@@ -347,6 +411,136 @@ def api_install(run_id: str, agent_name: str):
 
     store.set_agent_installed(run_id, agent_name)
     return {"status": "installed", "agent_name": agent_name}
+
+
+def _read_generated_files(target_path: _Path) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for p in target_path.rglob("*"):
+        if p.is_file() and p.suffix in (".py", ".toml", ".md", ".json", ".txt"):
+            with contextlib.suppress(Exception):
+                files[str(p.relative_to(target_path))] = p.read_text(encoding="utf-8")
+    return files
+
+
+def _pip_install(target_path: _Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-e", str(target_path), "-q"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=f"pip install failed: {result.stderr[:500]}")
+
+
+def _judge_scaffold(
+    target_path: _Path,
+    agent_name: str,
+    cdc_full: str,
+    llm_fn,
+    llm_cfg: dict,
+) -> tuple[float | None, list[dict], str]:
+    """Run atlas-judge pointwise on the scaffolded agent.
+
+    Returns (score, criteria_scores, feedback).
+    score is None if judge could not run (non-blocking).
+    """
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_judge.agent import AtlasJudgeAgent  # noqa: PLC0415
+
+        agent_slug = target_path.name
+        module_slug = agent_slug.replace("-", "_")
+
+        # Try to load the agent and run it on a minimal test input
+        try:
+            import importlib  # noqa: PLC0415
+
+            mod = importlib.import_module(module_slug)
+            class_name = next(
+                (k for k in dir(mod) if k.endswith("Agent") and not k.startswith("_")),
+                None,
+            )
+            if class_name:
+                agent_instance = getattr(mod, class_name)(llm_fn=llm_fn, config={"llm": llm_cfg})
+                output_events = list(agent_instance.run(cdc_bloc=cdc_full[:200], context="test"))
+                agent_output = " ".join(
+                    str(e.get("output", e.get("msg", "")))
+                    for e in output_events
+                    if isinstance(e, dict)
+                )
+            else:
+                agent_output = "(agent loaded but no Agent class found)"
+        except Exception as exc:  # noqa: BLE001
+            agent_output = f"(agent execution failed: {exc})"
+
+        judge = AtlasJudgeAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
+        events = list(
+            judge.run(
+                operation="pointwise",
+                output=agent_output,
+                agent_name=agent_name,
+                context=cdc_full[:500],
+            )
+        )
+        summary = next((e for e in events if e.get("summary")), None)
+        if summary is None:
+            return None, [], ""
+
+        criteria_scores = summary.get("criteria_scores", [])
+        feedback = summary.get("feedback", "")
+        score_val = summary.get("score")
+        if score_val is None and criteria_scores:
+            scores = [
+                c.get("score", 0)
+                for c in criteria_scores
+                if isinstance(c.get("score"), int | float)
+            ]
+            score_val = sum(scores) / len(scores) if scores else None
+        return score_val, criteria_scores, feedback
+
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "Judge evaluation failed for %s (non-blocking): %s", agent_name, exc
+        )
+        return None, [], ""
+
+
+def _run_diagnose(
+    attempts_log: list[dict],
+    agent_name: str,
+    cdc_full: str,
+    llm_fn,
+    llm_cfg: dict,
+) -> dict:
+    """Call atlas-judge diagnose after all retry attempts exhausted."""
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_judge.agent import AtlasJudgeAgent  # noqa: PLC0415
+
+        judge = AtlasJudgeAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
+        events = list(
+            judge.run(
+                operation="diagnose",
+                attempts=attempts_log,
+                agent_name=agent_name,
+                context=cdc_full[:800],
+            )
+        )
+        summary = next((e for e in events if e.get("summary")), None)
+        if summary:
+            return {k: v for k, v in summary.items() if k != "summary"}
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").error("Diagnose failed for %s: %s", agent_name, exc)
+
+    return {
+        "mode": "diagnose",
+        "problems": ["Diagnosis unavailable — LLM call failed"],
+        "questions": [],
+        "proposed_patches": [],
+    }
 
 
 def _fix_entry_point(output_path: _Path, agent_name: str) -> None:

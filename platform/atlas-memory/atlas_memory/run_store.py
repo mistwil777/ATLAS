@@ -67,6 +67,13 @@ class RunStore:
         run.setdefault("scaffolded", {}).setdefault(agent_name, {})["installed"] = True
         self._write(run_id, run)
 
+    def set_scaffold_diagnosis(
+        self, run_id: str, agent_name: str, diagnosis: dict[str, Any]
+    ) -> None:
+        run = self._read(run_id)
+        run.setdefault("scaffold_diagnosis", {})[agent_name] = diagnosis
+        self._write(run_id, run)
+
     def set_review_decision(self, run_id: str, decision: str) -> None:
         """decision: 'approved' | 'rejected'"""
         if decision not in ("approved", "rejected"):
