@@ -493,8 +493,20 @@ def api_install_tool(run_id: str, tool_name: str):
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=f"pip install failed: {result.stderr[:500]}")
     _register_tool_in_kg(tool_name, output_path)
+    # create KG edge caller_agent --USES_TOOL--> tool if called_by is set on the bloc
+    blocs = run.get("blocs", [])
+    called_by = next(
+        (
+            b.get("called_by")
+            for b in blocs
+            if b.get("agent_suggested") == tool_name and b.get("type") == "tool"
+        ),
+        None,
+    )
+    if called_by:
+        _add_kg_edge(called_by, tool_name, "USES_TOOL")
     store.set_tool_installed(run_id, tool_name)
-    return {"status": "installed", "tool_name": tool_name}
+    return {"status": "installed", "tool_name": tool_name, "called_by": called_by}
 
 
 @app.post("/api/runs/{run_id}/install/{agent_name}")
@@ -681,6 +693,22 @@ def _register_tool_in_kg(tool_name: str, output_path: str) -> None:
     except Exception as exc:  # noqa: BLE001
         logging.getLogger("atlas_dashboard").warning(
             "KG tool registration failed for %s (non-blocking): %s", tool_name, exc
+        )
+
+
+def _add_kg_edge(from_node: str, to_node: str, relation: str) -> None:
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+        mem = AtlasMemoryAgent()
+        list(
+            mem.run(operation="add_edge", from_agent=from_node, to_agent=to_node, relation=relation)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "KG edge %s->%s failed (non-blocking): %s", from_node, to_node, exc
         )
 
 

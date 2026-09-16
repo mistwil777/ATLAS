@@ -59,10 +59,10 @@ For each bloc, generate 2 to 4 evaluation criteria as assertion strings.
 
 ## Output format — return ONLY valid JSON, no markdown, no explanation
 
-IMPORTANT for agent_suggested:
-- type "ia"   → REQUIRED: PascalCase agent name (e.g. TicketPriorityClassifier). Reuse from Available ATLAS agents if a match exists, else invent a clear functional name.
-- type "tool" → REQUIRED: PascalCase tool name (e.g. OutputFormatter). Reuse from Available ATLAS tools if a match exists, else invent a clear functional name.
-- type "code" → MUST be null (no agent or tool created for inline code).
+IMPORTANT for agent_suggested and called_by:
+- type "ia"   → agent_suggested REQUIRED (PascalCase agent name). called_by: null.
+- type "tool" → agent_suggested REQUIRED (PascalCase tool name). called_by REQUIRED: PascalCase name of the "ia" agent that will call this tool (from blocs above).
+- type "code" → agent_suggested: null. called_by: null.
 
 {{
   "blocs": [
@@ -70,6 +70,7 @@ IMPORTANT for agent_suggested:
       "bloc": "<short description of the functional bloc>",
       "type": "ia" or "tool" or "code",
       "agent_suggested": "<PascalCase name — REQUIRED for ia and tool, null ONLY for code>",
+      "called_by": "<PascalCase agent name — REQUIRED for tool (who calls this tool), null for ia and code>",
       "justification": "<one sentence applying the decision rule>",
       "criteria": [
         "<criterion 1>",
@@ -98,6 +99,7 @@ Return ONLY valid JSON, no markdown, no explanation.
       "bloc": "...",
       "type": "ia" or "tool" or "code",
       "agent_suggested": "<PascalCase name — REQUIRED for ia and tool, null ONLY for code>",
+      "called_by": "<PascalCase agent — REQUIRED for tool, null for ia and code>",
       "justification": "...",
       "criteria": ["...", "..."]
     }}
@@ -115,6 +117,7 @@ Expected format:
       "bloc": "...",
       "type": "ia" or "tool" or "code",
       "agent_suggested": "<PascalCase name — REQUIRED for ia and tool, null ONLY for code>",
+      "called_by": "<PascalCase agent — REQUIRED for tool, null for ia and code>",
       "justification": "...",
       "criteria": ["...", "..."]
     }}
