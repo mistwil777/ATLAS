@@ -32,6 +32,7 @@ class RunStore:
             "status": "pending",
             "requires_review": False,
             "requires_creation": [],
+            "requires_tools": [],
             "scaffolded": {},
             "blocs": [],
             "metadata": metadata or {},
@@ -49,6 +50,11 @@ class RunStore:
     def set_requires_creation(self, run_id: str, agents: list[str]) -> None:
         run = self._read(run_id)
         run["requires_creation"] = agents
+        self._write(run_id, run)
+
+    def set_requires_tools(self, run_id: str, tools: list[str]) -> None:
+        run = self._read(run_id)
+        run["requires_tools"] = tools
         self._write(run_id, run)
 
     def set_scaffold_result(

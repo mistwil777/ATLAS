@@ -110,6 +110,13 @@
     .progress-connector.done { background: var(--aqua); }
     .progress-hint { margin-left: auto; font-size: 11px; color: var(--violet); padding-left: 16px; white-space: nowrap; }
 
+    /* ── Tools to Build panel ── */
+    .tools-panel { margin-top: 16px; }
+    .tools-panel h3 { font-size: 12px; color: var(--yellow); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+    .tool-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; }
+    .tool-row-name { color: var(--yellow); font-size: 13px; flex: 1; }
+    .tool-row-type { font-size: 10px; color: var(--ink-dim); background: #1a1800; border: 1px solid var(--yellow); padding: 2px 6px; border-radius: 3px; }
+
     /* ── Agents to Create panel ── */
     .create-panel { margin-top: 22px; }
     .create-panel h3 { font-size: 12px; color: var(--violet); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
@@ -289,6 +296,7 @@
           ${b.criteria && b.criteria.length ? `<div class="bloc-criteria"><span class="bloc-why-label">Critères d'évaluation</span><ul>${b.criteria.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>` : ''}
           ${buildJudgeDetail(b)}
         </div>`).join('')}
+      ${buildToolsPanel(run)}
       ${buildCreatePanel(run)}
     `;
   }
@@ -318,6 +326,7 @@
 
   function buildProgressBanner(run) {
     const agents = run.requires_creation || [];
+    const tools = run.requires_tools || [];
     const scaffolded = run.scaffolded || {};
 
     // Determine stage completion
@@ -358,6 +367,19 @@
 
     const hint = hints[currentIdx] ? `<span class="progress-hint">→ ${hints[currentIdx]}</span>` : '';
     return `<div class="progress-banner">${html}${hint}</div>`;
+  }
+
+  // ── Tools to Build ───────────────────────────────────────────────────────────
+
+  function buildToolsPanel(run) {
+    const tools = run.requires_tools || [];
+    if (!tools.length) return '';
+    const rows = tools.map(name => `
+      <div class="tool-row">
+        <span class="tool-row-name">${escHtml(name)}</span>
+        <span class="tool-row-type">tool → libs/</span>
+      </div>`).join('');
+    return `<div class="tools-panel"><h3>Tools to Build (${tools.length})</h3>${rows}</div>`;
   }
 
   // ── Agents to Create ─────────────────────────────────────────────────────────

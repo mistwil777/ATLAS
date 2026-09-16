@@ -28,6 +28,7 @@ def build_report(
         "blocs_passed": len(passed),
         "pipeline": routing_summary.get("pipeline", []),
         "requires_creation": routing_summary.get("requires_creation", []),
+        "requires_tools": routing_summary.get("requires_tools", []),
         "results": bloc_results,
         "overall_passed": overall_passed,
     }

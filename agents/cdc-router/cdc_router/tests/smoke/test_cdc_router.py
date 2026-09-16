@@ -21,10 +21,20 @@ _VALID_SEGMENTATION = json.dumps(
                 ],
             },
             {
+                "bloc": "format output as JSON",
+                "type": "tool",
+                "agent_suggested": "OutputFormatter",
+                "justification": "deterministic reusable formatting utility",
+                "criteria": [
+                    "Output must be valid JSON conforming to the defined schema.",
+                    "All required fields must be present.",
+                ],
+            },
+            {
                 "bloc": "save to PostgreSQL",
                 "type": "code",
                 "agent_suggested": None,
-                "justification": "deterministic write to known schema",
+                "justification": "deterministic write to known schema, project-specific",
                 "criteria": [
                     "Output must confirm successful write with row count.",
                     "All required fields must be present before insert.",
@@ -60,9 +70,10 @@ def test_segmenter_with_mock_llm():
     result, verdict, attempts = segment("Classify support tickets.", [], {}, _mock_llm_ok, {})
     assert result is not None
     assert "blocs" in result
-    assert len(result["blocs"]) == 2
+    assert len(result["blocs"]) == 3
     assert result["blocs"][0]["type"] == "ia"
-    assert result["blocs"][1]["type"] == "code"
+    assert result["blocs"][1]["type"] == "tool"
+    assert result["blocs"][2]["type"] == "code"
     assert attempts >= 1
 
 
@@ -140,6 +151,26 @@ def test_router_code_bloc_has_no_agent():
     assert result["blocs"][0]["agent_exists"] is False
     assert result["pipeline"] == []
     assert result["requires_creation"] == []
+    assert result["requires_tools"] == []
+
+
+def test_router_tool_bloc_goes_to_requires_tools():
+    from cdc_router.router import route
+
+    blocs = [
+        {
+            "bloc": "format output",
+            "type": "tool",
+            "agent_suggested": "OutputFormatter",
+            "justification": "reusable deterministic formatter",
+        }
+    ]
+    result = route(blocs, {"nodes": [], "links": []})
+
+    assert result["blocs"][0]["agent_exists"] is False
+    assert result["requires_creation"] == []
+    assert "OutputFormatter" in result["requires_tools"]
+    assert result["pipeline"] == []
 
 
 # ── full run() tests ──────────────────────────────────────────────────────────
@@ -156,6 +187,7 @@ def test_run_with_mock_llm():
     assert "blocs" in summary
     assert "pipeline" in summary
     assert "requires_creation" in summary
+    assert "requires_tools" in summary
 
 
 def test_run_empty_cdc_returns_error():
@@ -191,18 +223,12 @@ def test_check_dependencies():
     assert result["untested_versions"] == []
 
 
-def test_prompts_contain_binary_rules():
+def test_prompts_contain_type_rules():
     from cdc_router.prompts import SEGMENTATION_PROMPT
 
-    assert (
-        '"ia"' in SEGMENTATION_PROMPT
-        or "'ia'" in SEGMENTATION_PROMPT
-        or "ia" in SEGMENTATION_PROMPT
-    )
-    assert (
-        '"code"' in SEGMENTATION_PROMPT
-        or "'code'" in SEGMENTATION_PROMPT
-        or "code" in SEGMENTATION_PROMPT
-    )
+    assert "ia" in SEGMENTATION_PROMPT
+    assert "tool" in SEGMENTATION_PROMPT
+    assert "code" in SEGMENTATION_PROMPT
     assert "deterministic" in SEGMENTATION_PROMPT
     assert "unstructured" in SEGMENTATION_PROMPT
+    assert "reusable" in SEGMENTATION_PROMPT

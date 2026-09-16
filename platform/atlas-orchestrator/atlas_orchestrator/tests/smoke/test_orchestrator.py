@@ -21,6 +21,7 @@ _ROUTING_SUMMARY = {
     ],
     "pipeline": ["pair-forge", "cdc-router"],
     "requires_creation": [],
+    "requires_tools": [],
 }
 
 _JUDGE_SUMMARY = {
@@ -252,6 +253,7 @@ def test_report_structure():
     assert report["overall_passed"] is True
     assert "pipeline" in report
     assert "requires_creation" in report
+    assert "requires_tools" in report
     assert len(report["results"]) == 2
 
 

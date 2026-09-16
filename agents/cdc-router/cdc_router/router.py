@@ -17,12 +17,15 @@ def route(blocs: list[dict], kg_graph: dict) -> dict:
     enriched_blocs = []
     pipeline = []
     requires_creation = []
+    requires_tools = []
     atlas_agents_reused = []
 
     for bloc in blocs:
         b = dict(bloc)
-        if b.get("type") == "ia" and b.get("agent_suggested"):
-            agent_name = b["agent_suggested"]
+        bloc_type = b.get("type")
+        agent_name = b.get("agent_suggested")
+
+        if bloc_type == "ia" and agent_name:
             exists = agent_name in known_agents
             b["agent_exists"] = exists
             if exists:
@@ -35,6 +38,10 @@ def route(blocs: list[dict], kg_graph: dict) -> dict:
                     requires_creation.append(agent_name)
                 if agent_name not in pipeline:
                     pipeline.append(agent_name)
+        elif bloc_type == "tool" and agent_name:
+            b["agent_exists"] = False
+            if agent_name not in requires_tools:
+                requires_tools.append(agent_name)
         else:
             b["agent_exists"] = False
 
@@ -44,5 +51,6 @@ def route(blocs: list[dict], kg_graph: dict) -> dict:
         "blocs": enriched_blocs,
         "pipeline": pipeline,
         "requires_creation": requires_creation,
+        "requires_tools": requires_tools,
         "atlas_agents_reused": atlas_agents_reused,
     }

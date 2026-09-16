@@ -41,7 +41,13 @@ def orchestrate(
 
     blocs = routing_summary.get("blocs", [])
     requires_creation = routing_summary.get("requires_creation", [])
-    _log.info("Routing complete — %d blocs, %d to create", len(blocs), len(requires_creation))
+    requires_tools = routing_summary.get("requires_tools", [])
+    _log.info(
+        "Routing complete — %d blocs, %d to create, %d tools to build",
+        len(blocs),
+        len(requires_creation),
+        len(requires_tools),
+    )
 
     run_store = _get_run_store(run_store_dir)
     run_id = (
@@ -58,6 +64,8 @@ def orchestrate(
     )
     if run_store and run_id and requires_creation:
         run_store.set_requires_creation(run_id, requires_creation)
+    if run_store and run_id and requires_tools:
+        run_store.set_requires_tools(run_id, requires_tools)
 
     bus = _get_bus(bus_fn)
     bloc_results = []
