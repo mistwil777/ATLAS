@@ -45,8 +45,11 @@ For each bloc, generate 2 to 4 evaluation criteria as assertion strings.
 - Each criterion must be a single sentence starting with a verb ("Output must...", "Response must...", "All fields must...")
 - Criteria must be specific to the bloc content — never generic
 
-## Available ATLAS agents
+## Available ATLAS agents (for "ia" blocs — use exact name in agent_suggested if applicable)
 {kg_agents}
+
+## Available ATLAS tools (for "tool" blocs — reuse exact name in agent_suggested if applicable)
+{kg_tools}
 
 ## Similar CDCs from past experience
 {rag_examples}
@@ -56,12 +59,17 @@ For each bloc, generate 2 to 4 evaluation criteria as assertion strings.
 
 ## Output format — return ONLY valid JSON, no markdown, no explanation
 
+IMPORTANT for agent_suggested:
+- type "ia"   → REQUIRED: PascalCase agent name (e.g. TicketPriorityClassifier). Reuse from Available ATLAS agents if a match exists, else invent a clear functional name.
+- type "tool" → REQUIRED: PascalCase tool name (e.g. OutputFormatter). Reuse from Available ATLAS tools if a match exists, else invent a clear functional name.
+- type "code" → MUST be null (no agent or tool created for inline code).
+
 {{
   "blocs": [
     {{
       "bloc": "<short description of the functional bloc>",
       "type": "ia" or "tool" or "code",
-      "agent_suggested": "<PascalCase name — for 'ia': agent e.g. TicketClassifier; for 'tool': tool e.g. OutputFormatter; for 'code': null>",
+      "agent_suggested": "<PascalCase name — REQUIRED for ia and tool, null ONLY for code>",
       "justification": "<one sentence applying the decision rule>",
       "criteria": [
         "<criterion 1>",
@@ -89,7 +97,7 @@ Return ONLY valid JSON, no markdown, no explanation.
     {{
       "bloc": "...",
       "type": "ia" or "tool" or "code",
-      "agent_suggested": "<PascalCase functional name> or null",
+      "agent_suggested": "<PascalCase name — REQUIRED for ia and tool, null ONLY for code>",
       "justification": "...",
       "criteria": ["...", "..."]
     }}
@@ -106,7 +114,7 @@ Expected format:
     {{
       "bloc": "...",
       "type": "ia" or "tool" or "code",
-      "agent_suggested": "<PascalCase functional name> or null",
+      "agent_suggested": "<PascalCase name — REQUIRED for ia and tool, null ONLY for code>",
       "justification": "...",
       "criteria": ["...", "..."]
     }}

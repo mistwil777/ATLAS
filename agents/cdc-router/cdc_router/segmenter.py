@@ -28,10 +28,11 @@ def segment(
     prompt = SEGMENTATION_PROMPT.format(
         cdc_text=cdc_text,
         rag_examples=_fmt_examples(rag_examples),
-        kg_agents=_fmt_agents(kg_agents),
+        kg_agents=_fmt_agents(kg_agents, node_type="agent"),
+        kg_tools=_fmt_agents(kg_agents, node_type="tool"),
     )
 
-    raw = llm_fn(prompt, llm_cfg, 1024)
+    raw = llm_fn(prompt, llm_cfg, 2048)
     if not raw:
         _log.warning("LLM returned no output")
         return None, None, 0
@@ -112,14 +113,15 @@ def _build_correction_prompt(previous_output: str, failed_criteria: list[dict]) 
     return CORRECTION_PROMPT.format(previous_output=previous_output, failures=failures)
 
 
-def _fmt_agents(kg_agents: dict) -> str:
+def _fmt_agents(kg_agents: dict, node_type: str = "agent") -> str:
     nodes = kg_agents.get("nodes", [])
-    if not nodes:
-        return "No agents registered yet."
+    filtered = [n for n in nodes if n.get("node_type", "agent") == node_type]
+    if not filtered:
+        label = "agents" if node_type == "agent" else "tools"
+        return f"No {label} registered yet."
     lines = []
-    for node in nodes:
+    for node in filtered:
         name = node.get("id", "?")
         caps = ", ".join(node.get("capabilities", []))
-        tags = ", ".join(node.get("tags", []))
-        lines.append(f"- {name}: capabilities=[{caps}], tags=[{tags}]")
+        lines.append(f"- {name}: capabilities=[{caps}]")
     return "\n".join(lines)
