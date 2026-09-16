@@ -77,13 +77,23 @@ class RunStore:
         self._write(run_id, run)
 
     def set_scaffold_result(
-        self, run_id: str, agent_name: str, output_path: str, spec: dict[str, Any]
+        self,
+        run_id: str,
+        agent_name: str,
+        output_path: str,
+        spec: dict[str, Any],
+        user_answers: list[str] | None = None,
+        selected_patches: list[str] | None = None,
+        model_id: str | None = None,
     ) -> None:
         run = self._read(run_id)
         run.setdefault("scaffolded", {})[agent_name] = {
             "output_path": output_path,
             "installed": False,
             "spec": spec,
+            "user_answers": user_answers or [],
+            "selected_patches": selected_patches or [],
+            "model_id": model_id or "",
         }
         self._write(run_id, run)
 

@@ -224,6 +224,85 @@ def api_stats():
     }
 
 
+@app.get("/api/stats/trend")
+def api_stats_trend(agent: str):
+    runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
+    points = []
+    prev_model: str | None = None
+    prev_criteria: dict[str, int] = {}
+
+    for run in runs:
+        blocs = [b for b in run.get("blocs", []) if b.get("agent") == agent]
+        if not blocs:
+            continue
+
+        scores = [b["judge_score"] for b in blocs if b.get("judge_score") is not None]
+        avg = round(sum(scores) / len(scores), 2) if scores else None
+
+        # gather criteria from first bloc that has them
+        criteria = next((b.get("judge_criteria", []) for b in blocs if b.get("judge_criteria")), [])
+        feedback = next((b.get("judge_feedback", "") for b in blocs if b.get("judge_feedback")), "")
+
+        scaffolded = run.get("scaffolded", {}).get(agent, {})
+        user_answers = scaffolded.get("user_answers", [])
+        selected_patches = scaffolded.get("selected_patches", [])
+        model_id = scaffolded.get("model_id", "")
+
+        # determine cause
+        if model_id and prev_model and model_id != prev_model:
+            cause = "model_change"
+        elif user_answers or selected_patches:
+            cause = "cr_retry"
+        else:
+            cause = "initial_scaffold"
+
+        # compute delta vs previous point
+        delta = None
+        if points and avg is not None and points[-1].get("avg_score") is not None:
+            delta = round(avg - points[-1]["avg_score"], 2)
+
+        # compute per-criterion delta vs previous run
+        crit_map = {c.get("criterion", ""): c.get("score") for c in criteria}
+        crit_delta = []
+        for c in criteria:
+            name = c.get("criterion", "")
+            score = c.get("score")
+            prev_score = prev_criteria.get(name)
+            crit_delta.append(
+                {
+                    "criterion": name,
+                    "score": score,
+                    "prev_score": prev_score,
+                    "delta": round(score - prev_score, 1)
+                    if score is not None and prev_score is not None
+                    else None,
+                    "comment": c.get("comment", ""),
+                }
+            )
+
+        pt: dict = {
+            "run_id": run["run_id"],
+            "created_at": run.get("created_at", ""),
+            "avg_score": avg,
+            "cause": cause,
+            "criteria": crit_delta,
+            "feedback": feedback,
+            "patches_applied": selected_patches,
+            "user_answers": user_answers,
+            "model_id": model_id,
+        }
+        if delta is not None:
+            pt["delta"] = delta
+        if cause == "model_change" and prev_model:
+            pt["model_prev"] = prev_model
+
+        points.append(pt)
+        prev_model = model_id or prev_model
+        prev_criteria = crit_map
+
+    return {"agent": agent, "points": points}
+
+
 # ── Scaffold / Install / Re-run ────────────────────────────────────────────────
 
 
@@ -378,7 +457,15 @@ def api_scaffold(
             last_files = _read_generated_files(target_path)
 
             if judge_score is not None and judge_score >= _SCAFFOLD_QUALITY_THRESHOLD:
-                store.set_scaffold_result(run_id, agent_name, last_output_path, last_spec)
+                store.set_scaffold_result(
+                    run_id,
+                    agent_name,
+                    last_output_path,
+                    last_spec,
+                    user_answers=body.user_answers,
+                    selected_patches=body.selected_patches,
+                    model_id=llm_cfg.get("model_id", ""),
+                )
                 return {
                     "agent_name": agent_name,
                     "output_path": last_output_path,
@@ -390,7 +477,15 @@ def api_scaffold(
 
         # All attempts failed — run diagnose
         diagnosis = _run_diagnose(attempts_log, agent_name, cdc_full, llm_fn, llm_cfg)
-        store.set_scaffold_result(run_id, agent_name, last_output_path, last_spec)
+        store.set_scaffold_result(
+            run_id,
+            agent_name,
+            last_output_path,
+            last_spec,
+            user_answers=body.user_answers,
+            selected_patches=body.selected_patches,
+            model_id=llm_cfg.get("model_id", ""),
+        )
         store.set_scaffold_diagnosis(run_id, agent_name, diagnosis)
         return {
             "agent_name": agent_name,

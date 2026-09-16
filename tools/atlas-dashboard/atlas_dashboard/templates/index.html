@@ -183,6 +183,36 @@
     .kg-empty { color: var(--ink-dim); text-align: center; padding: 40px; }
     .btn-refresh-kg { padding: 5px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 12px; }
     .btn-refresh-kg:hover { border-color: var(--blue); color: var(--blue); }
+
+    /* ── Trend view ── */
+    #trend-panel { display: none; padding: 22px 32px; }
+    .trend-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+    .trend-toolbar h2 { font-size: 14px; color: var(--blue); flex: 1; }
+    .trend-select { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; font-size: 12px; font-family: inherit; cursor: pointer; }
+    .trend-select:focus { outline: none; border-color: var(--blue); }
+    .trend-chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 18px; overflow-x: auto; }
+    .trend-empty { color: var(--ink-dim); text-align: center; padding: 40px; }
+    .trend-point-dot { cursor: pointer; transition: r .1s; }
+    .trend-point-dot:hover { r: 7; }
+    .badge-cr    { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #1a1230; color: var(--violet); border: 1px solid var(--violet); cursor: pointer; }
+    .badge-model { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #0d1a2a; color: var(--blue);   border: 1px solid var(--blue);   cursor: pointer; }
+    .badge-init  { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: var(--surface); color: var(--ink-dim); border: 1px solid var(--border); }
+    /* detail panel */
+    .trend-detail { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; }
+    .trend-detail h3 { font-size: 13px; color: var(--blue); margin-bottom: 4px; }
+    .trend-detail-meta { font-size: 11px; color: var(--ink-dim); margin-bottom: 12px; }
+    .trend-section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--violet); margin: 10px 0 6px; }
+    .trend-patch { font-size: 11px; color: var(--aqua); padding: 3px 0; }
+    .trend-patch::before { content: "✓ "; }
+    .trend-answer { font-size: 11px; color: var(--ink); padding: 4px 10px; border-left: 2px solid var(--violet); margin-bottom: 4px; font-style: italic; }
+    .trend-crit-row { display: flex; align-items: center; gap: 8px; font-size: 11px; margin-bottom: 5px; }
+    .trend-crit-name { flex: 1; color: var(--ink); }
+    .trend-crit-score { width: 28px; text-align: right; font-weight: bold; }
+    .trend-crit-bar-wrap { flex: 0 0 80px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .trend-crit-bar { height: 100%; border-radius: 3px; }
+    .trend-crit-delta { width: 36px; font-size: 10px; text-align: right; }
+    .trend-feedback { font-size: 11px; color: var(--ink-dim); font-style: italic; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .trend-model-change { font-size: 11px; color: var(--blue); padding: 6px 10px; background: #0d1a2a; border-radius: 4px; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -215,6 +245,7 @@
   <button id="btn-review" onclick="showTabRuns(); loadRuns(true)">Needs review</button>
   <button onclick="refresh()">Refresh</button>
   <button id="btn-kg" onclick="showTabKG()">Knowledge Graph</button>
+  <button id="btn-trend" onclick="showTabTrend()">Tendances</button>
   <button onclick="bulkDeleteSkipped()" style="margin-left:auto;border-color:var(--red);color:var(--red)" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
 </div>
 
@@ -245,6 +276,18 @@
   <div class="kg-table-wrap" id="kg-table-wrap">
     <div class="kg-empty">Chargement…</div>
   </div>
+</div>
+
+<div id="trend-panel">
+  <div class="trend-toolbar">
+    <h2>Tendances — progression des agents</h2>
+    <select class="trend-select" id="trend-agent-select" onchange="loadTrend(this.value)">
+      <option value="">— Choisir un agent —</option>
+    </select>
+    <button class="btn-refresh-kg" onclick="loadTrend(document.getElementById('trend-agent-select').value)">Refresh</button>
+  </div>
+  <div id="trend-chart-area"><div class="trend-empty">Sélectionnez un agent pour voir sa progression.</div></div>
+  <div id="trend-detail-area" style="margin-top:16px;"></div>
 </div>
 
 <script>
@@ -799,16 +842,31 @@
   function showTabRuns() {
     document.querySelector('.layout').style.display = '';
     document.getElementById('kg-panel').style.display = 'none';
+    document.getElementById('trend-panel').style.display = 'none';
     document.getElementById('btn-kg').classList.remove('active');
+    document.getElementById('btn-trend').classList.remove('active');
   }
 
   function showTabKG() {
     document.querySelector('.layout').style.display = 'none';
     document.getElementById('kg-panel').style.display = 'block';
+    document.getElementById('trend-panel').style.display = 'none';
     document.getElementById('btn-all').classList.remove('active');
     document.getElementById('btn-review').classList.remove('active');
+    document.getElementById('btn-trend').classList.remove('active');
     document.getElementById('btn-kg').classList.add('active');
     loadKG();
+  }
+
+  function showTabTrend() {
+    document.querySelector('.layout').style.display = 'none';
+    document.getElementById('kg-panel').style.display = 'none';
+    document.getElementById('trend-panel').style.display = 'block';
+    document.getElementById('btn-all').classList.remove('active');
+    document.getElementById('btn-review').classList.remove('active');
+    document.getElementById('btn-kg').classList.remove('active');
+    document.getElementById('btn-trend').classList.add('active');
+    _populateTrendAgents();
   }
 
   async function loadKG() {
@@ -851,6 +909,157 @@
         <thead><tr><th>Name</th><th>Type</th><th>Capabilities</th><th>Tags</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
+  }
+
+  // ── Trend tab ────────────────────────────────────────────────
+  let _trendData = null;
+
+  async function _populateTrendAgents() {
+    const runs = await fetch('/api/runs').then(r => r.json());
+    const agents = new Set();
+    for (const run of runs) for (const b of (run.blocs || [])) if (b.agent) agents.add(b.agent);
+    const sel = document.getElementById('trend-agent-select');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— Choisir un agent —</option>' +
+      [...agents].sort().map(a => `<option value="${escHtml(a)}"${a===current?' selected':''}>${escHtml(a)}</option>`).join('');
+    if (current && agents.has(current)) loadTrend(current);
+  }
+
+  async function loadTrend(agentName) {
+    if (!agentName) return;
+    document.getElementById('trend-chart-area').innerHTML = '<div class="trend-empty">Chargement…</div>';
+    document.getElementById('trend-detail-area').innerHTML = '';
+    const data = await fetch('/api/stats/trend?agent=' + encodeURIComponent(agentName)).then(r => r.json());
+    _trendData = data;
+    renderTrendChart(data);
+  }
+
+  function renderTrendChart(data) {
+    const pts = data.points || [];
+    if (!pts.length) {
+      document.getElementById('trend-chart-area').innerHTML = '<div class="trend-empty">Aucune donnée pour cet agent.</div>';
+      return;
+    }
+    const W = 700, H = 200, PAD = { t: 20, r: 20, b: 50, l: 50 };
+    const chartW = W - PAD.l - PAD.r, chartH = H - PAD.t - PAD.b;
+    const n = pts.length;
+    const xStep = n > 1 ? chartW / (n - 1) : chartW / 2;
+    const yScale = v => chartH - (v / 5) * chartH;
+
+    // axis lines
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;overflow:visible">`;
+    // Y gridlines at 1,2,3,4,5
+    for (let y = 1; y <= 5; y++) {
+      const yy = PAD.t + yScale(y);
+      svg += `<line x1="${PAD.l}" y1="${yy}" x2="${PAD.l+chartW}" y2="${yy}" stroke="var(--border)" stroke-width="1"/>`;
+      svg += `<text x="${PAD.l-6}" y="${yy+4}" text-anchor="end" font-size="10" fill="var(--ink-dim)">${y}</text>`;
+    }
+    // threshold line at 4
+    const yThresh = PAD.t + yScale(4);
+    svg += `<line x1="${PAD.l}" y1="${yThresh}" x2="${PAD.l+chartW}" y2="${yThresh}" stroke="var(--aqua)" stroke-width="1" stroke-dasharray="4,3" opacity=".5"/>`;
+
+    // polyline
+    const lineCoords = pts.map((p, i) => {
+      const x = PAD.l + i * xStep;
+      const y = PAD.t + (p.avg_score != null ? yScale(p.avg_score) : chartH / 2);
+      return `${x},${y}`;
+    }).join(' ');
+    svg += `<polyline points="${lineCoords}" fill="none" stroke="var(--ink-dim)" stroke-width="1.5"/>`;
+
+    // points
+    pts.forEach((p, i) => {
+      const x = PAD.l + i * xStep;
+      const y = PAD.t + (p.avg_score != null ? yScale(p.avg_score) : chartH / 2);
+      const score = p.avg_score;
+      const color = score >= 4 ? 'var(--aqua)' : score >= 3 ? 'var(--yellow)' : 'var(--red)';
+      svg += `<circle class="trend-point-dot" cx="${x}" cy="${y}" r="5" fill="${color}" onclick="showTrendDetail(${i})" title="Run ${i+1}: ${score != null ? score.toFixed(2) : '—'}/5"/>`;
+
+      // cause badge below x-axis
+      const bx = x, by = PAD.t + chartH + 18;
+      let label = '', bcolor = '';
+      if (p.cause === 'cr_retry')     { label = 'CR';    bcolor = 'var(--violet)'; }
+      if (p.cause === 'model_change') { label = 'MODEL'; bcolor = 'var(--blue)'; }
+      if (label) {
+        svg += `<text x="${bx}" y="${by}" text-anchor="middle" font-size="9" fill="${bcolor}" style="cursor:pointer" onclick="showTrendDetail(${i})">${label}</text>`;
+      }
+      // run index
+      svg += `<text x="${bx}" y="${PAD.t+chartH+32}" text-anchor="middle" font-size="9" fill="var(--ink-dim)">R${i+1}</text>`;
+    });
+
+    // axes
+    svg += `<line x1="${PAD.l}" y1="${PAD.t}" x2="${PAD.l}" y2="${PAD.t+chartH}" stroke="var(--border)" stroke-width="1"/>`;
+    svg += `<line x1="${PAD.l}" y1="${PAD.t+chartH}" x2="${PAD.l+chartW}" y2="${PAD.t+chartH}" stroke="var(--border)" stroke-width="1"/>`;
+    svg += '</svg>';
+
+    // legend
+    svg += `<div style="font-size:10px;color:var(--ink-dim);margin-top:8px;display:flex;gap:16px;">
+      <span><span style="color:var(--aqua)">●</span> Passé (≥4)</span>
+      <span><span style="color:var(--yellow)">●</span> Borderline (3–4)</span>
+      <span><span style="color:var(--red)">●</span> Échoué (<3)</span>
+      <span><span style="color:var(--violet)">CR</span> = CR retry</span>
+      <span><span style="color:var(--blue)">MODEL</span> = changement de modèle</span>
+    </div>`;
+
+    document.getElementById('trend-chart-area').innerHTML = `<div class="trend-chart-wrap">${svg}</div>`;
+  }
+
+  function showTrendDetail(idx) {
+    if (!_trendData) return;
+    const pts = _trendData.points;
+    const p = pts[idx];
+    const prev = idx > 0 ? pts[idx - 1] : null;
+    if (!p) return;
+
+    const scoreStr = p.avg_score != null ? p.avg_score.toFixed(2) : '—';
+    const prevStr = prev?.avg_score != null ? prev.avg_score.toFixed(2) + ' → ' : '';
+    const deltaStr = p.delta != null ? (p.delta >= 0 ? `<span style="color:var(--aqua)">+${p.delta.toFixed(2)}</span>` : `<span style="color:var(--red)">${p.delta.toFixed(2)}</span>`) : '';
+    const date = p.created_at ? p.created_at.slice(0,16).replace('T',' ') : '';
+    const causeLabel = {initial_scaffold:'Scaffold initial', cr_retry:'CR retry', model_change:'Changement de modèle'}[p.cause] || p.cause;
+
+    let html = `<div class="trend-detail">
+      <h3>${escHtml(_trendData.agent)} — Run ${idx+1}</h3>
+      <div class="trend-detail-meta">Score : ${prevStr}<strong>${scoreStr}/5</strong> ${deltaStr} &nbsp;·&nbsp; ${causeLabel} &nbsp;·&nbsp; ${date}</div>`;
+
+    if (p.cause === 'model_change') {
+      html += `<div class="trend-model-change">Modèle : ${escHtml(p.model_prev || '—')} → <strong>${escHtml(p.model_id || '—')}</strong></div>`;
+    }
+
+    if (p.patches_applied?.length) {
+      html += `<div class="trend-section-title">Patches appliqués</div>`;
+      p.patches_applied.forEach(patch => { html += `<div class="trend-patch">${escHtml(patch)}</div>`; });
+    }
+
+    if (p.user_answers?.length) {
+      html += `<div class="trend-section-title">Réponses CR</div>`;
+      p.user_answers.forEach(a => { if (a.trim()) html += `<div class="trend-answer">${escHtml(a)}</div>`; });
+    }
+
+    if (p.criteria?.length) {
+      html += `<div class="trend-section-title">Critères${prev ? ' (delta)' : ''}</div>`;
+      p.criteria.forEach(c => {
+        const score = c.score ?? 0;
+        const barPct = (score / 5 * 100).toFixed(0);
+        const barColor = score >= 4 ? 'var(--aqua)' : score >= 3 ? 'var(--yellow)' : 'var(--red)';
+        const deltaHtml = c.delta != null
+          ? (c.delta > 0 ? `<span style="color:var(--aqua)">+${c.delta}</span>` : c.delta < 0 ? `<span style="color:var(--red)">${c.delta}</span>` : `<span style="color:var(--ink-dim)"> 0</span>`)
+          : '';
+        const prevScore = c.prev_score != null ? `${c.prev_score}→` : '';
+        html += `<div class="trend-crit-row">
+          <span class="trend-crit-name" title="${escHtml(c.comment||'')}">${escHtml(c.criterion||'')}</span>
+          <span class="trend-crit-score" style="color:${barColor}">${prevScore}${score}</span>
+          <div class="trend-crit-bar-wrap"><div class="trend-crit-bar" style="width:${barPct}%;background:${barColor}"></div></div>
+          <span class="trend-crit-delta">${deltaHtml}</span>
+        </div>`;
+        if (c.comment) html += `<div style="font-size:10px;color:var(--ink-dim);margin:-2px 0 6px 0;padding-left:0">${escHtml(c.comment)}</div>`;
+      });
+    }
+
+    if (p.feedback) {
+      html += `<div class="trend-feedback">${escHtml(p.feedback)}</div>`;
+    }
+
+    html += '</div>';
+    document.getElementById('trend-detail-area').innerHTML = html;
   }
 
   refresh();
