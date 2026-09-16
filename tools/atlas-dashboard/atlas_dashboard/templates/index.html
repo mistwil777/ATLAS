@@ -182,7 +182,7 @@
     #trend-panel { display: none; padding: 22px 32px; }
     .trend-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
     .trend-toolbar h2 { font-size: 14px; color: var(--blue); flex: 1; }
-    .trend-select { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; font-size: 12px; font-family: inherit; cursor: pointer; }
+    .trend-select { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; font-size: 12px; font-family: inherit; cursor: pointer; min-width: 220px; }
     .trend-select:focus { outline: none; border-color: var(--blue); }
     .trend-chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 18px; overflow-x: auto; }
     .trend-empty { color: var(--ink-dim); text-align: center; padding: 40px; }
@@ -957,13 +957,22 @@
   }
 
   function _kgTooltipHtml(n) {
+    // vis-network requires a DOM element for HTML tooltips — strings are rendered as plain text
     const caps = (n.capabilities || []).join(', ') || '—';
     const tags = (n.tags || []).join(', ') || '—';
-    return `<div class="kg-tooltip" style="display:block;position:static;border:none;background:transparent;padding:0">
-      <div class="kg-tooltip-title">${escHtml(n.id)}</div>
-      <div class="kg-tooltip-caps">capabilities: ${escHtml(caps)}</div>
-      <div style="font-size:10px;color:#7a7a9a">tags: ${escHtml(tags)}</div>
-    </div>`;
+    const el = document.createElement('div');
+    el.style.cssText = 'background:#1a1a2e;border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;font-size:11px;color:#c8c0d8;max-width:260px';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-weight:bold;font-size:12px;margin-bottom:6px';
+    title.textContent = n.id;
+    const capsEl = document.createElement('div');
+    capsEl.style.cssText = 'color:#7a7a9a;margin-bottom:4px';
+    capsEl.textContent = 'capabilities: ' + caps;
+    const tagsEl = document.createElement('div');
+    tagsEl.style.cssText = 'font-size:10px;color:#5a5a7a';
+    tagsEl.textContent = 'tags: ' + tags;
+    el.append(title, capsEl, tagsEl);
+    return el;
   }
 
   // ── Trend tab ────────────────────────────────────────────────
@@ -972,7 +981,10 @@
   async function _populateTrendAgents() {
     const runs = await fetch('/api/runs').then(r => r.json());
     const agents = new Set();
-    for (const run of runs) for (const b of (run.blocs || [])) if (b.agent) agents.add(b.agent);
+    for (const run of runs) for (const b of (run.blocs || [])) {
+      const name = b.agent || b.agent_suggested || '';
+      if (name) agents.add(name);
+    }
     const sel = document.getElementById('trend-agent-select');
     const current = sel.value;
     sel.innerHTML = '<option value="">— Choisir un agent —</option>' +
