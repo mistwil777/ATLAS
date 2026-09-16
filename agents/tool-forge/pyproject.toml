@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tool-forge"
+version = "1.0.0"
+description = "Autonomous agent: generates reusable Python tool libraries from a functional spec."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+collect = ["atlas-core"]
+dev = ["pytest>=8.0"]
+
+[project.entry-points."atlas.tools"]
+tool-forge = "tool_forge.agent:ToolForgeAgent"
+
+[project.scripts]
+tool-forge = "tool_forge.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tool_forge*"]
+
+[tool.setuptools.package-data]
+"tool_forge.tests.smoke.fixtures" = ["*"]
