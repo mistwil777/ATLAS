@@ -839,6 +839,43 @@ def api_download_agent(run_id: str, agent_name: str):
 # ── UI ─────────────────────────────────────────────────────────────────────────
 
 
+@app.get("/api/kg")
+def api_get_kg():
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+        mem = AtlasMemoryAgent()
+        events = list(mem.run(operation="get_graph"))
+        kg = next((e["result"] for e in events if e.get("summary")), {})
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning("KG fetch failed: %s", exc)
+        kg = {}
+
+    raw_nodes = kg.get("nodes", [])
+    raw_links = kg.get("links", [])
+    return {
+        "nodes": [
+            {
+                "id": n.get("id", ""),
+                "node_type": n.get("node_type", "agent"),
+                "capabilities": n.get("capabilities", []),
+                "tags": n.get("tags", []),
+            }
+            for n in raw_nodes
+        ],
+        "edges": [
+            {
+                "source": lnk.get("source", ""),
+                "target": lnk.get("target", ""),
+                "relation": lnk.get("relation", ""),
+            }
+            for lnk in raw_links
+        ],
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def ui_index():
     tpl = Path(__file__).parent / "templates" / "index.html"

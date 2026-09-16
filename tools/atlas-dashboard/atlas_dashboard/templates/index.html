@@ -156,6 +156,33 @@
     .btn-apply-retry { margin-top: 10px; padding: 6px 16px; background: var(--violet); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
     .btn-apply-retry:hover { opacity: .85; }
     .btn-apply-retry:disabled { opacity: .4; cursor: default; }
+
+    /* ── KG view ── */
+    #kg-panel { display: none; padding: 22px 32px; }
+    .kg-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    .kg-toolbar h2 { font-size: 14px; color: var(--blue); flex: 1; }
+    .kg-filter { display: flex; gap: 6px; }
+    .kg-filter label { font-size: 11px; color: var(--ink-dim); display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px; }
+    .kg-filter input[type=radio] { accent-color: var(--blue); }
+    .kg-filter label:has(input:checked) { border-color: var(--blue); color: var(--blue); }
+    .kg-counters { display: flex; gap: 8px; }
+    .kg-count { font-size: 11px; padding: 3px 10px; border-radius: 3px; border: 1px solid var(--border); }
+    .kg-count.agents { color: var(--violet); border-color: var(--violet); }
+    .kg-count.tools  { color: var(--yellow); border-color: var(--yellow); }
+    .kg-count.edges  { color: var(--ink-dim); }
+    .kg-table-wrap { overflow-x: auto; }
+    .kg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .kg-table th { text-align: left; color: var(--ink-dim); padding: 6px 10px; border-bottom: 1px solid var(--border); font-weight: normal; text-transform: uppercase; letter-spacing: .05em; font-size: 10px; }
+    .kg-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .kg-table tr:hover td { background: var(--surface); }
+    .node-type-agent { font-size: 10px; padding: 2px 7px; border-radius: 3px; background: #1a1230; color: var(--violet); border: 1px solid var(--violet); }
+    .node-type-tool  { font-size: 10px; padding: 2px 7px; border-radius: 3px; background: #1a1800; color: var(--yellow); border: 1px solid var(--yellow); }
+    .kg-caps { font-size: 11px; color: var(--ink-dim); }
+    .kg-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+    .kg-tag { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-dim); }
+    .kg-empty { color: var(--ink-dim); text-align: center; padding: 40px; }
+    .btn-refresh-kg { padding: 5px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 12px; }
+    .btn-refresh-kg:hover { border-color: var(--blue); color: var(--blue); }
   </style>
 </head>
 <body>
@@ -184,9 +211,10 @@
 </details>
 
 <div class="toolbar">
-  <button id="btn-all" class="active" onclick="loadRuns(false)">All runs</button>
-  <button id="btn-review" onclick="loadRuns(true)">Needs review</button>
+  <button id="btn-all" class="active" onclick="showTabRuns(); loadRuns(false)">All runs</button>
+  <button id="btn-review" onclick="showTabRuns(); loadRuns(true)">Needs review</button>
   <button onclick="refresh()">Refresh</button>
+  <button id="btn-kg" onclick="showTabKG()">Knowledge Graph</button>
   <button onclick="bulkDeleteSkipped()" style="margin-left:auto;border-color:var(--red);color:var(--red)" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
 </div>
 
@@ -196,6 +224,26 @@
   </div>
   <div class="detail" id="detail">
     <div class="detail-empty">Select a run to inspect it.</div>
+  </div>
+</div>
+
+<div id="kg-panel">
+  <div class="kg-toolbar">
+    <h2>Knowledge Graph</h2>
+    <div class="kg-counters">
+      <span class="kg-count agents" id="kg-count-agents">agents —</span>
+      <span class="kg-count tools"  id="kg-count-tools">tools —</span>
+      <span class="kg-count edges"  id="kg-count-edges">edges —</span>
+    </div>
+    <div class="kg-filter">
+      <label><input type="radio" name="kg-filter" value="all" checked onchange="renderKG()"> Tous</label>
+      <label><input type="radio" name="kg-filter" value="agent"         onchange="renderKG()"> Agents</label>
+      <label><input type="radio" name="kg-filter" value="tool"          onchange="renderKG()"> Tools</label>
+    </div>
+    <button class="btn-refresh-kg" onclick="loadKG()">Refresh</button>
+  </div>
+  <div class="kg-table-wrap" id="kg-table-wrap">
+    <div class="kg-empty">Chargement…</div>
   </div>
 </div>
 
@@ -743,6 +791,66 @@
   async function refresh() {
     await Promise.all([loadStats(), loadRuns(currentFilter)]);
     if (selectedId) await showRun(selectedId);
+  }
+
+  // ── KG tab ──────────────────────────────────────────────
+  let _kgData = { nodes: [], edges: [] };
+
+  function showTabRuns() {
+    document.querySelector('.layout').style.display = '';
+    document.getElementById('kg-panel').style.display = 'none';
+    document.getElementById('btn-kg').classList.remove('active');
+  }
+
+  function showTabKG() {
+    document.querySelector('.layout').style.display = 'none';
+    document.getElementById('kg-panel').style.display = 'block';
+    document.getElementById('btn-all').classList.remove('active');
+    document.getElementById('btn-review').classList.remove('active');
+    document.getElementById('btn-kg').classList.add('active');
+    loadKG();
+  }
+
+  async function loadKG() {
+    document.getElementById('kg-table-wrap').innerHTML = '<div class="kg-empty">Chargement…</div>';
+    try {
+      const r = await fetch('/api/kg');
+      _kgData = await r.json();
+    } catch (e) {
+      _kgData = { nodes: [], edges: [] };
+    }
+    renderKG();
+  }
+
+  function renderKG() {
+    const filter = document.querySelector('input[name="kg-filter"]:checked')?.value || 'all';
+    const nodes = filter === 'all' ? _kgData.nodes : _kgData.nodes.filter(n => n.node_type === filter);
+    const nAgents = _kgData.nodes.filter(n => n.node_type !== 'tool').length;
+    const nTools  = _kgData.nodes.filter(n => n.node_type === 'tool').length;
+    document.getElementById('kg-count-agents').textContent = `agents ${nAgents}`;
+    document.getElementById('kg-count-tools').textContent  = `tools ${nTools}`;
+    document.getElementById('kg-count-edges').textContent  = `edges ${(_kgData.edges || []).length}`;
+
+    if (!nodes.length) {
+      document.getElementById('kg-table-wrap').innerHTML = '<div class="kg-empty">Aucun nœud enregistré dans le KG.</div>';
+      return;
+    }
+    const rows = nodes.map(n => {
+      const badge = `<span class="node-type-${n.node_type}">${escHtml(n.node_type)}</span>`;
+      const caps = (n.capabilities || []).map(c => escHtml(c)).join(', ') || '<span style="color:var(--ink-dim)">—</span>';
+      const tags = (n.tags || []).map(t => `<span class="kg-tag">${escHtml(t)}</span>`).join('') || '';
+      return `<tr>
+        <td>${escHtml(n.id)}</td>
+        <td>${badge}</td>
+        <td class="kg-caps">${caps}</td>
+        <td><div class="kg-tags">${tags}</div></td>
+      </tr>`;
+    }).join('');
+    document.getElementById('kg-table-wrap').innerHTML = `
+      <table class="kg-table">
+        <thead><tr><th>Name</th><th>Type</th><th>Capabilities</th><th>Tags</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
   }
 
   refresh();
