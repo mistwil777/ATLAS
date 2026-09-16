@@ -12,6 +12,9 @@ dependencies = [
     "uvicorn[standard]>=0.29,<1.0",
 ]
 
+[project.optional-dependencies]
+mlflow = ["mlflow>=2.13,<3.0"]
+
 [project.scripts]
 atlas-dashboard = "atlas_dashboard.__main__:main"
 

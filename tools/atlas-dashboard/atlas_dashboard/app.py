@@ -456,6 +456,22 @@ def api_scaffold(
             last_spec = summary
             last_files = _read_generated_files(target_path)
 
+            from atlas_dashboard.atlas_mlflow import log_scaffold_attempt  # noqa: PLC0415
+
+            log_scaffold_attempt(
+                agent_name=agent_name,
+                attempt=attempt,
+                judge_score=judge_score,
+                judge_passed=judge_score is not None and judge_score >= _SCAFFOLD_QUALITY_THRESHOLD,
+                criteria=judge_criteria or [],
+                feedback=judge_feedback or "",
+                model_id=llm_cfg.get("model_id", ""),
+                patches_applied=body.selected_patches,
+                user_answers=body.user_answers,
+                run_id=run_id,
+                atlas_run_id=run_id,
+            )
+
             if judge_score is not None and judge_score >= _SCAFFOLD_QUALITY_THRESHOLD:
                 store.set_scaffold_result(
                     run_id,
@@ -556,6 +572,16 @@ def api_build_tool(run_id: str, tool_name: str):
 
     store.set_tool_result(run_id, tool_name, summary["output_path"], summary)
     _index_tool_in_rag(tool_name, spec_text, summary)
+
+    from atlas_dashboard.atlas_mlflow import log_tool_build  # noqa: PLC0415
+
+    log_tool_build(
+        tool_name=tool_name,
+        contract_passed=summary.get("contract_passed", False),
+        module_name=summary.get("module_name", ""),
+        functions=summary.get("functions", []),
+        atlas_run_id=run_id,
+    )
 
     files = _read_generated_files(_Path(summary["output_path"]))
     return {
