@@ -170,19 +170,13 @@
     .kg-count.agents { color: var(--violet); border-color: var(--violet); }
     .kg-count.tools  { color: var(--yellow); border-color: var(--yellow); }
     .kg-count.edges  { color: var(--ink-dim); }
-    .kg-table-wrap { overflow-x: auto; }
-    .kg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .kg-table th { text-align: left; color: var(--ink-dim); padding: 6px 10px; border-bottom: 1px solid var(--border); font-weight: normal; text-transform: uppercase; letter-spacing: .05em; font-size: 10px; }
-    .kg-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-    .kg-table tr:hover td { background: var(--surface); }
-    .node-type-agent { font-size: 10px; padding: 2px 7px; border-radius: 3px; background: #1a1230; color: var(--violet); border: 1px solid var(--violet); }
-    .node-type-tool  { font-size: 10px; padding: 2px 7px; border-radius: 3px; background: #1a1800; color: var(--yellow); border: 1px solid var(--yellow); }
-    .kg-caps { font-size: 11px; color: var(--ink-dim); }
-    .kg-tags { display: flex; gap: 4px; flex-wrap: wrap; }
-    .kg-tag { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-dim); }
+    #kg-graph { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 6px; background: #0d0d14; }
     .kg-empty { color: var(--ink-dim); text-align: center; padding: 40px; }
     .btn-refresh-kg { padding: 5px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 12px; }
     .btn-refresh-kg:hover { border-color: var(--blue); color: var(--blue); }
+    .kg-tooltip { position: fixed; background: #1a1a2e; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: 11px; color: var(--ink); pointer-events: none; z-index: 999; max-width: 260px; display: none; }
+    .kg-tooltip-title { font-weight: bold; font-size: 12px; margin-bottom: 6px; }
+    .kg-tooltip-caps { color: var(--ink-dim); margin-bottom: 4px; }
 
     /* ── Trend view ── */
     #trend-panel { display: none; padding: 22px 32px; }
@@ -214,6 +208,7 @@
     .trend-feedback { font-size: 11px; color: var(--ink-dim); font-style: italic; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
     .trend-model-change { font-size: 11px; color: var(--blue); padding: 6px 10px; background: #0d1a2a; border-radius: 4px; margin-bottom: 8px; }
   </style>
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
 </head>
 <body>
 
@@ -273,9 +268,8 @@
     </div>
     <button class="btn-refresh-kg" onclick="loadKG()">Refresh</button>
   </div>
-  <div class="kg-table-wrap" id="kg-table-wrap">
-    <div class="kg-empty">Chargement…</div>
-  </div>
+  <div id="kg-graph"><div class="kg-empty" style="padding-top:160px">Chargement…</div></div>
+  <div class="kg-tooltip" id="kg-tooltip"></div>
 </div>
 
 <div id="trend-panel">
@@ -877,8 +871,10 @@
     _populateTrendAgents();
   }
 
+  let _visNetwork = null;
+
   async function loadKG() {
-    document.getElementById('kg-table-wrap').innerHTML = '<div class="kg-empty">Chargement…</div>';
+    document.getElementById('kg-graph').innerHTML = '<div class="kg-empty" style="padding-top:160px">Chargement…</div>';
     try {
       const r = await fetch('/api/kg');
       _kgData = await r.json();
@@ -890,33 +886,84 @@
 
   function renderKG() {
     const filter = document.querySelector('input[name="kg-filter"]:checked')?.value || 'all';
-    const nodes = filter === 'all' ? _kgData.nodes : _kgData.nodes.filter(n => n.node_type === filter);
     const nAgents = _kgData.nodes.filter(n => n.node_type !== 'tool').length;
     const nTools  = _kgData.nodes.filter(n => n.node_type === 'tool').length;
     document.getElementById('kg-count-agents').textContent = `agents ${nAgents}`;
     document.getElementById('kg-count-tools').textContent  = `tools ${nTools}`;
     document.getElementById('kg-count-edges').textContent  = `edges ${(_kgData.edges || []).length}`;
 
-    if (!nodes.length) {
-      document.getElementById('kg-table-wrap').innerHTML = '<div class="kg-empty">Aucun nœud enregistré dans le KG.</div>';
+    const filteredNodes = filter === 'all' ? _kgData.nodes : _kgData.nodes.filter(n => n.node_type === filter);
+    const filteredIds = new Set(filteredNodes.map(n => n.id));
+
+    if (!filteredNodes.length) {
+      document.getElementById('kg-graph').innerHTML = '<div class="kg-empty" style="padding-top:160px">Aucun nœud enregistré dans le KG.</div>';
       return;
     }
-    const rows = nodes.map(n => {
-      const badge = `<span class="node-type-${n.node_type}">${escHtml(n.node_type)}</span>`;
-      const caps = (n.capabilities || []).map(c => escHtml(c)).join(', ') || '<span style="color:var(--ink-dim)">—</span>';
-      const tags = (n.tags || []).map(t => `<span class="kg-tag">${escHtml(t)}</span>`).join('') || '';
-      return `<tr>
-        <td>${escHtml(n.id)}</td>
-        <td>${badge}</td>
-        <td class="kg-caps">${caps}</td>
-        <td><div class="kg-tags">${tags}</div></td>
-      </tr>`;
-    }).join('');
-    document.getElementById('kg-table-wrap').innerHTML = `
-      <table class="kg-table">
-        <thead><tr><th>Name</th><th>Type</th><th>Capabilities</th><th>Tags</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+
+    if (typeof vis === 'undefined') {
+      document.getElementById('kg-graph').innerHTML = '<div class="kg-empty" style="padding-top:160px">vis-network non chargé (vérifier la connexion).</div>';
+      return;
+    }
+
+    const container = document.getElementById('kg-graph');
+    container.innerHTML = '';
+
+    const visNodes = filteredNodes.map(n => ({
+      id: n.id,
+      label: n.id,
+      group: n.node_type,
+      title: _kgTooltipHtml(n),
+      font: { color: n.node_type === 'tool' ? '#e8a600' : '#9085e9', size: 13, face: 'monospace' },
+      color: {
+        background: n.node_type === 'tool' ? '#1a1800' : '#1a1230',
+        border:     n.node_type === 'tool' ? '#e8a600' : '#9085e9',
+        highlight:  { background: n.node_type === 'tool' ? '#2a2800' : '#2a1a50', border: n.node_type === 'tool' ? '#e8a600' : '#c8b0ff' },
+        hover:      { background: n.node_type === 'tool' ? '#252000' : '#221040', border: n.node_type === 'tool' ? '#e8a600' : '#9085e9' },
+      },
+      shape: n.node_type === 'tool' ? 'diamond' : 'ellipse',
+      size: n.node_type === 'tool' ? 16 : 20,
+      borderWidth: 2,
+    }));
+
+    const visEdges = (_kgData.edges || [])
+      .filter(e => filteredIds.has(e.from) && filteredIds.has(e.to))
+      .map(e => ({
+        from: e.from, to: e.to,
+        label: e.relation || '',
+        arrows: 'to',
+        color: { color: '#3987e5', highlight: '#1baf7a', hover: '#3987e5' },
+        font: { color: '#c8c0d8', size: 10, align: 'middle' },
+        width: 1.5,
+        smooth: { type: 'curvedCW', roundness: 0.2 },
+      }));
+
+    const data = { nodes: new vis.DataSet(visNodes), edges: new vis.DataSet(visEdges) };
+    const options = {
+      physics: {
+        enabled: true,
+        solver: 'forceAtlas2Based',
+        forceAtlas2Based: { gravitationalConstant: -40, centralGravity: 0.005, springLength: 120, springConstant: 0.08, damping: 0.4 },
+        stabilization: { iterations: 150, updateInterval: 25 },
+      },
+      interaction: { hover: true, tooltipDelay: 200, zoomView: true, dragView: true },
+      layout: { improvedLayout: true },
+      edges: { selectionWidth: 2 },
+    };
+
+    if (_visNetwork) { _visNetwork.destroy(); }
+    _visNetwork = new vis.Network(container, data, options);
+
+    _visNetwork.on('stabilizationIterationsDone', () => { _visNetwork.setOptions({ physics: { enabled: false } }); });
+  }
+
+  function _kgTooltipHtml(n) {
+    const caps = (n.capabilities || []).join(', ') || '—';
+    const tags = (n.tags || []).join(', ') || '—';
+    return `<div class="kg-tooltip" style="display:block;position:static;border:none;background:transparent;padding:0">
+      <div class="kg-tooltip-title">${escHtml(n.id)}</div>
+      <div class="kg-tooltip-caps">capabilities: ${escHtml(caps)}</div>
+      <div style="font-size:10px;color:#7a7a9a">tags: ${escHtml(tags)}</div>
+    </div>`;
   }
 
   // ── Trend tab ────────────────────────────────────────────────
