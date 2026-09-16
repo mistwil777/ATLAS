@@ -10,7 +10,6 @@ requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.111,<1.0",
     "uvicorn[standard]>=0.29,<1.0",
-    "atlas-memory",
 ]
 
 [project.scripts]
