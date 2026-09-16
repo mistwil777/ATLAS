@@ -76,12 +76,27 @@ class AtlasJudgeAgent:
         criteria: list[str] | None = None,
         agent_name: str = "",
         context: str = "",
+        attempts: list[dict] | None = None,
     ) -> Generator[dict, None, None]:
         """Evaluate an output. Yields log dicts then summary."""
         from atlas_core import collect  # noqa: PLC0415
 
         _t0 = time.monotonic()
         yield self._info(f"atlas-judge: {operation}")
+
+        if operation == "diagnose":
+            if not attempts:
+                yield self._error("diagnose requires attempts list")
+                return
+            result = self._diagnose(attempts, agent_name, context)
+            if result is None:
+                yield self._error("Diagnosis failed — LLM did not return valid JSON")
+                return
+            yield self._info(
+                f"Diagnosis complete — {len(result.get('problems', []))} problem(s) identified"
+            )
+            yield {"summary": True, **result}
+            return
 
         resolved_criteria = self._resolve_criteria(criteria, agent_name)
         if not resolved_criteria:
@@ -144,6 +159,42 @@ class AtlasJudgeAgent:
             },
         )
         yield {"summary": True, **result}
+
+    def _diagnose(self, attempts: list[dict], agent_name: str, context: str) -> dict | None:
+        from atlas_judge.prompts import DIAGNOSE_PROMPT  # noqa: PLC0415
+
+        attempts_block = ""
+        for i, attempt in enumerate(attempts, 1):
+            criteria_lines = "\n".join(
+                f"  - {c['criterion']} → {c['score']}/5: {c.get('comment', '')}"
+                for c in attempt.get("criteria_scores", [])
+            )
+            attempts_block += (
+                f"### Attempt {i}\n"
+                f"Feedback: {attempt.get('feedback', '')}\n"
+                f"Criteria scores:\n{criteria_lines}\n\n"
+            )
+
+        prompt = DIAGNOSE_PROMPT.format(
+            n_attempts=len(attempts),
+            agent_name=agent_name or "unknown",
+            context=context[:800],
+            attempts_block=attempts_block,
+        )
+        raw = self._llm(prompt, self.llm_cfg, 1024)
+        if not raw:
+            return None
+
+        import json  # noqa: PLC0415
+        import re  # noqa: PLC0415
+
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            return None
 
     def _resolve_criteria(self, criteria: list[str] | None, agent_name: str) -> list[str]:
         if criteria:

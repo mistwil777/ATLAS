@@ -92,6 +92,34 @@ and assess how well the output matches it according to the criteria below.
 }}
 """
 
+DIAGNOSE_PROMPT = """\
+You are an expert AI systems diagnostician. An agent failed to meet quality standards after \
+{n_attempts} scaffold attempts. Analyze the repeated failures and produce an actionable diagnosis.
+
+## Agent
+{agent_name}
+
+## Context (what the agent was asked to do)
+{context}
+
+## Attempts history
+{attempts_block}
+
+## Instructions
+- Identify recurring problems across attempts (not one-off issues)
+- Formulate targeted questions whose answers would resolve the ambiguities
+- Propose concrete patches that can be applied to the agent spec before the next scaffold attempt
+- Be specific — reference actual criterion names and observed failure patterns
+- Return ONLY valid JSON, no markdown, no explanation
+
+{{
+  "mode": "diagnose",
+  "problems": ["<recurring problem 1>", "<recurring problem 2>"],
+  "questions": ["<targeted question 1>", "<targeted question 2>"],
+  "proposed_patches": ["<actionable spec patch 1>", "<actionable spec patch 2>"]
+}}
+"""
+
 REPROMPT = """\
 Your previous response was not valid JSON. Return ONLY the JSON object, no markdown, no explanation.
 
