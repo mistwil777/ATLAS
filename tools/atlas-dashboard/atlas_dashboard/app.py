@@ -17,6 +17,13 @@ from pathlib import Path as _Path
 from atlas_memory.run_store import RunStore
 from fastapi import Cookie, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from pydantic import BaseModel
+
+
+class ScaffoldRequest(BaseModel):
+    user_answers: list[str] = []
+    selected_patches: list[str] = []
+
 
 _DEFAULT_RUN_STORE_DIR = Path.home() / ".atlas" / "runs"
 
@@ -237,7 +244,11 @@ def _llm_fn_for_dashboard():
 
 
 @app.post("/api/runs/{run_id}/scaffold/{agent_name}")
-def api_scaffold(run_id: str, agent_name: str):
+def api_scaffold(
+    run_id: str,
+    agent_name: str,
+    body: ScaffoldRequest | None = None,
+):
     store = get_store()
     run = store.get_run(run_id)
     if run is None:
@@ -287,9 +298,21 @@ def api_scaffold(run_id: str, agent_name: str):
     last_spec: dict = {}
 
     try:
+        # CR context injected by user after a diagnosis
+        body = body or ScaffoldRequest()
+        cr_context = ""
+        if body.user_answers:
+            cr_context += "\n\n# User answers to diagnostic questions:\n" + "\n".join(
+                f"- {a}" for a in body.user_answers if a.strip()
+            )
+        if body.selected_patches:
+            cr_context += "\n\n# Patches to apply:\n" + "\n".join(
+                f"- {p}" for p in body.selected_patches if p.strip()
+            )
+
         for attempt in range(1, _SCAFFOLD_MAX_ATTEMPTS + 1):
             # Enrich spec with feedback from previous failed attempts
-            constraints = ""
+            constraints = cr_context
             if attempts_log:
                 lines = []
                 for a in attempts_log:
@@ -297,7 +320,7 @@ def api_scaffold(run_id: str, agent_name: str):
                         if cs.get("score", 5) < 4:
                             lines.append(f"- {cs['criterion']}: {cs.get('comment', '')}")
                 if lines:
-                    constraints = (
+                    constraints += (
                         "\n\n# Constraints from previous attempts — must fix:\n" + "\n".join(lines)
                     )
 

@@ -130,6 +130,21 @@
     .code-viewer pre { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 10px; font-size: 11px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
     .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--violet); border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Diagnosis / CR panel ── */
+    .diagnosis-panel { margin-top: 10px; width: 100%; background: #1a0d0d; border: 1px solid var(--red); border-radius: 6px; padding: 12px 14px; }
+    .diagnosis-panel .diag-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--red); margin-bottom: 10px; }
+    .diagnosis-panel .diag-section { margin-bottom: 10px; }
+    .diagnosis-panel .diag-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--yellow); margin-bottom: 6px; }
+    .diag-problem { font-size: 11px; color: var(--ink); margin-bottom: 4px; padding-left: 12px; border-left: 2px solid var(--red); }
+    .diag-question-row { margin-bottom: 8px; }
+    .diag-question-row label { display: block; font-size: 11px; color: var(--ink-dim); margin-bottom: 4px; }
+    .diag-question-row textarea { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 6px; font-size: 11px; font-family: inherit; resize: vertical; min-height: 48px; }
+    .diag-patch-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 4px; font-size: 11px; color: var(--ink); }
+    .diag-patch-row input[type=checkbox] { margin-top: 2px; flex-shrink: 0; accent-color: var(--violet); }
+    .btn-apply-retry { margin-top: 10px; padding: 6px 16px; background: var(--violet); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+    .btn-apply-retry:hover { opacity: .85; }
+    .btn-apply-retry:disabled { opacity: .4; cursor: default; }
   </style>
 </head>
 <body>
@@ -384,11 +399,21 @@
       } else if (state === 'installing') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
       } else if (state === 'installed') {
-        const files = _scaffoldState[key]?.files || sc?.spec ? {} : {};
         controls = `
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <span class="badge badge-approved">installed</span>
             <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
+          </div>`;
+      } else if (state === 'diagnosis') {
+        const diagnosis = _scaffoldState[key]?.diagnosis || {};
+        controls = `<span class="badge badge-failed">3 attempts failed</span>`;
+        return `
+          <div class="agent-row" id="agent-row-${agent}">
+            <div class="agent-row-header">
+              <span class="agent-row-name">${agent}</span>
+              ${controls}
+            </div>
+            ${buildDiagnosisPanel(run.run_id, agent, diagnosis)}
           </div>`;
       }
       return `
@@ -405,6 +430,95 @@
       : '';
 
     return `<div class="create-panel"><h3>Agents to Create (${agents.length})</h3>${rows}${rerunBtn}</div>`;
+  }
+
+  // ── Diagnosis CR panel ───────────────────────────────────────────────────────
+
+  function buildDiagnosisPanel(runId, agent, diagnosis) {
+    const problems = diagnosis.problems || [];
+    const questions = diagnosis.questions || [];
+    const patches = diagnosis.proposed_patches || [];
+
+    const problemsHtml = problems.length
+      ? `<div class="diag-section">
+          <div class="diag-section-label">Problems identified</div>
+          ${problems.map(p => `<div class="diag-problem">${escHtml(p)}</div>`).join('')}
+        </div>`
+      : '';
+
+    const questionsHtml = questions.length
+      ? `<div class="diag-section">
+          <div class="diag-section-label">Questions for you</div>
+          ${questions.map((q, i) => `
+            <div class="diag-question-row">
+              <label>${escHtml(q)}</label>
+              <textarea id="diag-answer-${agent}-${i}" placeholder="Your answer…"></textarea>
+            </div>`).join('')}
+        </div>`
+      : '';
+
+    const patchesHtml = patches.length
+      ? `<div class="diag-section">
+          <div class="diag-section-label">Proposed patches <span style="color:var(--ink-dim);font-weight:normal">(select to apply)</span></div>
+          ${patches.map((p, i) => `
+            <div class="diag-patch-row">
+              <input type="checkbox" id="diag-patch-${agent}-${i}" checked>
+              <label for="diag-patch-${agent}-${i}">${escHtml(p)}</label>
+            </div>`).join('')}
+        </div>`
+      : '';
+
+    return `<div class="diagnosis-panel" id="diag-panel-${agent}">
+      <div class="diag-title">Diagnostic — 3 attempts exhausted</div>
+      ${problemsHtml}
+      ${questionsHtml}
+      ${patchesHtml}
+      <button class="btn-apply-retry"
+        onclick="applyAndRetry('${runId}','${agent}',${questions.length},${patches.length})">
+        Apply &amp; Retry Scaffold
+      </button>
+    </div>`;
+  }
+
+  async function applyAndRetry(runId, agent, nQuestions, nPatches) {
+    const answers = [];
+    for (let i = 0; i < nQuestions; i++) {
+      const el = document.getElementById(`diag-answer-${agent}-${i}`);
+      if (el && el.value.trim()) answers.push(el.value.trim());
+    }
+    const selectedPatches = [];
+    for (let i = 0; i < nPatches; i++) {
+      const cb = document.getElementById(`diag-patch-${agent}-${i}`);
+      const lbl = cb?.nextElementSibling;
+      if (cb?.checked && lbl) selectedPatches.push(lbl.textContent.trim());
+    }
+
+    const key = _stateKey(runId, agent);
+    _scaffoldState[key] = { state: 'scaffolding' };
+    await showRun(runId);
+    try {
+      const res = await fetch(`/api/runs/${runId}/scaffold/${agent}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_answers: answers, selected_patches: selectedPatches }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Retry failed: ' + (err.detail || JSON.stringify(err)));
+        _scaffoldState[key] = { state: 'diagnosis', diagnosis: _scaffoldState[key]?.diagnosis || {} };
+      } else {
+        const data = await res.json();
+        if (data.diagnosis) {
+          _scaffoldState[key] = { state: 'diagnosis', diagnosis: data.diagnosis };
+        } else {
+          _scaffoldState[key] = { state: 'scaffolded', files: data.files, outputPath: data.output_path };
+        }
+      }
+    } catch(e) {
+      alert('Retry error: ' + e.message);
+      _scaffoldState[key] = { state: 'diagnosis', diagnosis: _scaffoldState[key]?.diagnosis || {} };
+    }
+    await showRun(runId);
   }
 
   function escHtml(s) {
@@ -428,7 +542,11 @@
         _scaffoldState[key] = { state: 'pending' };
       } else {
         const data = await res.json();
-        _scaffoldState[key] = { state: 'scaffolded', files: data.files, outputPath: data.output_path };
+        if (data.diagnosis) {
+          _scaffoldState[key] = { state: 'diagnosis', diagnosis: data.diagnosis };
+        } else {
+          _scaffoldState[key] = { state: 'scaffolded', files: data.files, outputPath: data.output_path };
+        }
       }
     } catch(e) {
       alert('Scaffold error: ' + e.message);
