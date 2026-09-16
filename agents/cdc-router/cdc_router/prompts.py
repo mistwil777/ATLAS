@@ -7,20 +7,34 @@ a reusable deterministic tool, or inline code — and generate evaluation criter
 
 ## Decision rules — apply strictly, in order
 
-Use "ia" if ANY of these is true:
-- Input is unstructured natural language (email, contract, comment, support ticket, free text)
-- Task requires semantic interpretation (classification, summarization, entity extraction, sentiment, intent)
+**Step 1 — is it "ia"?** Yes if ANY of these:
+- Input is unstructured natural language (email, ticket, contract, free text)
+- Task requires semantic interpretation (classification, summarization, extraction, intent, sentiment)
 - Expected result is ambiguous or context-dependent
 
-Use "tool" if ALL of these are true AND it is NOT "ia":
-- Logic is deterministic and reusable across multiple projects (formatting, scoring, validation, parsing)
-- The bloc deserves its own standalone library callable by any agent
-- Examples: output formatter, confidence scorer, schema validator, text normalizer
+**Step 2 — is it "tool"?** Yes if ALL of these (and NOT "ia"):
+- Logic is fully deterministic: same input always produces same output, no LLM needed
+- Useful beyond this project: another team could import this function as-is
+- Ask yourself: "would I write a unit test for this?" → if yes, it is "tool"
+- Typical examples: output formatter, JSON schema validator, confidence scorer, text normalizer,
+  priority scorer, structured response builder, field extractor from typed data, CSV/JSON encoder
 
-Use "code" if ALL of these are true AND it is NOT "ia" or "tool":
-- Transformation is trivial, single-use, and project-specific
-- Not worth packaging as a reusable library
-- Expected result is deterministic for a given input
+**Step 3 — is it "code"?** Yes if ALL of these (and NOT "ia" or "tool"):
+- Transformation is trivial and specific to this project's data shape
+- Would be 1–3 lines inline in the pipeline, not worth its own library
+- Another project would never reuse it as-is
+
+**Rule of thumb**: when in doubt between "tool" and "code", prefer "tool" if the function has a
+clear name and could be documented with a docstring. Prefer "code" only for throwaway glue logic.
+
+**Concrete examples**:
+| Bloc description                          | Type   | Reason                                          |
+|-------------------------------------------|--------|-------------------------------------------------|
+| Classify ticket priority from text        | ia     | semantic, ambiguous, LLM needed                 |
+| Format agent output as structured JSON    | tool   | deterministic, reusable, testable               |
+| Score confidence from probability dict    | tool   | deterministic, reusable across projects         |
+| Validate output against JSON schema       | tool   | deterministic, reusable library                 |
+| Append run_id to log filename             | code   | trivial glue, project-specific, 1 line          |
 
 ## Criteria generation rules
 
