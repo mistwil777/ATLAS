@@ -82,9 +82,16 @@ def _parse(raw: str) -> dict | None:
         data = json.loads(raw[start:end])
         if "blocs" not in data or not isinstance(data["blocs"], list):
             return None
+        last_ia_agent: str | None = None
         for bloc in data["blocs"]:
             if not isinstance(bloc.get("criteria"), list):
                 bloc["criteria"] = []
+            # track last ia agent for called_by inference
+            if bloc.get("type") == "ia" and bloc.get("agent_suggested"):
+                last_ia_agent = bloc["agent_suggested"]
+            # infer called_by if LLM left it empty on a tool bloc
+            if bloc.get("type") == "tool" and not bloc.get("called_by"):
+                bloc["called_by"] = last_ia_agent or ""
         return data
     except json.JSONDecodeError:
         return None
