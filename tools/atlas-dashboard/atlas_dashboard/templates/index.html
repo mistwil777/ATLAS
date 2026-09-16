@@ -297,6 +297,14 @@
   function pct(v) { return v != null ? (v * 100).toFixed(1) + '%' : '—'; }
   function score(v) { return v != null ? v.toFixed(2) : '—'; }
 
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString(undefined, {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
   function rateColor(v) {
     if (v == null) return 'var(--ink-dim)';
     if (v >= 0.8) return 'var(--aqua)';
@@ -353,7 +361,7 @@
         <div class="run-meta">
           <span class="badge badge-${r.status}">${r.status}</span>
           ${r.requires_review ? '<span class="badge badge-review">review</span>' : ''}
-          <span style="font-size:11px;color:var(--ink-dim)">${r.created_at.slice(0,19).replace('T',' ')}</span>
+          <span style="font-size:11px;color:var(--ink-dim)">${fmtDate(r.created_at)}</span>
         </div>
       </div>`).join('');
   }
@@ -370,7 +378,7 @@
       <div class="meta-row">
         <span class="badge badge-${run.status}">${run.status}</span>
         ${run.requires_review ? '<span class="badge badge-review">requires review</span>' : ''}
-        <span style="color:var(--ink-dim);font-size:11px">${run.created_at}</span>
+        <span style="color:var(--ink-dim);font-size:11px">${fmtDate(run.created_at)}</span>
       </div>
       ${buildProgressBanner(run)}
       <div class="actions">
@@ -1013,7 +1021,7 @@
     const scoreStr = p.avg_score != null ? p.avg_score.toFixed(2) : '—';
     const prevStr = prev?.avg_score != null ? prev.avg_score.toFixed(2) + ' → ' : '';
     const deltaStr = p.delta != null ? (p.delta >= 0 ? `<span style="color:var(--aqua)">+${p.delta.toFixed(2)}</span>` : `<span style="color:var(--red)">${p.delta.toFixed(2)}</span>`) : '';
-    const date = p.created_at ? p.created_at.slice(0,16).replace('T',' ') : '';
+    const date = fmtDate(p.created_at);
     const causeLabel = {initial_scaffold:'Scaffold initial', cr_retry:'CR retry', model_change:'Changement de modèle'}[p.cause] || p.cause;
 
     let html = `<div class="trend-detail">
