@@ -12,13 +12,16 @@ def route(blocs: list[dict], kg_graph: dict) -> dict:
       - requires_creation: agents that need to be created
       - atlas_agents_reused: existing agents matched
     """
-    known_agents = {node["id"] for node in kg_graph.get("nodes", [])}
+    nodes = kg_graph.get("nodes", [])
+    known_agents = {n["id"] for n in nodes if n.get("node_type", "agent") == "agent"}
+    known_tools = {n["id"] for n in nodes if n.get("node_type") == "tool"}
 
     enriched_blocs = []
     pipeline = []
     requires_creation = []
     requires_tools = []
     atlas_agents_reused = []
+    atlas_tools_reused = []
 
     for bloc in blocs:
         b = dict(bloc)
@@ -39,9 +42,14 @@ def route(blocs: list[dict], kg_graph: dict) -> dict:
                 if agent_name not in pipeline:
                     pipeline.append(agent_name)
         elif bloc_type == "tool" and agent_name:
-            b["agent_exists"] = False
-            if agent_name not in requires_tools:
-                requires_tools.append(agent_name)
+            exists = agent_name in known_tools
+            b["agent_exists"] = exists
+            if exists:
+                if agent_name not in atlas_tools_reused:
+                    atlas_tools_reused.append(agent_name)
+            else:
+                if agent_name not in requires_tools:
+                    requires_tools.append(agent_name)
         else:
             b["agent_exists"] = False
 
@@ -53,4 +61,5 @@ def route(blocs: list[dict], kg_graph: dict) -> dict:
         "requires_creation": requires_creation,
         "requires_tools": requires_tools,
         "atlas_agents_reused": atlas_agents_reused,
+        "atlas_tools_reused": atlas_tools_reused,
     }

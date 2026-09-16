@@ -28,15 +28,20 @@ class KGStore:
         inputs: list[str],
         outputs: list[str],
         tags: list[str],
+        node_type: str = "agent",
     ) -> None:
         self._g.add_node(
             name,
+            node_type=node_type,
             capabilities=capabilities,
             inputs=inputs,
             outputs=outputs,
             tags=tags,
         )
         self.save()
+
+    def get_nodes_by_type(self, node_type: str) -> set[str]:
+        return {n for n, d in self._g.nodes(data=True) if d.get("node_type", "agent") == node_type}
 
     def add_edge(self, from_agent: str, to_agent: str, relation: str) -> None:
         self._g.add_edge(from_agent, to_agent, relation=relation)

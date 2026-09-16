@@ -66,6 +66,7 @@ class AtlasMemoryAgent:
             "index": self._op_index,
             "search": self._op_search,
             "register_agent": self._op_register_agent,
+            "register_tool": self._op_register_tool,
             "add_edge": self._op_add_edge,
             "query_composable": self._op_query_composable,
             "get_graph": self._op_get_graph,
@@ -128,8 +129,26 @@ class AtlasMemoryAgent:
             inputs=inputs or [],
             outputs=outputs or [],
             tags=tags or [],
+            node_type="agent",
         )
         return {"registered": name}
+
+    def _op_register_tool(
+        self,
+        name: str,
+        capabilities: list | None = None,
+        tags: list | None = None,
+        **_: object,
+    ) -> dict:
+        self._get_kg().register_agent(
+            name,
+            capabilities=capabilities or [],
+            inputs=[],
+            outputs=[],
+            tags=tags or [],
+            node_type="tool",
+        )
+        return {"registered": name, "node_type": "tool"}
 
     def _op_add_edge(
         self,

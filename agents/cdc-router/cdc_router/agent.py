@@ -123,6 +123,10 @@ class CdcRouterAgent:
             for name in routing["requires_tools"]:
                 yield self._info(f"Tool to build: {name} (will go to libs/)")
 
+        if routing.get("atlas_tools_reused"):
+            for name in routing["atlas_tools_reused"]:
+                yield self._info(f"Existing tool reused: {name}")
+
         if routing["atlas_agents_reused"]:
             for name in routing["atlas_agents_reused"]:
                 yield self._info(f"Existing agent reused: {name}")
@@ -145,6 +149,7 @@ class CdcRouterAgent:
             "requires_creation": routing["requires_creation"],
             "requires_tools": routing.get("requires_tools", []),
             "atlas_agents_reused": routing["atlas_agents_reused"],
+            "atlas_tools_reused": routing.get("atlas_tools_reused", []),
         }
 
     def _load_cdc(self, cdc_text: str, cdc_path: str) -> str:

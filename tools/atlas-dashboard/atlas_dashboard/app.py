@@ -460,6 +460,7 @@ def api_build_tool(run_id: str, tool_name: str):
         raise HTTPException(status_code=500, detail=f"Tool generation failed: {errors}")
 
     store.set_tool_result(run_id, tool_name, summary["output_path"], summary)
+    _index_tool_in_rag(tool_name, spec_text, summary)
 
     files = _read_generated_files(_Path(summary["output_path"]))
     return {
@@ -491,6 +492,7 @@ def api_install_tool(run_id: str, tool_name: str):
     )
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=f"pip install failed: {result.stderr[:500]}")
+    _register_tool_in_kg(tool_name, output_path)
     store.set_tool_installed(run_id, tool_name)
     return {"status": "installed", "tool_name": tool_name}
 
@@ -654,6 +656,59 @@ def _run_diagnose(
         "questions": [],
         "proposed_patches": [],
     }
+
+
+def _register_tool_in_kg(tool_name: str, output_path: str) -> None:
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+        mem = AtlasMemoryAgent()
+        events = list(
+            mem.run(
+                operation="register_tool",
+                name=tool_name,
+                capabilities=[f"Reusable Python tool: {tool_name}"],
+                tags=["tool", "generated"],
+            )
+        )
+        err = next((e for e in events if e.get("level") == "error"), None)
+        if err:
+            logging.getLogger("atlas_dashboard").warning(
+                "KG tool registration warning for %s: %s", tool_name, err.get("msg")
+            )
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "KG tool registration failed for %s (non-blocking): %s", tool_name, exc
+        )
+
+
+def _index_tool_in_rag(tool_name: str, spec_text: str, summary: dict) -> None:
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+        mem = AtlasMemoryAgent()
+        list(
+            mem.run(
+                operation="index",
+                entry_type="tool_spec",
+                content=spec_text[:500],
+                payload={
+                    "tool_name": tool_name,
+                    "module_name": summary.get("module_name", ""),
+                    "functions": summary.get("functions", []),
+                    "description": summary.get("description", ""),
+                },
+                metadata={"tool": tool_name},
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "RAG indexing failed for tool %s (non-blocking): %s", tool_name, exc
+        )
 
 
 def _fix_entry_point(output_path: _Path, agent_name: str) -> None:
