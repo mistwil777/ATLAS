@@ -31,7 +31,7 @@ Do NOT classify blocs as ia/tool/code yet — focus entirely on WHAT each bloc d
 }}
 """
 
-# ── Passe 2 : classification agent/outil/glue ─────────────────────────────────
+# ── Passe 2 : classification agent/outil/code d'intégration ──────────────────
 CLASSIFICATION_PROMPT = """\
 You are an expert software architect. You have a list of functional blocs to classify.
 
@@ -48,7 +48,7 @@ You are an expert software architect. You have a list of functional blocs to cla
 - Worthy of a unit test and a docstring
 - Examples: OutputFormatter, JsonValidator, ConfidenceScorer, TextNormalizer
 
-**GLUE (type="code")** if ALL of these (and NOT "ia" or "tool"):
+**INTEGRATION CODE (type="code")** if ALL of these (and NOT "ia" or "tool"):
 - Trivial transformation specific to this project (1-3 lines inline)
 - Another team on another project could never reuse it as-is
 - Not worth naming or documenting

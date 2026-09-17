@@ -5,7 +5,7 @@ CRITERIA = {
         "The ia/tool/code decision follows the three-type rules strictly: "
         "ia for unstructured natural language input or semantic interpretation tasks requiring LLM reasoning; "
         "tool for fully deterministic, reusable, unit-testable functions; "
-        "code for trivial project-specific glue (1-3 lines, not reusable). "
+        "code for trivial project-specific integration code (1-3 lines, not reusable). "
         "No name appears as both ia and tool across blocs."
     ),
     "json_schema_valid": (
