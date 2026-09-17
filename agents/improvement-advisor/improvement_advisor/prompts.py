@@ -41,8 +41,24 @@ Ta mission : identifier les pain points, suggérer des actions ciblées, estimer
 """
 
 REPROMPT = """\
-Ta réponse précédente n'est pas du JSON valide. Réponds UNIQUEMENT avec le JSON demandé, sans texte avant ni après.
+Ta réponse précédente n'est pas du JSON valide ou ne contient pas les champs requis. \
+Réponds UNIQUEMENT avec le JSON ci-dessous, sans texte avant ni après, sans balises markdown.
 
-Réponse précédente :
+Format attendu :
+{{
+  "pain_points": [
+    {{"criterion": "<nom>", "pattern": "<description>", "severity": "high"|"medium"|"low"}}
+  ],
+  "suggested_actions": [
+    {{"action": "<description>", "targets": ["<critère>"], "expected_delta": "<str>"|null, "priority": <int>}}
+  ],
+  "forecast": {{
+    "score_range": [<float>, <float>]|null,
+    "confidence_tier": "<tier>",
+    "rationale": "<explication>"
+  }}
+}}
+
+Réponse précédente à corriger :
 {previous_response}
 """
