@@ -511,11 +511,12 @@ def api_scaffold(
 
             from atlas_dashboard.atlas_mlflow import log_scaffold_attempt  # noqa: PLC0415
 
+            _judge_passed = judge_score is not None and judge_score >= _SCAFFOLD_QUALITY_THRESHOLD
             log_scaffold_attempt(
                 agent_name=agent_name,
                 attempt=attempt,
                 judge_score=judge_score,
-                judge_passed=judge_score is not None and judge_score >= _SCAFFOLD_QUALITY_THRESHOLD,
+                judge_passed=_judge_passed,
                 criteria=judge_criteria or [],
                 feedback=judge_feedback or "",
                 model_id=llm_cfg.get("model_id", ""),
@@ -525,7 +526,21 @@ def api_scaffold(
                 atlas_run_id=run_id,
             )
 
-            if judge_score is not None and judge_score >= _SCAFFOLD_QUALITY_THRESHOLD:
+            _scaffold_output = "\n".join(last_files.values()) if last_files else ""
+            _index_judge_in_rag(
+                agent_name=agent_name,
+                output=_scaffold_output,
+                judge_score=judge_score,
+                judge_criteria=judge_criteria or [],
+                judge_feedback=judge_feedback or "",
+                judge_passed=_judge_passed,
+                attempt=attempt,
+                patches_applied=body.selected_patches or [],
+            )
+            if not _judge_passed:
+                _add_failed_on_edges(agent_name, judge_criteria or [])
+
+            if _judge_passed:
                 store.set_scaffold_result(
                     run_id,
                     agent_name,
@@ -923,6 +938,84 @@ def _index_tool_in_rag(tool_name: str, spec_text: str, summary: dict) -> None:
     except Exception as exc:  # noqa: BLE001
         logging.getLogger("atlas_dashboard").warning(
             "RAG indexing failed for tool %s (non-blocking): %s", tool_name, exc
+        )
+
+
+def _index_judge_in_rag(
+    agent_name: str,
+    output: str,
+    judge_score: float | None,
+    judge_criteria: list,
+    judge_feedback: str,
+    judge_passed: bool,
+    attempt: int,
+    patches_applied: list,
+) -> None:
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+        mem = AtlasMemoryAgent()
+        outcome = "success" if judge_passed else "failure"
+        list(
+            mem.run(
+                operation="index",
+                entry_type="judge_eval",
+                content=output[:500],
+                payload={
+                    "agent_name": agent_name,
+                    "outcome": outcome,
+                    "score": judge_score,
+                    "passed": judge_passed,
+                    "criteria_scores": judge_criteria,
+                    "feedback": judge_feedback,
+                    "attempt": attempt,
+                    "patches": patches_applied,
+                },
+                metadata={"agent": agent_name, "outcome": outcome},
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "RAG judge indexing failed for %s attempt %d (non-blocking): %s",
+            agent_name,
+            attempt,
+            exc,
+        )
+
+
+def _add_failed_on_edges(agent_name: str, criteria_scores: list) -> None:
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_memory.agent import _is_shareable  # noqa: PLC0415
+
+        if not _is_shareable():
+            return
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+        _kg_path = _Path.home() / ".atlas" / "memory" / "graph.json"
+        kg = KGStore(_kg_path)
+        for c in criteria_scores:
+            crit_name = c.get("criterion", "")
+            score = c.get("score", 5)
+            if not crit_name or score >= 3:
+                continue
+            if crit_name not in kg._g.nodes:
+                kg.register_agent(
+                    name=crit_name,
+                    capabilities=[f"evaluation criterion: {crit_name}"],
+                    inputs=[],
+                    outputs=[],
+                    tags=["criterion"],
+                    node_type="criterion",
+                    shareable=True,
+                )
+            kg.add_edge(agent_name, crit_name, "FAILED_ON")
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "KG FAILED_ON edges for %s (non-blocking): %s", agent_name, exc
         )
 
 
