@@ -122,12 +122,29 @@ class RunStore:
         run.setdefault("scaffold_diagnosis", {})[agent_name] = diagnosis
         self._write(run_id, run)
 
-    def set_review_decision(self, run_id: str, decision: str) -> None:
-        """decision: 'approved' | 'rejected'"""
+    def set_review_decision(
+        self,
+        run_id: str,
+        decision: str,
+        agent_names: list[str] | None = None,
+    ) -> None:
+        """decision: 'approved' | 'rejected'. agent_names: partial selection or None for all."""
         if decision not in ("approved", "rejected"):
             raise ValueError(f"Invalid decision: {decision!r}")
         run = self._read(run_id)
-        run["status"] = decision
+        if agent_names:
+            for bloc in run.get("blocs", []):
+                if bloc.get("agent") in agent_names:
+                    bloc["review_decision"] = decision
+            pending = [
+                b
+                for b in run.get("blocs", [])
+                if b.get("requires_review") and not b.get("review_decision")
+            ]
+            if not pending:
+                run["status"] = decision
+        else:
+            run["status"] = decision
         self._write(run_id, run)
 
     # ── read ───────────────────────────────────────────────────────────────────

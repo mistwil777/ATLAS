@@ -414,17 +414,25 @@
       </div>
       ${buildProgressBanner(run)}
       <div class="actions">
-        <button class="btn-approve" ${isPending ? '' : 'disabled'} onclick="decide('${runId}','approve')">Approve</button>
+        ${run.requires_review && isPending ? `
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--ink-dim)">
+            <input type="checkbox" id="select-all" checked onchange="toggleSelectAll(this)" style="accent-color:var(--violet)">
+            Tout sélectionner
+          </label>
+          <button class="btn-approve" onclick="decideSelected('${runId}','approve')">Approuver la sélection</button>
+        ` : `<button class="btn-approve" ${isPending ? '' : 'disabled'} onclick="decide('${runId}','approve')">Approve</button>`}
         <button class="btn-reject"  ${isPending ? '' : 'disabled'} onclick="decide('${runId}','reject')">Reject</button>
         <button class="btn-reject" style="margin-left:auto;background:transparent;border:1px solid var(--red);color:var(--red)" onclick="deleteRun('${runId}')">Delete</button>
       </div>
       ${(run.blocs || []).map(b => `
         <div class="bloc-card">
           <div class="bloc-header">
+            ${b.requires_review && isPending ? `<input type="checkbox" class="bloc-select" data-agent="${escHtml(b.agent || '')}" checked style="accent-color:var(--violet);margin-right:4px">` : ''}
             <span class="bloc-agent">${b.agent || '—'}</span>
             <span class="badge badge-${b.status || 'skipped'}">${b.status || 'skipped'}</span>
             ${b.requires_review ? '<span class="badge badge-review">review</span>' : ''}
             <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
+            ${b.requires_review && isPending ? `<button class="btn-scaffold" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="improveBloc('${runId}','${escHtml(b.agent || '')}',this)">Améliorer</button>` : ''}
           </div>
           <div class="bloc-preview">${(b.output_preview || b.bloc || '').slice(0, 400)}</div>
           ${b.justification ? `<div class="bloc-why"><span class="bloc-why-label">Décision</span> ${escHtml(b.justification)}</div>` : ''}
@@ -846,6 +854,56 @@
   async function decide(runId, action) {
     await fetch(`/api/runs/${runId}/${action}`, { method: 'POST' });
     await refresh();
+  }
+
+  function toggleSelectAll(cb) {
+    document.querySelectorAll('.bloc-select').forEach(el => { el.checked = cb.checked; });
+  }
+
+  async function decideSelected(runId, action) {
+    const all = [...document.querySelectorAll('.bloc-select')];
+    const checked = all.filter(el => el.checked).map(el => el.dataset.agent);
+    const isAll = checked.length === all.length;
+    await fetch(`/api/runs/${runId}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(isAll ? {} : { agent_names: checked }),
+    });
+    await refresh();
+  }
+
+  async function improveBloc(runId, agentName, btn) {
+    const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
+    const bloc = (run.blocs || []).find(b => b.agent === agentName);
+    if (!bloc) return;
+    const lines = (bloc.judge_criteria || [])
+      .filter(c => (c.score ?? 5) < 3)
+      .map(c => `- ${c.criterion} (score ${c.score}/5): ${c.comment || ''}`);
+    if (bloc.judge_feedback) lines.push(`Overall: ${bloc.judge_feedback}`);
+    const feedbackCtx = lines.join('\n');
+    const prev = btn.textContent;
+    btn.textContent = 'En cours…';
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/runs/${runId}/scaffold/${encodeURIComponent(agentName)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ judge_feedback_context: feedbackCtx }),
+      });
+      const data = await res.json();
+      if (data.error || data.detail) { alert('Erreur: ' + (data.error || JSON.stringify(data.detail))); return; }
+      const key = _stateKey(runId, agentName);
+      if (data.diagnosis) {
+        _scaffoldState[key] = { state: 'diagnosis', diagnosis: data.diagnosis };
+      } else {
+        _scaffoldState[key] = { state: 'scaffolded', files: data.files, outputPath: data.output_path };
+      }
+      await refresh();
+      await showRun(runId);
+    } finally {
+      btn.textContent = prev;
+      btn.disabled = false;
+    }
   }
 
   async function deleteRun(runId) {

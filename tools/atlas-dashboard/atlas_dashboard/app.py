@@ -23,6 +23,11 @@ from pydantic import BaseModel
 class ScaffoldRequest(BaseModel):
     user_answers: list[str] = []
     selected_patches: list[str] = []
+    judge_feedback_context: str = ""
+
+
+class ApproveRequest(BaseModel):
+    agent_names: list[str] | None = None
 
 
 class ImproveRequest(BaseModel):
@@ -134,11 +139,12 @@ def api_get_run(run_id: str):
 
 
 @app.post("/api/runs/{run_id}/approve")
-def api_approve(run_id: str):
+def api_approve(run_id: str, body: ApproveRequest | None = None):
     store = get_store()
     if store.get_run(run_id) is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    store.set_review_decision(run_id, "approved")
+    agent_names = (body.agent_names if body else None) or None
+    store.set_review_decision(run_id, "approved", agent_names=agent_names)
     return {"status": "approved"}
 
 
@@ -494,6 +500,11 @@ def api_scaffold(
             cr_context += "\n\n# Patches to apply:\n" + "\n".join(
                 f"- {p}" for p in body.selected_patches if p.strip()
             )
+        if body.judge_feedback_context:
+            cr_context += (
+                "\n\n# Judge feedback from previous attempt (address these issues):\n"
+                + body.judge_feedback_context
+            )
 
         for attempt in range(1, _SCAFFOLD_MAX_ATTEMPTS + 1):
             # Enrich spec with feedback from previous failed attempts
@@ -741,7 +752,7 @@ def api_install_tool(run_id: str, tool_name: str):
         (
             b.get("called_by")
             for b in blocs
-            if b.get("agent_suggested") == tool_name
+            if (b.get("agent_suggested") == tool_name or b.get("agent") == tool_name)
             and b.get("type") == "tool"
             and b.get("called_by")
         ),
