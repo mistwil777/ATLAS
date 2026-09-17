@@ -434,6 +434,187 @@ def _llm_fn_for_dashboard():
         raise HTTPException(status_code=500, detail=f"LLM not configured: {exc}") from exc
 
 
+def _run_scaffold_cycle(
+    cr_context: str,
+    cdc_full: str,
+    agent_slug: str,
+    agent_name: str,
+    run_id: str,
+    store,
+    base_output_dir: _Path,
+    llm_fn,
+    llm_cfg: dict,
+    body: "ScaffoldRequest",
+    forge_cls,
+    max_attempts: int = 3,
+    quality_threshold: float = 4.0,
+) -> tuple[bool, dict | None, list[dict], str, dict, dict]:
+    """Run one scaffold cycle (up to max_attempts). Returns (success, result, attempts_log,
+    last_output_path, last_spec, last_files). result is None on failure."""
+    attempts_log: list[dict] = []
+    last_output_path = ""
+    last_spec: dict = {}
+    last_files: dict = {}
+
+    for attempt in range(1, max_attempts + 1):
+        constraints = cr_context
+        if attempts_log:
+            lines = [
+                f"- {cs['criterion']}: {cs.get('comment', '')}"
+                for a in attempts_log
+                for cs in a.get("criteria_scores", [])
+                if cs.get("score", 5) < 4
+            ]
+            if lines:
+                constraints += "\n\n# Constraints from previous attempts — must fix:\n" + "\n".join(
+                    lines
+                )
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(
+                f"agent_name: {agent_slug}\n\n"
+                f"# Agent: {agent_name}\n\n"
+                f"{cdc_full}"
+                f"{constraints}"
+            )
+            attempt_spec_path = _Path(f.name)
+
+        try:
+            forge = forge_cls(output_dir=base_output_dir, config={"llm": llm_cfg}, llm_fn=llm_fn)
+            events = list(forge.run(spec_path=attempt_spec_path))
+        finally:
+            attempt_spec_path.unlink(missing_ok=True)
+
+        summary = next((e for e in events if e.get("summary")), None)
+        if summary is None:
+            errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
+            raise HTTPException(status_code=500, detail=f"Scaffolding failed: {errors}")
+
+        generated_path = _Path(summary["output_path"])
+        target_path = base_output_dir / agent_slug
+        if generated_path != target_path and generated_path.exists():
+            import shutil as _shutil  # noqa: PLC0415
+
+            if target_path.exists():
+                _shutil.rmtree(target_path)
+            generated_path.rename(target_path)
+
+        _fix_entry_point(target_path, agent_name)
+        _pip_install(target_path)
+
+        judge_score, judge_criteria, judge_feedback = _judge_scaffold(
+            target_path, agent_name, cdc_full, llm_fn, llm_cfg
+        )
+        attempts_log.append(
+            {"attempt": attempt, "criteria_scores": judge_criteria, "feedback": judge_feedback}
+        )
+        last_output_path = str(target_path)
+        last_spec = summary
+        last_files = _read_generated_files(target_path)
+
+        from atlas_dashboard.atlas_mlflow import log_scaffold_attempt  # noqa: PLC0415
+
+        _judge_passed = judge_score is not None and judge_score >= quality_threshold
+        log_scaffold_attempt(
+            agent_name=agent_name,
+            attempt=attempt,
+            judge_score=judge_score,
+            judge_passed=_judge_passed,
+            criteria=judge_criteria or [],
+            feedback=judge_feedback or "",
+            model_id=llm_cfg.get("model_id", ""),
+            patches_applied=body.selected_patches,
+            user_answers=body.user_answers,
+            run_id=run_id,
+            atlas_run_id=run_id,
+        )
+
+        _scaffold_output = "\n".join(last_files.values()) if last_files else ""
+        _index_judge_in_rag(
+            agent_name=agent_name,
+            output=_scaffold_output,
+            judge_score=judge_score,
+            judge_criteria=judge_criteria or [],
+            judge_feedback=judge_feedback or "",
+            judge_passed=_judge_passed,
+            attempt=attempt,
+            patches_applied=body.selected_patches or [],
+        )
+        if not _judge_passed:
+            _add_failed_on_edges(agent_name, judge_criteria or [])
+
+        if _judge_passed:
+            store.set_scaffold_result(
+                run_id,
+                agent_name,
+                last_output_path,
+                last_spec,
+                user_answers=body.user_answers,
+                selected_patches=body.selected_patches,
+                model_id=llm_cfg.get("model_id", ""),
+            )
+            return (
+                True,
+                {
+                    "agent_name": agent_name,
+                    "output_path": last_output_path,
+                    "spec": last_spec,
+                    "files": last_files,
+                    "attempts": attempt,
+                    "judge_score": judge_score,
+                },
+                attempts_log,
+                last_output_path,
+                last_spec,
+                last_files,
+            )
+
+    return False, None, attempts_log, last_output_path, last_spec, last_files
+
+
+def _run_improvement_advisor(agent_name: str, store) -> list[dict]:
+    """Call improvement-advisor after failed scaffold cycle. Returns suggested_actions or []."""
+    import logging  # noqa: PLC0415
+
+    try:
+        from improvement_advisor.agent import ImprovementAdvisorAgent  # noqa: PLC0415
+    except ImportError:
+        return []
+
+    try:
+        llm_fn, llm_cfg = _llm_fn_for_dashboard()
+        runs = sorted(store.list_runs(), key=lambda r: r.get("created_at", ""))
+        trend_points = _build_trend_points(agent_name, runs)
+        if not trend_points:
+            trend_points = _build_trend_points_from_scaffold(agent_name, runs)
+        if not trend_points:
+            logging.getLogger("atlas_dashboard").info(
+                "improvement-advisor: no trend data for '%s' — skipping", agent_name
+            )
+            return []
+
+        advisor = ImprovementAdvisorAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
+        events = list(advisor.run(agent_name=agent_name, trend_points=trend_points))
+        summary = next((e for e in events if e.get("summary")), None)
+        if not summary:
+            return []
+
+        actions = summary.get("suggested_actions", [])
+        logging.getLogger("atlas_dashboard").info(
+            "improvement-advisor: %d actions for '%s' — injecting into cycle 2",
+            len(actions),
+            agent_name,
+        )
+        return actions
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "improvement-advisor call failed (non-blocking): %s", exc
+        )
+        return []
+
+
 @app.post("/api/runs/{run_id}/scaffold/{agent_name}")
 def api_scaffold(
     run_id: str,
@@ -458,7 +639,6 @@ def api_scaffold(
 
     llm_fn, llm_cfg = _llm_fn_for_dashboard()
 
-    # Smoke-test the LLM before handing it to agent-forge
     _probe = llm_fn("Reply OK", llm_cfg, 8)
     if not _probe:
         raise HTTPException(
@@ -478,174 +658,88 @@ def api_scaffold(
     else:
         base_output_dir = _Path(project_dir) / "agents"
     base_output_dir.mkdir(parents=True, exist_ok=True)
-    output_dir = base_output_dir
 
-    _SCAFFOLD_MAX_ATTEMPTS = 3
-    _SCAFFOLD_QUALITY_THRESHOLD = 4.0
-
-    attempts_log: list[dict] = []
-    last_output_path: str = ""
-    last_files: dict[str, str] = {}
-    last_spec: dict = {}
-
-    try:
-        # CR context injected by user after a diagnosis
-        body = body or ScaffoldRequest()
-        cr_context = ""
-        if body.user_answers:
-            cr_context += "\n\n# User answers to diagnostic questions:\n" + "\n".join(
-                f"- {a}" for a in body.user_answers if a.strip()
-            )
-        if body.selected_patches:
-            cr_context += "\n\n# Patches to apply:\n" + "\n".join(
-                f"- {p}" for p in body.selected_patches if p.strip()
-            )
-        if body.judge_feedback_context:
-            cr_context += (
-                "\n\n# Judge feedback from previous attempt (address these issues):\n"
-                + body.judge_feedback_context
-            )
-
-        for attempt in range(1, _SCAFFOLD_MAX_ATTEMPTS + 1):
-            # Enrich spec with feedback from previous failed attempts
-            constraints = cr_context
-            if attempts_log:
-                lines = []
-                for a in attempts_log:
-                    for cs in a.get("criteria_scores", []):
-                        if cs.get("score", 5) < 4:
-                            lines.append(f"- {cs['criterion']}: {cs.get('comment', '')}")
-                if lines:
-                    constraints += (
-                        "\n\n# Constraints from previous attempts — must fix:\n" + "\n".join(lines)
-                    )
-
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".md", delete=False, encoding="utf-8"
-            ) as f:
-                f.write(
-                    f"agent_name: {agent_slug}\n\n"
-                    f"# Agent: {agent_name}\n\n"
-                    f"{cdc_full}"
-                    f"{constraints}"
-                )
-                attempt_spec_path = _Path(f.name)
-
-            try:
-                forge = AgentForgeAgent(
-                    output_dir=output_dir, config={"llm": llm_cfg}, llm_fn=llm_fn
-                )
-                events = list(forge.run(spec_path=attempt_spec_path))
-            finally:
-                attempt_spec_path.unlink(missing_ok=True)
-
-            summary = next((e for e in events if e.get("summary")), None)
-            if summary is None:
-                errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
-                raise HTTPException(status_code=500, detail=f"Scaffolding failed: {errors}")
-
-            generated_path = _Path(summary["output_path"])
-            target_path = base_output_dir / agent_slug
-            if generated_path != target_path and generated_path.exists():
-                import shutil as _shutil  # noqa: PLC0415
-
-                if target_path.exists():
-                    _shutil.rmtree(target_path)
-                generated_path.rename(target_path)
-
-            _fix_entry_point(target_path, agent_name)
-
-            # Install and evaluate with judge
-            _pip_install(target_path)
-
-            judge_score, judge_criteria, judge_feedback = _judge_scaffold(
-                target_path, agent_name, cdc_full, llm_fn, llm_cfg
-            )
-            attempts_log.append(
-                {
-                    "attempt": attempt,
-                    "criteria_scores": judge_criteria,
-                    "feedback": judge_feedback,
-                }
-            )
-
-            last_output_path = str(target_path)
-            last_spec = summary
-            last_files = _read_generated_files(target_path)
-
-            from atlas_dashboard.atlas_mlflow import log_scaffold_attempt  # noqa: PLC0415
-
-            _judge_passed = judge_score is not None and judge_score >= _SCAFFOLD_QUALITY_THRESHOLD
-            log_scaffold_attempt(
-                agent_name=agent_name,
-                attempt=attempt,
-                judge_score=judge_score,
-                judge_passed=_judge_passed,
-                criteria=judge_criteria or [],
-                feedback=judge_feedback or "",
-                model_id=llm_cfg.get("model_id", ""),
-                patches_applied=body.selected_patches,
-                user_answers=body.user_answers,
-                run_id=run_id,
-                atlas_run_id=run_id,
-            )
-
-            _scaffold_output = "\n".join(last_files.values()) if last_files else ""
-            _index_judge_in_rag(
-                agent_name=agent_name,
-                output=_scaffold_output,
-                judge_score=judge_score,
-                judge_criteria=judge_criteria or [],
-                judge_feedback=judge_feedback or "",
-                judge_passed=_judge_passed,
-                attempt=attempt,
-                patches_applied=body.selected_patches or [],
-            )
-            if not _judge_passed:
-                _add_failed_on_edges(agent_name, judge_criteria or [])
-
-            if _judge_passed:
-                store.set_scaffold_result(
-                    run_id,
-                    agent_name,
-                    last_output_path,
-                    last_spec,
-                    user_answers=body.user_answers,
-                    selected_patches=body.selected_patches,
-                    model_id=llm_cfg.get("model_id", ""),
-                )
-                return {
-                    "agent_name": agent_name,
-                    "output_path": last_output_path,
-                    "spec": last_spec,
-                    "files": last_files,
-                    "attempts": attempt,
-                    "judge_score": judge_score,
-                }
-
-        # All attempts failed — run diagnose
-        diagnosis = _run_diagnose(attempts_log, agent_name, cdc_full, llm_fn, llm_cfg)
-        store.set_scaffold_result(
-            run_id,
-            agent_name,
-            last_output_path,
-            last_spec,
-            user_answers=body.user_answers,
-            selected_patches=body.selected_patches,
-            model_id=llm_cfg.get("model_id", ""),
+    body = body or ScaffoldRequest()
+    cr_context = ""
+    if body.user_answers:
+        cr_context += "\n\n# User answers to diagnostic questions:\n" + "\n".join(
+            f"- {a}" for a in body.user_answers if a.strip()
         )
-        store.set_scaffold_diagnosis(run_id, agent_name, diagnosis)
-        return {
-            "agent_name": agent_name,
-            "output_path": last_output_path,
-            "spec": last_spec,
-            "files": last_files,
-            "attempts": _SCAFFOLD_MAX_ATTEMPTS,
-            "diagnosis": diagnosis,
-        }
+    if body.selected_patches:
+        cr_context += "\n\n# Patches to apply:\n" + "\n".join(
+            f"- {p}" for p in body.selected_patches if p.strip()
+        )
+    if body.judge_feedback_context:
+        cr_context += (
+            "\n\n# Judge feedback from previous attempt (address these issues):\n"
+            + body.judge_feedback_context
+        )
 
-    finally:
-        pass  # attempt_spec_path is cleaned up inside the loop
+    # Cycle 1
+    success, result, attempts_log, last_output_path, last_spec, last_files = _run_scaffold_cycle(
+        cr_context=cr_context,
+        cdc_full=cdc_full,
+        agent_slug=agent_slug,
+        agent_name=agent_name,
+        run_id=run_id,
+        store=store,
+        base_output_dir=base_output_dir,
+        llm_fn=llm_fn,
+        llm_cfg=llm_cfg,
+        body=body,
+        forge_cls=AgentForgeAgent,
+    )
+    if success:
+        return result  # type: ignore[return-value]
+
+    # Cycle 1 exhausted — call improvement-advisor before giving up
+    advisor_actions = _run_improvement_advisor(agent_name, store)
+    if advisor_actions:
+        advisor_context = (
+            cr_context
+            + "\n\n# Improvement-advisor suggested actions:\n"
+            + "\n".join(f"- {a['action']}" for a in advisor_actions)
+        )
+        success2, result2, attempts_log2, last_output_path, last_spec, last_files = (
+            _run_scaffold_cycle(
+                cr_context=advisor_context,
+                cdc_full=cdc_full,
+                agent_slug=agent_slug,
+                agent_name=agent_name,
+                run_id=run_id,
+                store=store,
+                base_output_dir=base_output_dir,
+                llm_fn=llm_fn,
+                llm_cfg=llm_cfg,
+                body=body,
+                forge_cls=AgentForgeAgent,
+            )
+        )
+        attempts_log.extend(attempts_log2)
+        if success2:
+            result2["advisor_used"] = True  # type: ignore[index]
+            return result2  # type: ignore[return-value]
+
+    # All cycles failed — diagnose
+    diagnosis = _run_diagnose(attempts_log, agent_name, cdc_full, llm_fn, llm_cfg)
+    store.set_scaffold_result(
+        run_id,
+        agent_name,
+        last_output_path,
+        last_spec,
+        user_answers=body.user_answers,
+        selected_patches=body.selected_patches,
+        model_id=llm_cfg.get("model_id", ""),
+    )
+    store.set_scaffold_diagnosis(run_id, agent_name, diagnosis)
+    return {
+        "agent_name": agent_name,
+        "output_path": last_output_path,
+        "spec": last_spec,
+        "files": last_files,
+        "attempts": len(attempts_log),
+        "diagnosis": diagnosis,
+    }
 
 
 @app.post("/api/runs/{run_id}/build-tool/{tool_name}")
