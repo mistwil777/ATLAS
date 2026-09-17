@@ -155,7 +155,11 @@ def cmd_run(args: argparse.Namespace) -> None:
     collect_mode = cfg.get("collect", {}).get("mode", "off")
     os.environ.setdefault("ATLAS_COLLECT", collect_mode)
 
-    llm_fn, llm_cfg = llm_fn_from_config(cfg)
+    try:
+        llm_fn, llm_cfg = llm_fn_from_config(cfg)
+    except (RuntimeError, NotImplementedError) as exc:
+        _log.error("Deployment mode violation: %s", exc)
+        sys.exit(1)
 
     # Start dashboard in background if requested
     dashboard_proc = None
