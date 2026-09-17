@@ -16,8 +16,29 @@ class DeploymentMode(str, Enum):
 
 
 def get_deployment_mode(cfg: dict) -> DeploymentMode:
-    """Read deployment_mode from ATLAS_MODE env var or atlas.toml [project] section."""
-    raw = os.environ.get("ATLAS_MODE") or cfg.get("project", {}).get("deployment_mode", "saas")
+    """Read deployment_mode from ATLAS_MODE env var or atlas.toml.
+
+    Checks [project].deployment_mode first, then [deployment].deployment_mode as fallback.
+    Warns if found under [deployment] — correct section is [project].
+    """
+    import logging  # noqa: PLC0415
+
+    env_val = os.environ.get("ATLAS_MODE")
+    if env_val:
+        try:
+            return DeploymentMode(env_val.lower())
+        except ValueError:
+            return DeploymentMode.SAAS
+
+    raw = cfg.get("project", {}).get("deployment_mode")
+    if raw is None:
+        fallback = cfg.get("deployment", {}).get("deployment_mode")
+        if fallback:
+            logging.getLogger("atlas_cli").warning(
+                "deployment_mode found under [deployment] section — move it to [project] in atlas.toml"
+            )
+            raw = fallback
+    raw = raw or "saas"
     try:
         return DeploymentMode(raw.lower())
     except ValueError:
