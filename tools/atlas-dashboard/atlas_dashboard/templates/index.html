@@ -178,6 +178,30 @@
     .kg-tooltip-title { font-weight: bold; font-size: 12px; margin-bottom: 6px; }
     .kg-tooltip-caps { color: var(--ink-dim); margin-bottom: 4px; }
 
+    /* ── Advisor panel ── */
+    .adv-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .adv-title { font-size: 13px; color: var(--blue); flex: 1; }
+    .adv-confidence { font-size: 10px; padding: 2px 8px; border-radius: 3px; }
+    .adv-confidence.high   { background: #0d1a14; color: var(--aqua); border: 1px solid var(--aqua); }
+    .adv-confidence.medium { background: #1a1800; color: var(--yellow); border: 1px solid var(--yellow); }
+    .adv-confidence.low    { background: #1a1200; color: #e8a600; border: 1px solid #e8a600; }
+    .adv-confidence.none   { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--border); }
+    .adv-section { margin-bottom: 14px; }
+    .adv-section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--violet); margin-bottom: 8px; }
+    .adv-pain-row { font-size: 11px; padding: 4px 0; display: flex; align-items: flex-start; gap: 8px; }
+    .adv-severity-high   { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #1a0d0d; color: var(--red); border: 1px solid var(--red); flex-shrink: 0; }
+    .adv-severity-medium { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #1a1800; color: var(--yellow); border: 1px solid var(--yellow); flex-shrink: 0; }
+    .adv-severity-low    { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: var(--surface); color: var(--ink-dim); border: 1px solid var(--border); flex-shrink: 0; }
+    .adv-action-row { display: flex; align-items: flex-start; gap: 8px; font-size: 11px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+    .adv-action-row:last-child { border-bottom: none; }
+    .adv-action-row input[type=checkbox] { margin-top: 2px; accent-color: var(--violet); flex-shrink: 0; }
+    .adv-action-label { flex: 1; color: var(--ink); }
+    .adv-action-delta { font-size: 10px; color: var(--aqua); flex-shrink: 0; }
+    .adv-forecast { font-size: 11px; color: var(--ink-dim); padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 12px; }
+    .adv-custom { margin-bottom: 12px; }
+    .adv-custom-field { width: 100%; box-sizing: border-box; background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 12px; font-family: inherit; }
+    .adv-custom-field:focus { outline: none; border-color: var(--violet); }
+
     /* ── Trend view ── */
     #trend-panel { display: none; padding: 22px 32px; }
     .trend-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
@@ -278,10 +302,24 @@
     <select class="trend-select" id="trend-agent-select" onchange="loadTrend(this.value)">
       <option value="">— Choisir un agent —</option>
     </select>
+    <button id="btn-analyze" class="btn-refresh-kg" onclick="runAdvisor()" style="display:none">Analyser</button>
     <button class="btn-refresh-kg" onclick="loadTrend(document.getElementById('trend-agent-select').value)">Refresh</button>
   </div>
   <div id="trend-chart-area"><div class="trend-empty">Sélectionnez un agent pour voir sa progression.</div></div>
   <div id="trend-detail-area" style="margin-top:16px;"></div>
+  <div id="advisor-panel" style="margin-top:20px; display:none;">
+    <div class="adv-toolbar">
+      <h3 class="adv-title">improvement-advisor</h3>
+      <span class="adv-confidence" id="adv-confidence"></span>
+    </div>
+    <div id="adv-pain-points" class="adv-section"></div>
+    <div id="adv-actions" class="adv-section"></div>
+    <div id="adv-forecast" class="adv-forecast" style="display:none"></div>
+    <div class="adv-custom">
+      <input type="text" id="adv-custom-input" placeholder="Ajouter une action personnalisée…" class="adv-custom-field" oninput="updateValidateBtn()" />
+    </div>
+    <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Valider et lancer scaffold</button>
+  </div>
 </div>
 
 <script>
@@ -1130,6 +1168,131 @@
   }
 
   refresh();
+
+  // ── improvement-advisor ──────────────────────────────────────────────────────
+  let _lastRunId = null;
+
+  document.getElementById('trend-agent-select').addEventListener('change', function() {
+    document.getElementById('btn-analyze').style.display = this.value ? '' : 'none';
+    document.getElementById('advisor-panel').style.display = 'none';
+    _lastRunId = null;
+  });
+
+  async function runAdvisor() {
+    const agent = document.getElementById('trend-agent-select').value;
+    if (!agent) return;
+    const btn = document.getElementById('btn-analyze');
+    btn.textContent = 'Analyse…';
+    btn.disabled = true;
+    document.getElementById('advisor-panel').style.display = 'none';
+    try {
+      const runs = await fetch('/api/runs').then(r => r.json());
+      const agentRuns = runs.filter(r => (r.blocs||[]).some(b => (b.agent||b.agent_suggested) === agent));
+      _lastRunId = agentRuns.length ? agentRuns[agentRuns.length - 1].run_id : null;
+      const body = _lastRunId ? { run_id: _lastRunId } : {};
+      const data = await fetch(`/api/improve/${encodeURIComponent(agent)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(r => r.json());
+      if (data.error) { alert('Erreur: ' + data.error); return; }
+      renderAdvice(data);
+    } finally {
+      btn.textContent = 'Analyser';
+      btn.disabled = false;
+    }
+  }
+
+  function renderAdvice(data) {
+    const panel = document.getElementById('advisor-panel');
+    panel.style.display = 'block';
+
+    const tier = data.confidence_tier || 'none';
+    const confEl = document.getElementById('adv-confidence');
+    confEl.className = `adv-confidence ${tier}`;
+    confEl.textContent = `confiance: ${tier} (N=${data.n_points})`;
+
+    const ppEl = document.getElementById('adv-pain-points');
+    if ((data.pain_points||[]).length) {
+      ppEl.innerHTML = `<div class="adv-section-title">Pain points</div>` +
+        data.pain_points.map(p => `
+          <div class="adv-pain-row">
+            <span class="adv-severity-${escHtml(p.severity)}">${escHtml(p.severity)}</span>
+            <span><strong>${escHtml(p.criterion)}</strong> — ${escHtml(p.pattern)}</span>
+          </div>`).join('');
+    } else {
+      ppEl.innerHTML = '';
+    }
+
+    const actEl = document.getElementById('adv-actions');
+    if ((data.suggested_actions||[]).length) {
+      actEl.innerHTML = `<div class="adv-section-title">Actions suggérées</div>` +
+        data.suggested_actions.map((a, i) => `
+          <div class="adv-action-row">
+            <input type="checkbox" id="adv-act-${i}" checked onchange="updateValidateBtn()">
+            <label class="adv-action-label" for="adv-act-${i}">${escHtml(a.action)}</label>
+            ${a.expected_delta ? `<span class="adv-action-delta">${escHtml(a.expected_delta)}</span>` : ''}
+          </div>`).join('');
+    } else {
+      actEl.innerHTML = '';
+    }
+    updateValidateBtn();
+
+    const fc = data.forecast || {};
+    const fcEl = document.getElementById('adv-forecast');
+    if (fc.rationale) {
+      const range = fc.score_range ? ` → score estimé ${fc.score_range[0].toFixed(1)}–${fc.score_range[1].toFixed(1)}` : '';
+      fcEl.textContent = `Prévision${range} : ${fc.rationale}`;
+      fcEl.style.display = '';
+    } else {
+      fcEl.style.display = 'none';
+    }
+
+    panel.dataset.actions = JSON.stringify(data.suggested_actions || []);
+  }
+
+  function updateValidateBtn() {
+    const checks = document.querySelectorAll('[id^="adv-act-"]');
+    const hasChecked = [...checks].some(c => c.checked);
+    const hasCustom = document.getElementById('adv-custom-input').value.trim().length > 0;
+    document.getElementById('adv-validate-btn').disabled = !hasChecked && !hasCustom;
+  }
+
+  async function validateAdvice() {
+    const agent = document.getElementById('trend-agent-select').value;
+    if (!agent || !_lastRunId) { alert('Pas de run disponible pour lancer le scaffold.'); return; }
+
+    const actions = JSON.parse(document.getElementById('advisor-panel').dataset.actions || '[]');
+    const checks = document.querySelectorAll('[id^="adv-act-"]');
+    const selectedPatches = actions
+      .filter((_, i) => checks[i] && checks[i].checked)
+      .map(a => a.action);
+
+    const customText = document.getElementById('adv-custom-input').value.trim();
+    if (customText) selectedPatches.push(customText);
+
+    const btn = document.getElementById('adv-validate-btn');
+    btn.textContent = 'Lancement…';
+    btn.disabled = true;
+    try {
+      const r = await fetch(`/api/runs/${_lastRunId}/scaffold/${encodeURIComponent(agent)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selected_patches: selectedPatches, user_answers: [] }),
+      });
+      const data = await r.json();
+      if (data.error || data.detail) {
+        alert('Erreur scaffold: ' + (data.error || JSON.stringify(data.detail)));
+      } else {
+        document.getElementById('adv-custom-input').value = '';
+        document.getElementById('advisor-panel').style.display = 'none';
+        loadTrend(agent);
+      }
+    } finally {
+      btn.textContent = 'Valider et lancer scaffold';
+      btn.disabled = false;
+    }
+  }
 </script>
 </body>
 </html>

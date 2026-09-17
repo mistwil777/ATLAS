@@ -59,6 +59,20 @@ class KGStore:
             result.append(data)
         return result
 
+    def update_node_coaching(
+        self,
+        name: str,
+        patch_description: str,
+        criterion: str,
+        delta: float,
+    ) -> None:
+        if name not in self._g:
+            return
+        history = self._g.nodes[name].get("coaching_history", [])
+        history.append({"patch": patch_description, "criterion": criterion, "delta": delta})
+        self._g.nodes[name]["coaching_history"] = history
+        self.save()
+
     def get_graph(self) -> dict[str, Any]:
         return nx.node_link_data(self._g, edges="links")
 

@@ -102,6 +102,19 @@ class RunStore:
         run.setdefault("scaffolded", {}).setdefault(agent_name, {})["installed"] = True
         self._write(run_id, run)
 
+    def set_improvement_result(
+        self,
+        run_id: str,
+        agent_name: str,
+        advice: dict[str, Any],
+    ) -> None:
+        run = self._read(run_id)
+        run.setdefault("improvement", {})[agent_name] = {
+            "advice": advice,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self._write(run_id, run)
+
     def set_scaffold_diagnosis(
         self, run_id: str, agent_name: str, diagnosis: dict[str, Any]
     ) -> None:

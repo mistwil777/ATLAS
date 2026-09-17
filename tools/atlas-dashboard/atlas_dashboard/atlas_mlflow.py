@@ -110,6 +110,39 @@ def log_tool_build(
         _log.warning("MLflow tool build log failed (non-blocking): %s", exc)
 
 
+def log_improvement_advice(
+    *,
+    agent_name: str,
+    confidence_tier: str,
+    pain_points_count: int,
+    suggested_count: int,
+    validated_count: int,
+    atlas_run_id: str,
+    advice_json: dict | None = None,
+) -> None:
+    ml = _mlflow()
+    if ml is None:
+        return
+    try:
+        ml.set_experiment(f"atlas/coaching/{agent_name}")
+        with ml.start_run(run_name=f"advice-{atlas_run_id[:8]}"):
+            ml.set_tags({"atlas.run_id": atlas_run_id, "atlas.agent": agent_name})
+            ml.log_params({"confidence_tier": confidence_tier})
+            ml.log_metrics(
+                {
+                    "pain_points_count": pain_points_count,
+                    "suggested_count": suggested_count,
+                    "validated_count": validated_count,
+                }
+            )
+            if advice_json:
+                import json as _json  # noqa: PLC0415
+
+                ml.log_text(_json.dumps(advice_json, ensure_ascii=False, indent=2), "advice.json")
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("MLflow coaching log failed (non-blocking): %s", exc)
+
+
 def log_routing(
     *,
     atlas_run_id: str,

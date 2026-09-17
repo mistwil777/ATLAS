@@ -25,6 +25,10 @@ class ScaffoldRequest(BaseModel):
     selected_patches: list[str] = []
 
 
+class ImproveRequest(BaseModel):
+    run_id: str | None = None
+
+
 _DEFAULT_RUN_STORE_DIR = Path.home() / ".atlas" / "runs"
 
 app = FastAPI(title="ATLAS Dashboard", version="1.0.0")
@@ -224,10 +228,9 @@ def api_stats():
     }
 
 
-@app.get("/api/stats/trend")
-def api_stats_trend(agent: str):
-    runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
-    points = []
+def _build_trend_points(agent: str, runs: list[dict]) -> list[dict]:
+    """Build trend points for a given agent from sorted runs."""
+    points: list[dict] = []
     prev_model: str | None = None
     prev_criteria: dict[str, int] = {}
 
@@ -239,7 +242,6 @@ def api_stats_trend(agent: str):
         scores = [b["judge_score"] for b in blocs if b.get("judge_score") is not None]
         avg = round(sum(scores) / len(scores), 2) if scores else None
 
-        # gather criteria from first bloc that has them
         criteria = next((b.get("judge_criteria", []) for b in blocs if b.get("judge_criteria")), [])
         feedback = next((b.get("judge_feedback", "") for b in blocs if b.get("judge_feedback")), "")
 
@@ -248,7 +250,6 @@ def api_stats_trend(agent: str):
         selected_patches = scaffolded.get("selected_patches", [])
         model_id = scaffolded.get("model_id", "")
 
-        # determine cause
         if model_id and prev_model and model_id != prev_model:
             cause = "model_change"
         elif user_answers or selected_patches:
@@ -256,12 +257,10 @@ def api_stats_trend(agent: str):
         else:
             cause = "initial_scaffold"
 
-        # compute delta vs previous point
         delta = None
         if points and avg is not None and points[-1].get("avg_score") is not None:
             delta = round(avg - points[-1]["avg_score"], 2)
 
-        # compute per-criterion delta vs previous run
         crit_map = {c.get("criterion", ""): c.get("score") for c in criteria}
         crit_delta = []
         for c in criteria:
@@ -300,7 +299,53 @@ def api_stats_trend(agent: str):
         prev_model = model_id or prev_model
         prev_criteria = crit_map
 
-    return {"agent": agent, "points": points}
+    return points
+
+
+@app.get("/api/stats/trend")
+def api_stats_trend(agent: str):
+    runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
+    return {"agent": agent, "points": _build_trend_points(agent, runs)}
+
+
+@app.post("/api/improve/{agent_name}")
+def api_improve(agent_name: str, body: ImproveRequest | None = None):
+    body = body or ImproveRequest()
+    runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
+    trend_points = _build_trend_points(agent_name, runs)
+
+    try:
+        from improvement_advisor.agent import ImprovementAdvisorAgent  # noqa: PLC0415
+    except ImportError:
+        return {
+            "error": "improvement-advisor not installed — pip install -e agents/improvement-advisor"
+        }
+
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+    advisor = ImprovementAdvisorAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
+    events = list(advisor.run(agent_name=agent_name, trend_points=trend_points))
+    summary = next((e for e in events if e.get("summary")), None)
+    if not summary:
+        return {"error": "improvement-advisor returned no result"}
+
+    run_id = body.run_id
+    if run_id:
+        with contextlib.suppress(Exception):
+            get_store().set_improvement_result(run_id, agent_name, summary)
+
+    from atlas_dashboard.atlas_mlflow import log_improvement_advice  # noqa: PLC0415
+
+    log_improvement_advice(
+        agent_name=agent_name,
+        confidence_tier=summary.get("confidence_tier", "none"),
+        pain_points_count=len(summary.get("pain_points", [])),
+        suggested_count=len(summary.get("suggested_actions", [])),
+        validated_count=0,
+        atlas_run_id=run_id or "unknown",
+        advice_json=summary,
+    )
+
+    return summary
 
 
 # ── Scaffold / Install / Re-run ────────────────────────────────────────────────
