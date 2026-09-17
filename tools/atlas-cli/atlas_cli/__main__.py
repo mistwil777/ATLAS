@@ -29,6 +29,17 @@ _TOML_TEMPLATE = """\
 # capgemini → agents scaffoldés dans ~/.atlas/scaffolded/   (catalogue ATLAS global)
 owner = "client"
 
+# deployment_mode: saas | onpremise | airgap  (défaut: saas)
+# saas      = hébergement Capgemini, cross-learning activé entre clients
+# onpremise = données locales chez le client, cross-learning opt-out via cross_learning=false
+# airgap    = réseau fermé (secret défense), aucun appel externe, aucun partage de données
+deployment_mode = "saas"
+
+# cross_learning: true | false  (ignoré si deployment_mode = airgap)
+# true  = les observations de coaching remontent vers ATLAS pour améliorer les prévisions cross-clients
+# false = les données restent locales, aucun partage
+cross_learning = true
+
 [llm]
 # provider: bedrock | openai | anthropic
 provider = "bedrock"

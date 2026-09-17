@@ -29,6 +29,7 @@ class KGStore:
         outputs: list[str],
         tags: list[str],
         node_type: str = "agent",
+        shareable: bool = True,
     ) -> None:
         self._g.add_node(
             name,
@@ -37,6 +38,7 @@ class KGStore:
             inputs=inputs,
             outputs=outputs,
             tags=tags,
+            shareable=shareable,
         )
         self.save()
 
@@ -68,9 +70,13 @@ class KGStore:
     ) -> None:
         if name not in self._g:
             return
-        history = self._g.nodes[name].get("coaching_history", [])
+        node = self._g.nodes[name]
+        # skip if node is not shareable (airgap or cross_learning=false)
+        if not node.get("shareable", True):
+            return
+        history = node.get("coaching_history", [])
         history.append({"patch": patch_description, "criterion": criterion, "delta": delta})
-        self._g.nodes[name]["coaching_history"] = history
+        node["coaching_history"] = history
         self.save()
 
     def get_graph(self) -> dict[str, Any]:

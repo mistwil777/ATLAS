@@ -354,9 +354,17 @@ def api_improve(agent_name: str, body: ImproveRequest | None = None):
 def _llm_fn_for_dashboard():
     """Build LLM callable from atlas.toml (CWD) — same logic as atlas-cli."""
     try:
+        import os  # noqa: PLC0415
+
         from atlas_cli.config import llm_fn_from_config, load  # noqa: PLC0415
 
         cfg = load()
+        # propagate deployment_mode to env so downstream components respect it
+        os.environ.setdefault("ATLAS_MODE", cfg.get("project", {}).get("deployment_mode", "saas"))
+        os.environ.setdefault(
+            "ATLAS_CROSS_LEARNING",
+            str(cfg.get("project", {}).get("cross_learning", True)).lower(),
+        )
         return llm_fn_from_config(cfg)
     except Exception as exc:  # noqa: BLE001
         import logging  # noqa: PLC0415

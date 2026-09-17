@@ -2,9 +2,36 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from enum import Enum
 from pathlib import Path
 from typing import Any
+
+
+class DeploymentMode(str, Enum):
+    SAAS = "saas"
+    ONPREMISE = "onpremise"
+    AIRGAP = "airgap"
+
+
+def get_deployment_mode(cfg: dict) -> DeploymentMode:
+    """Read deployment_mode from ATLAS_MODE env var or atlas.toml [project] section."""
+    raw = os.environ.get("ATLAS_MODE") or cfg.get("project", {}).get("deployment_mode", "saas")
+    try:
+        return DeploymentMode(raw.lower())
+    except ValueError:
+        return DeploymentMode.SAAS
+
+
+def _check_provider_allowed(provider: str, mode: DeploymentMode) -> None:
+    _EXTERNAL_PROVIDERS = {"bedrock", "openai", "anthropic", "groq", "auto"}
+    if mode == DeploymentMode.AIRGAP and provider in _EXTERNAL_PROVIDERS:
+        raise RuntimeError(
+            f"Provider '{provider}' requires network access — "
+            f"not allowed in deployment_mode=airgap. "
+            f"Configure a local LLM provider (e.g. provider='local' with Ollama)."
+        )
 
 
 def load(project_dir: Path | None = None) -> dict[str, Any]:
@@ -27,11 +54,15 @@ def load(project_dir: Path | None = None) -> dict[str, Any]:
 def llm_fn_from_config(cfg: dict):
     """Return an LLM callable from atlas.toml [llm] section.
 
-    Supported providers: bedrock (default), openai, anthropic.
-    Falls back to a stub that raises if not configured.
+    Supported providers: bedrock (default), openai, anthropic, groq, auto, local.
+    Raises RuntimeError if an external provider is used in deployment_mode=airgap.
     """
     llm_cfg = cfg.get("llm", {})
     provider = llm_cfg.get("provider", "bedrock")
+    mode = get_deployment_mode(cfg)
+    _check_provider_allowed(provider, mode)
+    # propagate mode to env so downstream components (mlflow, kg) respect it
+    os.environ.setdefault("ATLAS_MODE", mode.value)
 
     if provider == "bedrock":
         return _bedrock_fn(llm_cfg), llm_cfg
@@ -43,9 +74,15 @@ def llm_fn_from_config(cfg: dict):
         return _groq_fn(llm_cfg), llm_cfg
     if provider == "auto":
         return _auto_fn(llm_cfg), llm_cfg
+    if provider == "local":
+        raise NotImplementedError(
+            "Local LLM provider not yet implemented. "
+            "Use provider='openai' with base_url pointing to your Ollama or local endpoint."
+        )
 
     raise ValueError(
-        f"Unknown LLM provider: {provider!r}. Supported: bedrock, openai, anthropic, groq, auto"
+        f"Unknown LLM provider: {provider!r}. "
+        f"Supported: bedrock, openai, anthropic, groq, auto, local"
     )
 
 

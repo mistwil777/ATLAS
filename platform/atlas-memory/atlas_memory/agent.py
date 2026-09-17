@@ -22,6 +22,13 @@ from pathlib import Path
 _DEFAULT_STORAGE = Path(os.environ.get("ATLAS_MEMORY_PATH", Path.home() / ".atlas" / "memory"))
 
 
+def _is_shareable() -> bool:
+    """Return False if airgap mode or cross_learning explicitly disabled."""
+    return os.environ.get("ATLAS_MODE", "saas") != "airgap" and os.environ.get(
+        "ATLAS_CROSS_LEARNING", "true"
+    ).lower() not in ("false", "0", "no")
+
+
 class AtlasMemoryAgent:
     """Memory agent for indexing and retrieving ATLAS agent experiences.
 
@@ -130,6 +137,7 @@ class AtlasMemoryAgent:
             outputs=outputs or [],
             tags=tags or [],
             node_type="agent",
+            shareable=_is_shareable(),
         )
         return {"registered": name}
 
@@ -147,6 +155,7 @@ class AtlasMemoryAgent:
             outputs=[],
             tags=tags or [],
             node_type="tool",
+            shareable=_is_shareable(),
         )
         return {"registered": name, "node_type": "tool"}
 

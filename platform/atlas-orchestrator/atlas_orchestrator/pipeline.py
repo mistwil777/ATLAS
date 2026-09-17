@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -67,37 +68,35 @@ def orchestrate(
     if run_store and run_id and requires_tools:
         run_store.set_requires_tools(run_id, requires_tools)
 
-    try:
-        import os  # noqa: PLC0415
+    if os.environ.get("ATLAS_MODE", "saas") != "airgap":
+        try:
+            import mlflow  # noqa: PLC0415
 
-        import mlflow  # noqa: PLC0415
-
-        mlflow.set_tracking_uri(
-            os.environ.get(
-                "MLFLOW_TRACKING_URI", str(__import__("pathlib").Path.home() / ".atlas" / "mlflow")
+            _mlflow_uri = os.environ.get(
+                "MLFLOW_TRACKING_URI", str(Path.home() / ".atlas" / "mlflow")
             )
-        )
-        mlflow.set_experiment("atlas/routing")
-        with mlflow.start_run(run_name=(run_id or "unknown")[:8]):
-            mlflow.set_tags({"atlas.run_id": run_id or "unknown"})
-            mlflow.log_params(
-                {
-                    "blocs_count": len(blocs),
-                    "requires_creation": ",".join(requires_creation) or "none",
-                    "requires_tools": ",".join(requires_tools) or "none",
-                    "cdc_preview": cdc_text[:200],
-                }
-            )
-            mlflow.log_metrics(
-                {
-                    "requires_creation_count": len(requires_creation),
-                    "requires_tools_count": len(requires_tools),
-                    "agents_reused_count": len(routing_summary.get("atlas_agents_reused", [])),
-                    "tools_reused_count": len(routing_summary.get("atlas_tools_reused", [])),
-                }
-            )
-    except Exception:  # noqa: BLE001
-        pass
+            mlflow.set_tracking_uri(_mlflow_uri)
+            mlflow.set_experiment("atlas/routing")
+            with mlflow.start_run(run_name=(run_id or "unknown")[:8]):
+                mlflow.set_tags({"atlas.run_id": run_id or "unknown"})
+                mlflow.log_params(
+                    {
+                        "blocs_count": len(blocs),
+                        "requires_creation": ",".join(requires_creation) or "none",
+                        "requires_tools": ",".join(requires_tools) or "none",
+                        "cdc_preview": cdc_text[:200],
+                    }
+                )
+                mlflow.log_metrics(
+                    {
+                        "requires_creation_count": len(requires_creation),
+                        "requires_tools_count": len(requires_tools),
+                        "agents_reused_count": len(routing_summary.get("atlas_agents_reused", [])),
+                        "tools_reused_count": len(routing_summary.get("atlas_tools_reused", [])),
+                    }
+                )
+        except Exception:  # noqa: BLE001
+            pass
 
     bus = _get_bus(bus_fn)
     bloc_results = []

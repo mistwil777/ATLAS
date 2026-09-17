@@ -14,7 +14,11 @@ _TRACKING_URI = os.environ.get(
 
 
 def _mlflow():
-    """Return mlflow module or None if not installed."""
+    """Return mlflow module or None if not installed or blocked by deployment mode."""
+    # airgap mode: block remote MLflow URIs to prevent data egress
+    if os.environ.get("ATLAS_MODE", "saas") == "airgap" and _TRACKING_URI.startswith("http"):
+        _log.warning("MLflow remote URI blocked in deployment_mode=airgap — logging disabled")
+        return None
     try:
         import mlflow  # noqa: PLC0415
 
