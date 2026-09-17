@@ -67,19 +67,19 @@ class ImprovementAdvisorAgent:
 
         raw = self._llm(prompt, self._cfg, 1500)
         if not raw:
-            yield self._error("LLM returned no output")
-            return
+            yield self._info("LLM unavailable — returning deterministic analysis only")
+            result = _deterministic_fallback(stats)
+        else:
+            result = self._parse(raw)
+            if result is None:
+                yield self._info("First response invalid JSON — re-prompting")
+                reprompt = REPROMPT.format(previous_response=raw[:600])
+                raw2 = self._llm(reprompt, self._cfg, 1500)
+                result = self._parse(raw2) if raw2 else None
 
-        result = self._parse(raw)
-        if result is None:
-            yield self._info("First response invalid JSON — re-prompting")
-            reprompt = REPROMPT.format(previous_response=raw[:600])
-            raw2 = self._llm(reprompt, self._cfg, 1500)
-            result = self._parse(raw2) if raw2 else None
-
-        if result is None:
-            yield self._error("Could not parse LLM response as valid advice JSON")
-            return
+            if result is None:
+                yield self._info("LLM parse failed — returning deterministic analysis only")
+                result = _deterministic_fallback(stats)
 
         try:
             from atlas_core.collect import emit_metrics  # noqa: PLC0415
@@ -139,3 +139,37 @@ class ImprovementAdvisorAgent:
     def _error(self, msg: str) -> dict:
         _log.error(msg)
         return {"level": "error", "msg": msg}
+
+
+def _deterministic_fallback(stats: dict) -> dict:
+    """Build a minimal advice result from deterministic stats when LLM is unavailable."""
+    pain_points = []
+    suggested_actions = []
+    priority = 1
+
+    for cname, cdata in stats.get("crit_stats", {}).items():
+        if cdata.get("avg", 5) < 3.5 or cdata.get("unaddressed"):
+            pain_points.append(
+                {
+                    "criterion": cname,
+                    "observation": f"avg={cdata['avg']:.1f} σ={cdata['std']:.2f} trend={cdata['trend']}",
+                    "severity": "high" if cdata.get("avg", 5) < 2.5 else "medium",
+                }
+            )
+            suggested_actions.append(
+                {
+                    "action": f"Improve criterion '{cname}' (currently avg {cdata['avg']:.1f}/5)",
+                    "rationale": "Below threshold"
+                    + (" — unaddressed across runs" if cdata.get("unaddressed") else ""),
+                    "priority": priority,
+                }
+            )
+            priority += 1
+
+    return {
+        "pain_points": pain_points,
+        "suggested_actions": suggested_actions,
+        "forecast": {
+            "note": "LLM unavailable — deterministic analysis only, no probabilistic forecast"
+        },
+    }
