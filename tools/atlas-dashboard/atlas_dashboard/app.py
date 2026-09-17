@@ -302,6 +302,49 @@ def _build_trend_points(agent: str, runs: list[dict]) -> list[dict]:
     return points
 
 
+def _build_trend_points_from_scaffold(agent: str, runs: list[dict]) -> list[dict]:
+    """Fallback: build trend points from scaffold judge data stored in run['scaffolded']."""
+    points: list[dict] = []
+    for run in runs:
+        scaffolded = run.get("scaffolded", {}).get(agent)
+        if not scaffolded:
+            continue
+        judge_score = scaffolded.get("judge_score")
+        judge_criteria = scaffolded.get("judge_criteria") or []
+        judge_feedback = scaffolded.get("judge_feedback") or ""
+        model_id = scaffolded.get("model_id", "")
+        selected_patches = scaffolded.get("selected_patches") or []
+        user_answers = scaffolded.get("user_answers") or []
+        if judge_score is None and not judge_criteria:
+            continue
+        avg = round(judge_score, 2) if judge_score is not None else None
+        cause = "cr_retry" if (user_answers or selected_patches) else "initial_scaffold"
+        crit_delta = [
+            {
+                "criterion": c.get("criterion", ""),
+                "score": c.get("score"),
+                "prev_score": None,
+                "delta": None,
+                "comment": c.get("comment", ""),
+            }
+            for c in judge_criteria
+        ]
+        points.append(
+            {
+                "run_id": run.get("run_id", ""),
+                "created_at": run.get("created_at", ""),
+                "avg_score": avg,
+                "cause": cause,
+                "criteria": crit_delta,
+                "feedback": judge_feedback,
+                "patches_applied": selected_patches,
+                "user_answers": user_answers,
+                "model_id": model_id,
+            }
+        )
+    return points
+
+
 @app.get("/api/stats/trend")
 def api_stats_trend(agent: str):
     runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
@@ -313,6 +356,15 @@ def api_improve(agent_name: str, body: ImproveRequest | None = None):
     body = body or ImproveRequest()
     runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
     trend_points = _build_trend_points(agent_name, runs)
+    if not trend_points:
+        # Fallback: check scaffold attempts stored under run["scaffolded"]
+        trend_points = _build_trend_points_from_scaffold(agent_name, runs)
+
+    if not trend_points:
+        return {
+            "error": f"No trend data found for agent '{agent_name}'. "
+            "Run at least one atlas pipeline with this agent to generate judge scores."
+        }
 
     try:
         from improvement_advisor.agent import ImprovementAdvisorAgent  # noqa: PLC0415
@@ -326,7 +378,8 @@ def api_improve(agent_name: str, body: ImproveRequest | None = None):
     events = list(advisor.run(agent_name=agent_name, trend_points=trend_points))
     summary = next((e for e in events if e.get("summary")), None)
     if not summary:
-        return {"error": "improvement-advisor returned no result"}
+        errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
+        return {"error": f"improvement-advisor failed: {'; '.join(errors) or 'no output from LLM'}"}
 
     run_id = body.run_id
     if run_id:
