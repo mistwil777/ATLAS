@@ -1,91 +1,129 @@
-"""Prompts for cdc-router LLM calls."""
+"""Prompts for cdc-router LLM calls — three-pass architecture."""
 
+# ── Passe 1 : segmentation fonctionnelle ─────────────────────────────────────
 SEGMENTATION_PROMPT = """\
 You are an expert software architect analyzing a functional specification (CDC).
-Your task: segment the CDC into functional blocs, decide for each whether it requires AI reasoning, \
-a reusable deterministic tool, or inline code — and generate evaluation criteria for each bloc.
 
-## Decision rules — apply strictly, in order
+Your ONLY task in this pass: decompose the CDC into independent functional blocs.
+Do NOT classify blocs as ia/tool/code yet — focus entirely on WHAT each bloc does.
 
-**Step 1 — is it "ia"?** Yes if ANY of these:
-- Input is unstructured natural language (email, ticket, contract, free text)
-- Task requires semantic interpretation (classification, summarization, extraction, intent, sentiment)
-- Expected result is ambiguous or context-dependent
-
-**Step 2 — is it "tool"?** Yes if ALL of these (and NOT "ia"):
-- Logic is fully deterministic: same input always produces same output, no LLM needed
-- Useful beyond this project: another team could import this function as-is
-- Ask yourself: "would I write a unit test for this?" → if yes, it is "tool"
-- Typical examples: output formatter, JSON schema validator, confidence scorer, text normalizer,
-  priority scorer, structured response builder, field extractor from typed data, CSV/JSON encoder
-
-**Step 3 — is it "code"?** Yes if ALL of these (and NOT "ia" or "tool"):
-- Transformation is trivial and specific to this project's data shape
-- Would be 1–3 lines inline in the pipeline, not worth its own library
-- Another project would never reuse it as-is
-
-**Rule of thumb**: when in doubt between "tool" and "code", prefer "tool" if the function has a
-clear name and could be documented with a docstring. Prefer "code" only for throwaway glue logic.
-
-**Concrete examples**:
-| Bloc description                          | Type   | Reason                                          |
-|-------------------------------------------|--------|-------------------------------------------------|
-| Classify ticket priority from text        | ia     | semantic, ambiguous, LLM needed                 |
-| Format agent output as structured JSON    | tool   | deterministic, reusable, testable               |
-| Score confidence from probability dict    | tool   | deterministic, reusable across projects         |
-| Validate output against JSON schema       | tool   | deterministic, reusable library                 |
-| Append run_id to log filename             | code   | trivial glue, project-specific, 1 line          |
-
-## Criteria generation rules
-
-For each bloc, generate 2 to 4 evaluation criteria as assertion strings.
-- For "ia" blocs: assert semantic quality, completeness, absence of hallucination, alignment with CDC intent
-- For "tool" blocs: assert output contract, determinism, edge-case handling, reusability
-- For "code" blocs: assert output format, field presence, value constraints (deterministic, verifiable)
-- Each criterion must be a single sentence starting with a verb ("Output must...", "Response must...", "All fields must...")
-- Criteria must be specific to the bloc content — never generic
-
-## Available ATLAS agents (for "ia" blocs — use exact name in agent_suggested if applicable)
-{kg_agents}
-
-## Available ATLAS tools (for "tool" blocs — reuse exact name in agent_suggested if applicable)
-{kg_tools}
-
-## Similar CDCs from past experience
-{rag_examples}
+## Rules
+- Each bloc = one precise function of the system
+- Blocs must be independent (no overlap)
+- Generate 2-4 evaluation criteria per bloc (verifiable assertions on the expected output)
+  Each criterion: single sentence starting with a verb ("Output must...", "All fields must...")
 
 ## CDC to analyze
 {cdc_text}
 
-## Output format — return ONLY valid JSON, no markdown, no explanation
+## Similar CDCs from past experience
+{rag_examples}
 
-IMPORTANT for agent_suggested and called_by:
-- type "ia"   → agent_suggested REQUIRED (PascalCase agent name). called_by: null.
-- type "tool" → agent_suggested REQUIRED (PascalCase tool name). called_by REQUIRED: exact agent_suggested value of the "ia" bloc that will call this tool. NEVER empty string — if unsure pick the closest "ia" bloc.
-- type "code" → agent_suggested: null. called_by: null.
-
-Example: if bloc "ia" has agent_suggested="PriorityClassifier" and uses an OutputFormatter tool,
-then the "tool" bloc for OutputFormatter must have called_by="PriorityClassifier".
-
+## Output — return ONLY valid JSON, no markdown, no explanation
 {{
-  "blocs": [
+  "segments": [
     {{
-      "bloc": "<short description of the functional bloc>",
-      "type": "ia" or "tool" or "code",
-      "agent_suggested": "<PascalCase name — REQUIRED for ia and tool, null ONLY for code>",
-      "called_by": "<exact agent_suggested of the calling ia bloc — REQUIRED for tool, null for ia and code, NEVER empty string>",
-      "justification": "<one sentence applying the decision rule>",
-      "criteria": [
-        "<criterion 1>",
-        "<criterion 2>"
-      ]
+      "bloc": "<short description of what this bloc does>",
+      "justification": "<why this is a separate functional bloc>",
+      "criteria": ["<criterion 1>", "<criterion 2>"]
     }}
   ]
 }}
 """
 
+# ── Passe 2 : classification agent/outil/glue ─────────────────────────────────
+CLASSIFICATION_PROMPT = """\
+You are an expert software architect. You have a list of functional blocs to classify.
+
+## Classification rules — apply strictly, in order
+
+**AGENT (type="ia")** if ANY of these:
+- Input is unstructured natural language (email, ticket, contract, free text)
+- Task requires semantic interpretation (classification, summarisation, extraction, intent)
+- Result is ambiguous or context-dependent — a deterministic function cannot produce it
+
+**TOOL (type="tool")** if ALL of these (and NOT "ia"):
+- Fully deterministic: same input → same output, no LLM needed
+- Reusable as-is by another team on a different project (reusable library function)
+- Worthy of a unit test and a docstring
+- Examples: OutputFormatter, JsonValidator, ConfidenceScorer, TextNormalizer
+
+**GLUE (type="code")** if ALL of these (and NOT "ia" or "tool"):
+- Trivial transformation specific to this project (1-3 lines inline)
+- Another team on another project could never reuse it as-is
+- Not worth naming or documenting
+
+**EXCLUSIVITY RULE**: a PascalCase name cannot be "ia" in one bloc and "tool" in another.
+If a name is ambiguous → choose "ia" if reasoning is required, "tool" otherwise.
+
+## Available ATLAS agents (reuse exact name in agent_suggested if applicable)
+{kg_agents}
+
+## Available ATLAS tools (reuse exact name in agent_suggested if applicable)
+{kg_tools}
+
+## Blocs to classify
+{segments_json}
+
+## CDC context
+{cdc_text}
+
+## Output — return ONLY valid JSON, no markdown, no explanation
+
+REQUIRED fields:
+- type "ia"   → agent_suggested REQUIRED (PascalCase). called_by: null.
+- type "tool" → agent_suggested REQUIRED (PascalCase). called_by REQUIRED: exact agent_suggested of the "ia" bloc that calls this tool. NEVER empty string.
+- type "code" → agent_suggested: null. called_by: null.
+
+{{
+  "blocs": [
+    {{
+      "bloc": "<same description as input>",
+      "type": "ia" or "tool" or "code",
+      "agent_suggested": "<PascalCase — REQUIRED for ia/tool, null for code>",
+      "called_by": "<PascalCase ia agent — REQUIRED for tool, null for ia/code>",
+      "justification": "<one sentence applying the decision rule above>",
+      "criteria": ["<criterion 1>", "<criterion 2>"]
+    }}
+  ]
+}}
+"""
+
+# ── Passe 3 : validation de cohérence architecturale ─────────────────────────
+COHERENCE_PROMPT = """\
+You are an expert software architect reviewing an architecture for consistency.
+
+## Check the following blocs for architectural coherence:
+
+1. Each "tool" bloc must have a called_by pointing to an existing "ia" bloc's agent_suggested.
+2. No PascalCase name appears as both "ia" and "tool" in different blocs.
+3. No circular dependencies between "ia" agents.
+4. The pipeline is orderable (no deadlocks).
+
+## Blocs to validate
+{blocs_json}
+
+## Return the corrected blocs — apply fixes inline, preserve correct blocs unchanged.
+Return ONLY valid JSON, no markdown, no explanation.
+
+{{
+  "blocs": [
+    {{
+      "bloc": "...",
+      "type": "ia" or "tool" or "code",
+      "agent_suggested": "...",
+      "called_by": "...",
+      "justification": "...",
+      "criteria": ["...", "..."]
+    }}
+  ],
+  "corrections_applied": ["<description of each fix made, empty list if none>"]
+}}
+"""
+
+# ── Correction / reprompt (conservés pour les retries JSON) ───────────────────
 CORRECTION_PROMPT = """\
-Your previous segmentation was evaluated and failed on the following criteria:
+Your previous classification was evaluated and failed on the following criteria:
 
 {failures}
 

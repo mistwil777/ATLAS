@@ -2,13 +2,16 @@
 
 CRITERIA = {
     "binary_rules": (
-        "The ia/code decision follows the binary rules strictly: "
-        "ia for unstructured natural language input or semantic interpretation tasks, "
-        "code for deterministic transformations on known structured formats."
+        "The ia/tool/code decision follows the three-type rules strictly: "
+        "ia for unstructured natural language input or semantic interpretation tasks requiring LLM reasoning; "
+        "tool for fully deterministic, reusable, unit-testable functions; "
+        "code for trivial project-specific glue (1-3 lines, not reusable). "
+        "No name appears as both ia and tool across blocs."
     ),
     "json_schema_valid": (
         "All required fields are present and correctly typed: "
-        "bloc (str), type ('ia'|'code'), agent_suggested (str|null), justification (str), "
+        "bloc (str), type ('ia'|'tool'|'code'), agent_suggested (str|null), "
+        "called_by (str|null — required for tool blocs), justification (str), "
         "criteria (non-empty list of strings)."
     ),
     "justification_coherent": (
