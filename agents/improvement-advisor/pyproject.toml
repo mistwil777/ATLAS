@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "improvement-advisor"
+version = "1.0.0"
+description = "Autonomous agent: analyzes ATLAS agent score trajectories and suggests improvements."
+requires-python = ">=3.10"
+dependencies = [
+    "boto3>=1.35,<2.0",
+]
+
+[project.optional-dependencies]
+collect = ["atlas-core"]
+dev = ["pytest>=8.0"]
+memory = ["atlas-memory"]
+
+[project.entry-points."atlas.agents"]
+improvement-advisor = "improvement_advisor.agent:ImprovementAdvisorAgent"
+
+[project.scripts]
+improvement-advisor = "improvement_advisor.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["improvement_advisor*"]
