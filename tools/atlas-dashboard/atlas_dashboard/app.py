@@ -1646,16 +1646,19 @@ def _add_resolved_by_edges(agent_name: str, criterion: str, resolution_key: str)
 
         _kg_path = _Path.home() / ".atlas" / "memory" / "graph.json"
         kg = KGStore(_kg_path)
-        if resolution_key not in kg._g.nodes:
-            kg.register_agent(
-                name=resolution_key,
-                capabilities=[f"Resolution: {resolution_key}"],
-                inputs=[],
-                outputs=[],
-                tags=["resolution"],
-                node_type="resolution",
-                shareable=True,
-            )
+        # Ensure both nodes exist with node_type="resolution" so _fmt_agents()
+        # never picks them up as agents or tools in cdc-router pass 2.
+        for node_name in (criterion, resolution_key):
+            if node_name not in kg._g.nodes:
+                kg.register_agent(
+                    name=node_name,
+                    capabilities=[],
+                    inputs=[],
+                    outputs=[],
+                    tags=["resolution"],
+                    node_type="resolution",
+                    shareable=True,
+                )
         kg.add_edge(criterion, resolution_key, "RESOLVED_BY")
         kg.add_edge(agent_name, criterion, "RESOLVED")
     except Exception as exc:  # noqa: BLE001
