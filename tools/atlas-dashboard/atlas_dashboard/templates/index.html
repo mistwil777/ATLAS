@@ -59,13 +59,39 @@
     .run-item .run-meta { display: flex; gap: 8px; align-items: center; }
 
     .badge { font-size: 10px; padding: 2px 7px; border-radius: 3px; font-weight: bold; }
-    .badge-pending  { background: #2a2a14; color: var(--yellow); border: 1px solid var(--yellow); }
-    .badge-approved { background: #0d2a1a; color: var(--aqua);   border: 1px solid var(--aqua); }
-    .badge-rejected { background: #2a0d0d; color: var(--red);    border: 1px solid var(--red); }
-    .badge-review   { background: #1a1220; color: var(--violet); border: 1px solid var(--violet); }
-    .badge-success  { background: #0d2a1a; color: var(--aqua);   border: 1px solid var(--aqua); }
-    .badge-failed   { background: #2a0d0d; color: var(--red);    border: 1px solid var(--red); }
-    .badge-skipped  { background: #1a1a1a; color: var(--ink-dim); border: 1px solid var(--border); }
+    .badge-pending           { background: #2a2a14; color: var(--yellow); border: 1px solid var(--yellow); }
+    .badge-approved          { background: #0d2a1a; color: var(--aqua);   border: 1px solid var(--aqua); }
+    .badge-rejected          { background: #2a0d0d; color: var(--red);    border: 1px solid var(--red); }
+    .badge-review            { background: #1a1220; color: var(--violet); border: 1px solid var(--violet); }
+    .badge-success           { background: #0d2a1a; color: var(--aqua);   border: 1px solid var(--aqua); }
+    .badge-failed            { background: #2a0d0d; color: var(--red);    border: 1px solid var(--red); }
+    .badge-skipped           { background: #1a1a1a; color: var(--ink-dim); border: 1px solid var(--border); }
+    .badge-waiting_for_client{ background: #1a1230; color: var(--blue);   border: 1px solid var(--blue); }
+    .badge-scaffolding       { background: #1a1230; color: var(--violet); border: 1px solid var(--violet); }
+
+    /* ── Waiting panel ── */
+    .waiting-panel { background: #0d1220; border: 1px solid var(--blue); border-radius: 6px; padding: 16px 20px; margin-bottom: 18px; }
+    .waiting-panel .waiting-title { font-size: 12px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .waiting-panel .waiting-intro { font-size: 12px; color: var(--ink-dim); margin-bottom: 16px; }
+    .waiting-question { margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 14px; }
+    .waiting-question:last-of-type { border-bottom: none; }
+    .waiting-q-num { font-size: 10px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+    .waiting-q-text { font-size: 12px; color: var(--ink); margin-bottom: 6px; }
+    .waiting-q-hint { font-size: 10px; color: var(--ink-dim); margin-bottom: 8px; font-style: italic; }
+    .waiting-q-text-input { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 12px; font-family: inherit; }
+    .waiting-q-text-input:focus { outline: none; border-color: var(--blue); }
+    .waiting-q-options { display: flex; flex-direction: column; gap: 6px; }
+    .waiting-q-option { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink); cursor: pointer; }
+    .waiting-q-option input { accent-color: var(--blue); }
+    .btn-submit-answers { margin-top: 14px; padding: 8px 22px; background: var(--blue); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
+    .btn-submit-answers:hover { opacity: .85; }
+    .btn-submit-answers:disabled { opacity: .4; cursor: default; }
+
+    /* ── cause badge inline judge criteria ── */
+    .cause-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; flex-shrink: 0; }
+    .cause-model_error  { background: #1a0d0d; color: var(--red);    border: 1px solid var(--red); }
+    .cause-code_error   { background: #1a1800; color: var(--yellow); border: 1px solid var(--yellow); }
+    .cause-missing_spec { background: #0d1220; color: var(--blue);   border: 1px solid var(--blue); }
 
     .detail { flex: 1; overflow-y: auto; padding: 22px 32px; }
     .detail-empty { color: var(--ink-dim); margin-top: 40px; text-align: center; }
@@ -387,15 +413,21 @@
       list.innerHTML = '<div style="padding:20px;color:var(--ink-dim)">No runs.</div>';
       return;
     }
-    list.innerHTML = runs.map(r => `
+    list.innerHTML = runs.map(r => {
+      const isWaiting = r.status === 'waiting_for_client';
+      const statusLabel = isWaiting ? 'En attente de validation' : r.status;
+      const badgeCls = `badge-${r.status}`;
+      return `
       <div class="run-item${r.run_id === selectedId ? ' selected' : ''}" onclick="showRun('${r.run_id}')">
         <div class="run-id">${r.run_id}</div>
         <div class="run-meta">
-          <span class="badge badge-${r.status}">${r.status}</span>
-          ${r.requires_review ? '<span class="badge badge-review">review</span>' : ''}
+          <span class="badge ${badgeCls}">${statusLabel}</span>
+          ${isWaiting ? `<span style="font-size:10px;color:var(--blue)">● ${r.pending_agent || ''}${(r.pending_questions||[]).length ? ' — ' + (r.pending_questions||[]).length + ' question(s)' : ''}</span>` : ''}
+          ${r.requires_review && !isWaiting ? '<span class="badge badge-review">review</span>' : ''}
           <span style="font-size:11px;color:var(--ink-dim)">${fmtDate(r.created_at)}</span>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   async function showRun(runId) {
@@ -405,15 +437,18 @@
     });
     const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
     const isPending = run.status === 'pending';
+    const isWaiting = run.status === 'waiting_for_client';
+    const statusLabel = isWaiting ? 'En attente de validation' : run.status;
     document.getElementById('detail').innerHTML = `
       <h2>Run ${run.run_id}</h2>
       <div class="meta-row">
-        <span class="badge badge-${run.status}">${run.status}</span>
-        ${run.requires_review ? '<span class="badge badge-review">requires review</span>' : ''}
+        <span class="badge badge-${run.status}">${statusLabel}</span>
+        ${run.requires_review && !isWaiting ? '<span class="badge badge-review">requires review</span>' : ''}
         <span style="color:var(--ink-dim);font-size:11px">${fmtDate(run.created_at)}</span>
       </div>
       ${buildProgressBanner(run)}
-      <div class="actions">
+      ${isWaiting ? buildWaitingPanel(run) : ''}
+      <div class="actions" ${isWaiting ? 'style="display:none"' : ''}>
         ${run.requires_review && isPending ? `
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--ink-dim)">
             <input type="checkbox" id="select-all" checked onchange="toggleSelectAll(this)" style="accent-color:var(--violet)">
@@ -450,11 +485,16 @@
     const criteria = b.judge_criteria || [];
     const feedback = b.judge_feedback || '';
     if (!criteria.length && !feedback) return '';
+    const causeLabel = { model_error: 'IA', code_error: 'code', missing_spec: 'décision requise' };
     const rows = criteria.map(c => {
       const sc = Math.round(c.score || 0);
+      const cause = c.cause && sc < 3
+        ? `<span class="cause-badge cause-${c.cause}">${causeLabel[c.cause] || c.cause}</span>`
+        : '';
       return `<div class="judge-criterion">
         <span class="crit-name">${escHtml(c.criterion || '')}</span>
         <span class="crit-score score-${sc}">${sc}/5</span>
+        ${cause}
         <span class="crit-comment">${escHtml(c.comment || '')}</span>
       </div>`;
     }).join('');
@@ -510,6 +550,97 @@
 
     const hint = hints[currentIdx] ? `<span class="progress-hint">→ ${hints[currentIdx]}</span>` : '';
     return `<div class="progress-banner">${html}${hint}</div>`;
+  }
+
+  // ── Waiting for client panel ─────────────────────────────────────────────────
+
+  function buildWaitingPanel(run) {
+    const qs = run.pending_questions || [];
+    const agent = run.pending_agent || '';
+    if (!qs.length) return '';
+    const n = qs.length;
+    const header = `
+      <div class="waiting-title">Décisions en attente — ${escHtml(agent)}</div>
+      <div class="waiting-intro">Avant de finaliser cet agent, ${n === 1 ? '1 point nécessite' : n + ' points nécessitent'} votre validation métier.</div>`;
+
+    const questions = qs.map((q, i) => {
+      const num = `① ② ③ ④ ⑤`.split(' ')[i] || `(${i+1})`;
+      const hint = q.hint ? `<div class="waiting-q-hint">${escHtml(q.hint)}</div>` : '';
+      let input = '';
+      if (q.question_type === 'single_choice' && q.options && q.options.length) {
+        const opts = q.options.map((opt, j) =>
+          `<label class="waiting-q-option"><input type="radio" name="q_${q.id}" value="${escHtml(opt)}"${j===0?' checked':''}> ${escHtml(opt)}</label>`
+        ).join('');
+        input = `<div class="waiting-q-options">${opts}</div>`;
+      } else if (q.question_type === 'multiple_choice' && q.options && q.options.length) {
+        const opts = q.options.map(opt =>
+          `<label class="waiting-q-option"><input type="checkbox" name="q_${q.id}" value="${escHtml(opt)}"> ${escHtml(opt)}</label>`
+        ).join('');
+        input = `<div class="waiting-q-options">${opts}</div>`;
+      } else {
+        input = `<input type="text" class="waiting-q-text-input" id="ans_${q.id}" placeholder="${escHtml(q.hint || '')}" />`;
+      }
+      return `<div class="waiting-question">
+        <div class="waiting-q-num">${num} ${escHtml(q.criterion || '')}</div>
+        <div class="waiting-q-text">${escHtml(q.question || '')}</div>
+        ${hint}
+        ${input}
+      </div>`;
+    }).join('');
+
+    return `<div class="waiting-panel" id="waiting-panel-${run.run_id}">
+      ${header}
+      ${questions}
+      <button class="btn-submit-answers" onclick="submitAnswers('${run.run_id}', this)">Valider et continuer</button>
+    </div>`;
+  }
+
+  async function submitAnswers(runId, btn) {
+    const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
+    const qs = run.pending_questions || [];
+    const answers = {};
+    for (const q of qs) {
+      if (q.question_type === 'single_choice') {
+        const checked = document.querySelector(`input[name="q_${q.id}"]:checked`);
+        if (checked) answers[q.id] = checked.value;
+      } else if (q.question_type === 'multiple_choice') {
+        const checked = [...document.querySelectorAll(`input[name="q_${q.id}"]:checked`)].map(el => el.value);
+        if (checked.length) answers[q.id] = checked.join(', ');
+      } else {
+        const el = document.getElementById(`ans_${q.id}`);
+        if (el && el.value.trim()) answers[q.id] = el.value.trim();
+      }
+    }
+    if (!Object.keys(answers).length) {
+      alert('Veuillez répondre à au moins une question avant de continuer.');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Reprise du scaffold…';
+    const panel = document.getElementById(`waiting-panel-${runId}`);
+    if (panel) panel.style.opacity = '0.5';
+    try {
+      const res = await fetch(`/api/runs/${runId}/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert('Erreur : ' + (data.detail || res.status));
+        btn.disabled = false;
+        btn.textContent = 'Valider et continuer';
+        if (panel) panel.style.opacity = '1';
+        return;
+      }
+      await showRun(runId);
+      await loadRuns(currentFilter);
+    } catch (e) {
+      alert('Erreur réseau : ' + e.message);
+      btn.disabled = false;
+      btn.textContent = 'Valider et continuer';
+      if (panel) panel.style.opacity = '1';
+    }
   }
 
   // ── Tools to Build ───────────────────────────────────────────────────────────
