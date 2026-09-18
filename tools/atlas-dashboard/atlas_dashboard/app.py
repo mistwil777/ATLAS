@@ -1361,9 +1361,9 @@ def _judge_scaffold(
             )
             if class_name:
                 agent_instance = getattr(mod, class_name)(llm_fn=llm_fn, config={"llm": llm_cfg})
-                output_events = list(agent_instance.run(cdc_bloc=cdc_full[:200], context="test"))
+                output_events = list(agent_instance.run(cdc_bloc=cdc_full, context=cdc_full))
                 agent_output = " ".join(
-                    str(e.get("output", e.get("msg", "")))
+                    str(e.get("output", e.get("summary", e.get("msg", ""))))
                     for e in output_events
                     if isinstance(e, dict)
                 )
@@ -1371,6 +1371,9 @@ def _judge_scaffold(
                 agent_output = "(agent loaded but no Agent class found)"
         except Exception as exc:  # noqa: BLE001
             agent_output = f"(agent execution failed: {exc})"
+            logging.getLogger("atlas_dashboard").warning(
+                "Judge scaffold: agent execution failed for %s: %s", agent_name, exc
+            )
 
         judge = AtlasJudgeAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
         events = list(
@@ -1378,7 +1381,7 @@ def _judge_scaffold(
                 operation="pointwise",
                 output=agent_output,
                 agent_name=agent_name,
-                context=cdc_full[:500],
+                context=cdc_full,
             )
         )
         summary = next((e for e in events if e.get("summary")), None)
