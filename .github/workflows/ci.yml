@@ -192,7 +192,8 @@ jobs:
             -e "platform/atlas-orchestrator/[dev]" \
             -e "agents/cdc-router/" \
             -e "platform/atlas-judge/" \
-            -e "platform/atlas-bus/"
+            -e "platform/atlas-bus/" \
+            -e "platform/atlas-memory/[dev]"
 
       - name: Dependency status
         run: uv run python -m atlas_orchestrator check
