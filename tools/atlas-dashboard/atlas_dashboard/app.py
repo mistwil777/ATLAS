@@ -1364,12 +1364,21 @@ def _judge_scaffold(
         try:
             import importlib  # noqa: PLC0415
 
-            mod = importlib.import_module(module_slug)
+            # Try {module}.agent first (agent-forge places class in agent.py, not __init__)
+            mod = None
+            for candidate in (f"{module_slug}.agent", module_slug):
+                try:
+                    mod = importlib.import_module(candidate)
+                    break
+                except ImportError:
+                    continue
+
             class_name = next(
                 (k for k in dir(mod) if k.endswith("Agent") and not k.startswith("_")),
                 None,
-            )
-            if class_name:
+            ) if mod else None
+
+            if class_name and mod:
                 agent_instance = getattr(mod, class_name)(llm_fn=llm_fn, config={"llm": llm_cfg})
                 output_events = list(agent_instance.run(cdc_bloc=test_input, context=cdc_full))
                 agent_output = " ".join(
