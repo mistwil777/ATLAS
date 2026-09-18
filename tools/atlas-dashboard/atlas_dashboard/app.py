@@ -198,10 +198,29 @@ def _resume_pipeline_with_answers(
     if report is None:
         raise HTTPException(status_code=500, detail="Orchestration failed after client answers")
 
+    # Index resolved CDC gaps if the new run succeeded (no further pending questions)
+    new_pending = report.get("pending_questions", [])
+    if not new_pending and report.get("status") != "waiting_for_client":
+        pending_qs = run.get("pending_questions", [])
+        for q in pending_qs:
+            criterion = q.get("criterion", q.get("id", ""))
+            answer = criterion_answers.get(criterion, "")
+            if answer:
+                resolution_key = f"client_answer_{criterion}"
+                # Index each answered gap as a client_decision
+                _index_resolution_in_rag(
+                    agent_name="cdc-router",
+                    criterion=criterion,
+                    cause="missing_spec",
+                    resolution=answer,
+                    entry_type="client_decision",
+                )
+                _add_resolved_by_edges("cdc-router", criterion, resolution_key)
+
     return {
         "status": "resumed",
         "new_run_id": report.get("run_id"),
-        "pending_questions": report.get("pending_questions", []),
+        "pending_questions": new_pending,
         "run_status": report.get("status", "pending"),
     }
 
