@@ -1350,7 +1350,17 @@ def _judge_scaffold(
         agent_slug = target_path.name
         module_slug = agent_slug.replace("-", "_")
 
-        # Try to load the agent and run it on a minimal test input
+        # Generate a synthetic test input so the agent receives a realistic payload
+        # (not the CDC spec itself, which is the requirements doc, not an agent input)
+        _test_input_prompt = (
+            f"Based on this agent specification:\n{cdc_full[:800]}\n\n"
+            "Generate ONE realistic example INPUT that this agent should process "
+            "(e.g. a support ticket, an email, a text snippet — whatever the agent expects). "
+            "Return only the example input text, nothing else."
+        )
+        test_input = llm_fn(_test_input_prompt, llm_cfg, 200) or "Sample input for evaluation."
+
+        # Try to load the agent and run it on the synthetic test input
         try:
             import importlib  # noqa: PLC0415
 
@@ -1361,7 +1371,7 @@ def _judge_scaffold(
             )
             if class_name:
                 agent_instance = getattr(mod, class_name)(llm_fn=llm_fn, config={"llm": llm_cfg})
-                output_events = list(agent_instance.run(cdc_bloc=cdc_full, context=cdc_full))
+                output_events = list(agent_instance.run(cdc_bloc=test_input, context=cdc_full))
                 agent_output = " ".join(
                     str(e.get("output", e.get("summary", e.get("msg", ""))))
                     for e in output_events
