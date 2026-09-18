@@ -65,6 +65,29 @@ def _invalid_then_valid_llm(valid_payload: str):
     return _llm
 
 
+_POINTWISE_RESPONSE_WITH_CAUSE = json.dumps(
+    {
+        "mode": "pointwise",
+        "criteria_scores": [
+            {
+                "criterion": "binary_rules",
+                "score": 2,
+                "comment": "rule ignored",
+                "cause": "model_error",
+            },
+            {
+                "criterion": "output_language",
+                "score": 1,
+                "comment": "no language spec",
+                "cause": "missing_spec",
+            },
+            {"criterion": "json_schema_valid", "score": 5, "comment": "correct", "cause": None},
+        ],
+        "feedback": "Two criteria failed.",
+        "winner": None,
+    }
+)
+
 _CRITERIA = ["binary_rules", "json_schema_valid"]
 
 
@@ -131,6 +154,23 @@ def test_reference_based_with_mock_llm():
     assert result is not None
     assert result["score"] == 4.0
     assert result["passed"] is True
+
+
+def test_pointwise_cause_field_propagated():
+    """cause field for failed criteria (score < 3) is preserved in criteria_scores."""
+    result = pointwise(
+        output="output text",
+        criteria=["binary_rules", "output_language", "json_schema_valid"],
+        context="CDC with no language spec.",
+        llm_fn=_mock_llm_returning(_POINTWISE_RESPONSE_WITH_CAUSE),
+        llm_cfg={},
+    )
+    assert result is not None
+    assert result["passed"] is False
+    scores = {c["criterion"]: c for c in result["criteria_scores"]}
+    assert scores["binary_rules"]["cause"] == "model_error"
+    assert scores["output_language"]["cause"] == "missing_spec"
+    assert scores["json_schema_valid"]["cause"] is None
 
 
 def test_invalid_json_reprompt():

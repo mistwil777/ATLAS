@@ -17,12 +17,18 @@ against explicit criteria. Score each criterion from 1 to 5.
 - Score each criterion independently from 1 to 5 (1=very poor, 3=acceptable, 5=excellent)
 - A score >= 4 on all criteria means the output passed
 - Be specific in your comments — reference the actual output content
+- For each criterion with score < 3, classify the failure cause:
+  - "model_error"  : the context contained an explicit instruction the agent did not follow
+  - "code_error"   : the failure is a deterministic logic error (wrong calculation, bad parsing, incorrect regex)
+  - "missing_spec" : the context did not specify this behavior — only the client can decide
+  Rule: when in doubt between model_error and missing_spec, choose missing_spec.
+- For criteria with score >= 3, set cause to null.
 - Return ONLY valid JSON, no markdown, no explanation
 
 {{
   "mode": "pointwise",
   "criteria_scores": [
-    {{"criterion": "<name>", "score": <1-5>, "comment": "<specific observation>"}}
+    {{"criterion": "<name>", "score": <1-5>, "comment": "<specific observation>", "cause": "model_error"|"code_error"|"missing_spec"|null}}
   ],
   "feedback": "<one sentence overall assessment>",
   "winner": null
