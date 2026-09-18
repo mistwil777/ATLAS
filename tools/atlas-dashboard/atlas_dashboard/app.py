@@ -1379,7 +1379,7 @@ def _judge_scaffold(
             ) if mod else None
 
             if class_name and mod:
-                agent_instance = getattr(mod, class_name)(llm_fn=llm_fn, config={"llm": llm_cfg})
+                agent_instance = getattr(mod, class_name)(llm_fn=llm_fn, config={"llm": llm_cfg}, llm_cfg=llm_cfg)
                 output_events = list(agent_instance.run(cdc_bloc=test_input, context=cdc_full))
                 agent_output = " ".join(
                     str(e.get("output", e.get("summary", e.get("msg", ""))))
