@@ -236,6 +236,8 @@ def api_answer(run_id: str, body: AnswerRequest):
     )
     if success:
         result["resumed_from_client_answers"] = True  # type: ignore[index]
+        # Index: client answers resolved missing_spec criteria
+        _index_scaffold_resolutions(agent_name, saved_attempts_log, attempts_log2)
         return result
 
     # Still failing — try advisor then diagnose
@@ -266,6 +268,7 @@ def api_answer(run_id: str, body: AnswerRequest):
         if success3:
             result3["advisor_used"] = True  # type: ignore[index]
             result3["resumed_from_client_answers"] = True  # type: ignore[index]
+            _index_scaffold_resolutions(agent_name, saved_attempts_log, attempts_log3)
             return result3
 
     diagnosis = _run_diagnose(all_attempts, agent_name, cdc_full, llm_fn, llm_cfg)
@@ -768,7 +771,7 @@ def _run_scaffold_cycle(
     base_output_dir: _Path,
     llm_fn,
     llm_cfg: dict,
-    body: "ScaffoldRequest",
+    body: ScaffoldRequest,
     forge_cls,
     max_attempts: int = 3,
     quality_threshold: float = 4.0,
@@ -1061,6 +1064,7 @@ def api_scaffold(
         attempts_log.extend(attempts_log2)
         if success2:
             result2["advisor_used"] = True  # type: ignore[index]
+            _index_scaffold_resolutions(agent_name, attempts_log, attempts_log2)
             return result2  # type: ignore[return-value]
 
     # All cycles failed — diagnose
@@ -1518,6 +1522,111 @@ def _add_failed_on_edges(agent_name: str, criteria_scores: list) -> None:
         logging.getLogger("atlas_dashboard").warning(
             "KG FAILED_ON edges for %s (non-blocking): %s", agent_name, exc
         )
+
+
+def _index_resolution_in_rag(
+    agent_name: str,
+    criterion: str,
+    cause: str,
+    resolution: str,
+    entry_type: str,
+) -> None:
+    """Index a resolved failure in RAG so same blockers recur less often.
+
+    entry_type: 'client_decision' | 'scaffold_fix' | 'deterministic_fix'
+    """
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+        mem = AtlasMemoryAgent()
+        content = f"{agent_name}: {criterion} ({cause}) → {resolution}"
+        list(
+            mem.run(
+                operation="index",
+                entry_type=entry_type,
+                content=content[:500],
+                payload={
+                    "agent_name": agent_name,
+                    "criterion": criterion,
+                    "cause": cause,
+                    "resolution": resolution,
+                },
+                metadata={"agent": agent_name, "criterion": criterion, "cause": cause},
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "RAG resolution indexing failed for %s/%s (non-blocking): %s",
+            agent_name,
+            criterion,
+            exc,
+        )
+
+
+def _add_resolved_by_edges(agent_name: str, criterion: str, resolution_key: str) -> None:
+    """Add KG edges: criterion --RESOLVED_BY--> resolution_key."""
+    import logging  # noqa: PLC0415
+
+    try:
+        from atlas_memory.agent import _is_shareable  # noqa: PLC0415
+
+        if not _is_shareable():
+            return
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+        _kg_path = _Path.home() / ".atlas" / "memory" / "graph.json"
+        kg = KGStore(_kg_path)
+        if resolution_key not in kg._g.nodes:
+            kg.register_agent(
+                name=resolution_key,
+                capabilities=[f"Resolution: {resolution_key}"],
+                inputs=[],
+                outputs=[],
+                tags=["resolution"],
+                node_type="resolution",
+                shareable=True,
+            )
+        kg.add_edge(criterion, resolution_key, "RESOLVED_BY")
+        kg.add_edge(agent_name, criterion, "RESOLVED")
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "KG RESOLVED_BY edge for %s/%s (non-blocking): %s", criterion, resolution_key, exc
+        )
+
+
+def _index_scaffold_resolutions(
+    agent_name: str,
+    attempts_log_before: list[dict],
+    attempts_log_after: list[dict],
+) -> None:
+    """After a successful scaffold cycle, index what was fixed vs what failed before.
+
+    Compares failing criteria from cycle N-1 against the now-passing cycle N.
+    """
+    failed_before = {
+        cs["criterion"]: cs
+        for attempt in attempts_log_before
+        for cs in attempt.get("criteria_scores", [])
+        if cs.get("score", 5) < 3 and cs.get("criterion")
+    }
+    if not failed_before:
+        return
+
+    for criterion, cs in failed_before.items():
+        cause = cs.get("cause") or "model_error"
+        if cause == "missing_spec":
+            entry_type = "client_decision"
+            resolution = "client_answer_provided"
+        elif cause == "code_error":
+            entry_type = "deterministic_fix"
+            resolution = f"code_fix:{criterion}"
+        else:
+            entry_type = "scaffold_fix"
+            resolution = f"scaffold_fix:{criterion}"
+        _index_resolution_in_rag(agent_name, criterion, cause, resolution, entry_type)
+        _add_resolved_by_edges(agent_name, criterion, resolution)
 
 
 def _fix_entry_point(output_path: _Path, agent_name: str) -> None:

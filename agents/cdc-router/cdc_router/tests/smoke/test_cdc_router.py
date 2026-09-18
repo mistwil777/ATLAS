@@ -213,7 +213,6 @@ def test_enforce_exclusivity_reclassifies():
     }
 
     result = _enforce_exclusivity(blocs_with_conflict)
-    types = {b["agent_suggested"]: b["type"] for b in result["blocs"]}
     # Both blocs named OutputFormatter must now be ia (ia wins)
     for bloc in result["blocs"]:
         if bloc.get("agent_suggested") == "OutputFormatter":
