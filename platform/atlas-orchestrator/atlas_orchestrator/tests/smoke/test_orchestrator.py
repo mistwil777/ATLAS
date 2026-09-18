@@ -371,10 +371,12 @@ def test_run_store_receives_pending_questions_on_high_gap(tmp_path):
     run_id = report.get("run_id")
     assert run_id is not None
 
-    from atlas_memory.run_store import RunStore
+    # Read run file directly — avoids importing atlas-memory (not installed in this CI job)
+    import json as _json
 
-    store = RunStore(tmp_path)
-    run = store.get_run(run_id)
+    run_file = tmp_path / f"{run_id}.json"
+    assert run_file.exists(), f"Run file not found: {run_file}"
+    run = _json.loads(run_file.read_text())
     assert run["status"] == "waiting_for_client"
     assert len(run["pending_questions"]) == 1
     assert run["pending_agent"] == "cdc-router"
