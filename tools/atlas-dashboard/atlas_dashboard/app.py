@@ -434,6 +434,85 @@ def _llm_fn_for_dashboard():
         raise HTTPException(status_code=500, detail=f"LLM not configured: {exc}") from exc
 
 
+def _build_consolidated_context(
+    agent_name: str,
+    attempts_log: list[dict],
+    client_answers: dict | None = None,
+) -> dict:
+    """Build a structured failure summary from scaffold attempts history.
+
+    Replaces raw cr_context string concatenation with a deduplicated, cause-classified dict.
+    client_answers is for Step 4 (waiting_for_client) — included now with default {}.
+    """
+    client_answers = client_answers or {}
+    history: dict[str, dict] = {}
+
+    for attempt_entry in attempts_log:
+        for cs in attempt_entry.get("criteria_scores", []):
+            name = cs.get("criterion", "")
+            score = cs.get("score", 5)
+            cause = cs.get("cause")
+            if not name or score >= 4:
+                continue
+            if name not in history:
+                history[name] = {"occurrences": 0, "last_score": score, "last_cause": cause}
+            history[name]["occurrences"] += 1
+            history[name]["last_score"] = score
+            if cause is not None:
+                history[name]["last_cause"] = cause
+
+    open_issues = [
+        {
+            "criterion": name,
+            "cause": data["last_cause"],
+            "occurrences": data["occurrences"],
+            "last_score": data["last_score"],
+        }
+        for name, data in history.items()
+    ]
+
+    return {
+        "agent_name": agent_name,
+        "client_answers": client_answers,
+        "open_issues": open_issues,
+        "failed_criteria_history": history,
+    }
+
+
+def _format_consolidated_context_for_prompt(ctx: dict) -> str:
+    """Format a consolidated context dict as a clean prompt section (no raw accumulation)."""
+    lines: list[str] = []
+    open_issues = ctx.get("open_issues", [])
+    if not open_issues and not ctx.get("client_answers"):
+        return ""
+
+    fixable = [i for i in open_issues if i.get("cause") in ("model_error", "code_error", None)]
+    missing = [i for i in open_issues if i.get("cause") == "missing_spec"]
+
+    if fixable:
+        lines.append("# Criteria to fix (repeated failures — must address):")
+        for issue in fixable:
+            n = issue["occurrences"]
+            lines.append(f"- {issue['criterion']} (failed {n}x, last score={issue['last_score']})")
+
+    if missing:
+        if lines:
+            lines.append("")
+        lines.append("# Behaviors not specified in the CDC — apply a reasonable default:")
+        for issue in missing:
+            lines.append(f"- {issue['criterion']}")
+
+    client_answers = ctx.get("client_answers", {})
+    if client_answers:
+        if lines:
+            lines.append("")
+        lines.append("# Client decisions (authoritative — apply exactly):")
+        for criterion, answer in client_answers.items():
+            lines.append(f"- {criterion}: {answer}")
+
+    return "\n".join(lines)
+
+
 def _run_scaffold_cycle(
     cr_context: str,
     cdc_full: str,
@@ -459,16 +538,10 @@ def _run_scaffold_cycle(
     for attempt in range(1, max_attempts + 1):
         constraints = cr_context
         if attempts_log:
-            lines = [
-                f"- {cs['criterion']}: {cs.get('comment', '')}"
-                for a in attempts_log
-                for cs in a.get("criteria_scores", [])
-                if cs.get("score", 5) < 4
-            ]
-            if lines:
-                constraints += "\n\n# Constraints from previous attempts — must fix:\n" + "\n".join(
-                    lines
-                )
+            ctx = _build_consolidated_context(agent_name, attempts_log)
+            formatted = _format_consolidated_context_for_prompt(ctx)
+            if formatted:
+                constraints += "\n\n" + formatted
 
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".md", delete=False, encoding="utf-8"
