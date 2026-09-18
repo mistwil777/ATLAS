@@ -129,7 +129,7 @@ class AgentForgeAgent:
         yield self._info("Extracting parameters from spec via LLM...")
 
         prompt = SPEC_EXTRACTION.format(spec_content=content)
-        raw = self._llm(prompt, self.llm_cfg, 512)
+        raw = self._llm(prompt, self.llm_cfg, 1024)
         if not raw:
             yield self._error("LLM returned no output for spec extraction")
             return None
