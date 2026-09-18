@@ -22,21 +22,23 @@ def orchestrate(
     run_store_dir: Path | None = None,
     project_dir: str | None = None,
     project_owner: str = "client",
+    cdc_router_cls: type | None = None,
 ) -> dict | None:
     """Run the full orchestration flow and return the raw report dict.
 
     Args:
-        cdc_text:       CDC content as plain text.
-        llm_fn:         LLM callable (prompt, cfg, max_tokens) -> str | None.
-        llm_cfg:        LLM config dict.
-        memory_path:    Optional path for atlas-memory storage.
-        bus_fn:         Optional injectable Bus factory for tests (returns Bus instance).
-        judge_fn:       Optional injectable AtlasJudgeAgent factory for tests.
-        run_store_dir:  Directory for HITL run persistence (default: ~/.atlas/runs).
+        cdc_text:        CDC content as plain text.
+        llm_fn:          LLM callable (prompt, cfg, max_tokens) -> str | None.
+        llm_cfg:         LLM config dict.
+        memory_path:     Optional path for atlas-memory storage.
+        bus_fn:          Optional injectable Bus factory for tests (returns Bus instance).
+        judge_fn:        Optional injectable AtlasJudgeAgent factory for tests.
+        run_store_dir:   Directory for HITL run persistence (default: ~/.atlas/runs).
+        cdc_router_cls:  Optional injectable CdcRouterAgent class for tests.
     """
     from atlas_orchestrator.report import build_report  # noqa: PLC0415
 
-    routing_summary = _segment(cdc_text, llm_fn, llm_cfg, memory_path)
+    routing_summary = _segment(cdc_text, llm_fn, llm_cfg, memory_path, cdc_router_cls)
     if routing_summary is None:
         return None
 
@@ -49,6 +51,11 @@ def orchestrate(
         len(requires_creation),
         len(requires_tools),
     )
+
+    cdc_gaps = routing_summary.get("cdc_gaps", [])
+    if cdc_gaps:
+        high = [g for g in cdc_gaps if g.get("impact") == "high"]
+        _log.info("CDC gaps detected: %d total, %d high-impact", len(cdc_gaps), len(high))
 
     run_store = _get_run_store(run_store_dir)
     run_id = (
@@ -67,6 +74,29 @@ def orchestrate(
         run_store.set_requires_creation(run_id, requires_creation)
     if run_store and run_id and requires_tools:
         run_store.set_requires_tools(run_id, requires_tools)
+
+    # If high-impact CDC gaps found — suspend and ask client before scaffold
+    if run_store and run_id and cdc_gaps:
+        high_gaps = [g for g in cdc_gaps if g.get("impact") == "high"]
+        if high_gaps:
+            questions = _gaps_to_questions(high_gaps)
+            run_store.set_pending_questions(run_id, "cdc-router", questions)
+            _log.warning(
+                "Run %s suspended — %d high-impact CDC gap(s) require client input",
+                run_id,
+                len(high_gaps),
+            )
+            report = build_report(
+                cdc_path=routing_summary.get("cdc_path", "inline"),
+                routing_summary=routing_summary,
+                bloc_results=[],
+            )
+            if report is not None:
+                report["run_id"] = run_id
+                report["status"] = "waiting_for_client"
+                report["pending_questions"] = questions
+                report["requires_review"] = False
+            return report
 
     if os.environ.get("ATLAS_MODE", "saas") != "airgap":
         try:
@@ -130,18 +160,22 @@ def _segment(
     llm_fn: Callable,
     llm_cfg: dict,
     memory_path: Path | None,
+    cdc_router_cls: type | None = None,
 ) -> dict | None:
-    try:
-        from cdc_router.agent import CdcRouterAgent  # noqa: PLC0415
-    except ImportError:
-        _log.error("cdc-router not installed — pip install cdc-router")
-        return None
+    if cdc_router_cls is None:
+        try:
+            from cdc_router.agent import CdcRouterAgent  # noqa: PLC0415
+
+            cdc_router_cls = CdcRouterAgent
+        except ImportError:
+            _log.error("cdc-router not installed — pip install cdc-router")
+            return None
 
     kwargs: dict = {"llm_fn": llm_fn, "config": {"llm": llm_cfg}}
     if memory_path:
         kwargs["memory_storage_path"] = memory_path
 
-    agent = CdcRouterAgent(**kwargs)
+    agent = cdc_router_cls(**kwargs)
     events = list(agent.run(cdc_text=cdc_text))
     for e in events:
         if e.get("level") == "error":
@@ -291,6 +325,34 @@ def _extract_output(summary: dict) -> str:
         if val:
             return str(val)
     return str(summary)
+
+
+def _gaps_to_questions(gaps: list[dict]) -> list[dict]:
+    """Convert CDC gap dicts to pending-question format compatible with run_store."""
+    import datetime  # noqa: PLC0415
+
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    questions = []
+    for i, gap in enumerate(gaps):
+        desc = gap.get("description", "")
+        bloc = gap.get("bloc_concerned", "")
+        context = f" (bloc : {bloc})" if bloc else ""
+        questions.append(
+            {
+                "id": f"q_{i + 1:03d}",
+                "agent": "cdc-router",
+                "criterion": f"cdc_gap_{i + 1}",
+                "question": f"{desc}{context}",
+                "question_type": "text",
+                "hint": "",
+                "options": [],
+                "cause": "missing_spec",
+                "gap_type": gap.get("type", "missing"),
+                "impact": gap.get("impact", "high"),
+                "created_at": now,
+            }
+        )
+    return questions
 
 
 def _get_run_store(run_store_dir: Path | None) -> object:

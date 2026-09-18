@@ -266,3 +266,115 @@ def test_check_dependencies():
     # boto3 is installed in dev deps
     boto3_missing = [m for m in result["missing"] if m["primary"]["import"] == "boto3"]
     assert len(boto3_missing) == 0
+
+
+# ── CDC gap → waiting_for_client tests ───────────────────────────────────────
+
+_HIGH_GAP = {
+    "type": "missing",
+    "description": "Langue de sortie non spécifiée — français ou anglais ?",
+    "bloc_concerned": "Classifier les tickets",
+    "impact": "high",
+}
+
+_LOW_GAP = {
+    "type": "vague",
+    "description": "Performance acceptable non définie",
+    "bloc_concerned": "",
+    "impact": "low",
+}
+
+_ROUTING_WITH_GAPS = {
+    **_ROUTING_SUMMARY,
+    "cdc_gaps": [_HIGH_GAP, _LOW_GAP],
+}
+
+_ROUTING_WITH_LOW_GAPS_ONLY = {
+    **_ROUTING_SUMMARY,
+    "cdc_gaps": [_LOW_GAP],
+}
+
+
+def test_orchestrate_suspends_on_high_impact_gaps(tmp_path):
+    """High-impact gaps must suspend the run (waiting_for_client) before scaffold."""
+    report = orchestrate(
+        cdc_text=_CDC_TEXT,
+        llm_fn=lambda p, c, t: "",
+        llm_cfg={},
+        run_store_dir=tmp_path,
+        bus_fn=_make_mock_bus(),
+        judge_fn=_make_mock_judge(),
+        cdc_router_cls=_make_mock_cdc_router(_ROUTING_WITH_GAPS),
+    )
+    assert report is not None
+    assert report.get("status") == "waiting_for_client"
+    assert len(report.get("pending_questions", [])) == 1  # only the high-impact gap
+
+
+def test_orchestrate_no_suspension_on_low_gaps_only(tmp_path):
+    """Low-impact gaps alone must NOT suspend the run."""
+    report = orchestrate(
+        cdc_text=_CDC_TEXT,
+        llm_fn=lambda p, c, t: "",
+        llm_cfg={},
+        run_store_dir=tmp_path,
+        bus_fn=_make_mock_bus(),
+        judge_fn=_make_mock_judge(),
+        cdc_router_cls=_make_mock_cdc_router(_ROUTING_WITH_LOW_GAPS_ONLY),
+    )
+    assert report is not None
+    assert report.get("status") != "waiting_for_client"
+
+
+def test_orchestrate_no_suspension_when_no_gaps(tmp_path):
+    """No gaps → run proceeds normally."""
+    report = orchestrate(
+        cdc_text=_CDC_TEXT,
+        llm_fn=lambda p, c, t: "",
+        llm_cfg={},
+        run_store_dir=tmp_path,
+        bus_fn=_make_mock_bus(),
+        judge_fn=_make_mock_judge(),
+        cdc_router_cls=_make_mock_cdc_router(_ROUTING_SUMMARY),
+    )
+    assert report is not None
+    assert report.get("status") != "waiting_for_client"
+
+
+def test_gaps_to_questions_converts_correctly():
+    from atlas_orchestrator.pipeline import _gaps_to_questions
+
+    gaps = [_HIGH_GAP, _LOW_GAP]
+    questions = _gaps_to_questions(gaps)
+    assert len(questions) == 2
+    assert questions[0]["id"] == "q_001"
+    assert questions[0]["cause"] == "missing_spec"
+    assert questions[0]["impact"] == "high"
+    assert questions[0]["gap_type"] == "missing"
+    assert "Classifier les tickets" in questions[0]["question"]
+    assert questions[0]["question_type"] == "text"
+    assert questions[1]["id"] == "q_002"
+
+
+def test_run_store_receives_pending_questions_on_high_gap(tmp_path):
+    """set_pending_questions must be called with the high-impact gap questions."""
+    report = orchestrate(
+        cdc_text=_CDC_TEXT,
+        llm_fn=lambda p, c, t: "",
+        llm_cfg={},
+        run_store_dir=tmp_path,
+        bus_fn=_make_mock_bus(),
+        judge_fn=_make_mock_judge(),
+        cdc_router_cls=_make_mock_cdc_router(_ROUTING_WITH_GAPS),
+    )
+    assert report is not None
+    run_id = report.get("run_id")
+    assert run_id is not None
+
+    from atlas_memory.run_store import RunStore
+
+    store = RunStore(tmp_path)
+    run = store.get_run(run_id)
+    assert run["status"] == "waiting_for_client"
+    assert len(run["pending_questions"]) == 1
+    assert run["pending_agent"] == "cdc-router"
