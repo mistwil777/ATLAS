@@ -513,6 +513,119 @@ def _format_consolidated_context_for_prompt(ctx: dict) -> str:
     return "\n".join(lines)
 
 
+_GENERATE_QUESTIONS_PROMPT = """\
+Tu es un assistant de projet IA. Un agent nommé '{agent_name}' a été construit pour ce projet, \
+mais certains comportements ne sont pas spécifiés dans le cahier des charges.
+
+Avant de finaliser cet agent, formule des questions précises pour le client.
+
+## Critères non spécifiés ({n_issues})
+{issues_block}
+
+## Extrait du cahier des charges
+{cdc_excerpt}
+
+## Règles de formulation
+- Formule des questions qui montrent ta compréhension du projet, pas ton ignorance
+- N'utilise jamais : "manquant", "non spécifié", "information manquante", "missing_spec"
+- Chaque question doit être autonome et compréhensible sans contexte technique
+- Choisis question_type selon la nature du critère :
+  "text"            → réponse libre (valeurs métier, libellés, règles)
+  "single_choice"   → choix unique parmi 2-4 options
+  "multiple_choice" → sélection multiple parmi des options
+- hint : exemple concret ou liste des options si question_type != "text"
+- Maximum {max_questions} questions, priorisées par impact sur le comportement de l'agent
+- Pour single_choice et multiple_choice, inclure le champ "options" avec la liste
+
+## Format — JSON strict, tableau, aucun texte avant/après
+[
+  {{
+    "criterion": "<nom du critère>",
+    "question": "<question client-facing>",
+    "question_type": "text"|"single_choice"|"multiple_choice",
+    "hint": "<exemple ou liste d'options>",
+    "options": ["<option1>", "<option2>"]
+  }}
+]
+"""
+
+
+def _generate_questions(
+    missing_spec_issues: list[dict],
+    agent_name: str,
+    cdc_text: str,
+    llm_fn,
+    llm_cfg: dict,
+    max_questions: int = 3,
+) -> list[dict]:
+    """Generate structured client questions for missing_spec criteria.
+
+    Returns list of question dicts with id, question_type and hint (max max_questions).
+    """
+    import json as _json  # noqa: PLC0415
+    import logging as _logging  # noqa: PLC0415
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    if not missing_spec_issues:
+        return []
+
+    issues = missing_spec_issues[:max_questions]
+    issues_block = "\n".join(
+        f"- {i['criterion']} (failed {i.get('occurrences', 1)}x)" for i in issues
+    )
+    prompt = _GENERATE_QUESTIONS_PROMPT.format(
+        agent_name=agent_name,
+        n_issues=len(issues),
+        issues_block=issues_block,
+        cdc_excerpt=cdc_text[:600],
+        max_questions=max_questions,
+    )
+
+    raw = llm_fn(prompt, llm_cfg, 1024)
+    if not raw:
+        return []
+
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1]
+    if raw.endswith("```"):
+        raw = raw.rsplit("```", 1)[0]
+    raw = raw.strip()
+    start = raw.find("[")
+    end = raw.rfind("]") + 1
+    if start == -1 or end <= 0:
+        return []
+
+    try:
+        questions_raw = _json.loads(raw[start:end])
+    except _json.JSONDecodeError:
+        _logging.getLogger("atlas_dashboard").warning("_generate_questions: JSON parse failed")
+        return []
+
+    now = datetime.now(timezone.utc).isoformat()
+    questions = []
+    for i, q in enumerate(questions_raw[:max_questions]):
+        criterion = q.get("criterion", "")
+        question = q.get("question", "")
+        if not criterion or not question:
+            continue
+        questions.append(
+            {
+                "id": f"q_{i + 1:03d}",
+                "agent": agent_name,
+                "criterion": criterion,
+                "question": question,
+                "question_type": q.get("question_type", "text"),
+                "hint": q.get("hint", ""),
+                "options": q.get("options", []),
+                "cause": "missing_spec",
+                "created_at": now,
+            }
+        )
+
+    return questions
+
+
 def _run_scaffold_cycle(
     cr_context: str,
     cdc_full: str,
