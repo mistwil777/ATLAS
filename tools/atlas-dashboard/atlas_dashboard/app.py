@@ -161,6 +161,51 @@ def api_reject(run_id: str):
     return {"status": "rejected"}
 
 
+def _resume_pipeline_with_answers(
+    run_id: str,
+    run: dict,
+    criterion_answers: dict,
+    store,
+) -> dict:
+    """Re-run orchestrate() with the CDC enriched by client answers (CDC-gap flow)."""
+    try:
+        from atlas_orchestrator.pipeline import orchestrate  # noqa: PLC0415
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail="atlas-orchestrator not installed") from exc
+
+    cdc_full = run.get("metadata", {}).get("cdc_full", "")
+    if not cdc_full:
+        raise HTTPException(status_code=400, detail="No CDC text stored for this run")
+
+    # Append answers as clarifications at the end of the CDC
+    answers_block = "\n\n## Précisions apportées par le client\n" + "\n".join(
+        f"- {criterion}: {answer}" for criterion, answer in criterion_answers.items()
+    )
+    enriched_cdc = cdc_full + answers_block
+
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+    store_dir = _Path(os.environ.get("ATLAS_RUN_STORE_DIR", str(_DEFAULT_RUN_STORE_DIR)))
+
+    meta = run.get("metadata", {})
+    report = orchestrate(
+        cdc_text=enriched_cdc,
+        llm_fn=llm_fn,
+        llm_cfg=llm_cfg,
+        run_store_dir=store_dir,
+        project_dir=meta.get("project_dir", ""),
+        project_owner=meta.get("project_owner", "client"),
+    )
+    if report is None:
+        raise HTTPException(status_code=500, detail="Orchestration failed after client answers")
+
+    return {
+        "status": "resumed",
+        "new_run_id": report.get("run_id"),
+        "pending_questions": report.get("pending_questions", []),
+        "run_status": report.get("status", "pending"),
+    }
+
+
 @app.post("/api/runs/{run_id}/answer")
 def api_answer(run_id: str, body: AnswerRequest):
     """Receive client answers for a waiting_for_client run and resume scaffold."""
@@ -182,6 +227,10 @@ def api_answer(run_id: str, body: AnswerRequest):
     agent_name = run.get("pending_agent", "")
     if not agent_name:
         raise HTTPException(status_code=400, detail="No pending agent found in run")
+
+    # CDC-gap flow: gaps came from cdc-router pass 0 — re-run pipeline with enriched CDC
+    if agent_name == "cdc-router":
+        return _resume_pipeline_with_answers(run_id, run, criterion_answers, store)
 
     agent_state = run.get("agent_state", {}).get(agent_name, {})
     saved_cr_context = agent_state.get("cr_context", "")
