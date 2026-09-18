@@ -1385,6 +1385,35 @@ def _judge_scaffold(
                 "Judge scaffold: agent execution failed for %s: %s", agent_name, exc
             )
 
+        # Derive evaluation criteria from CDC when no criteria.py exists for this agent
+        module_slug = target_path.name.replace("-", "_")
+        derived_criteria: list[str] = []
+        try:
+            import importlib as _il  # noqa: PLC0415
+
+            mod_c = _il.import_module(f"{module_slug}.criteria")
+            derived_criteria = list(getattr(mod_c, "CRITERIA", {}).values())
+        except ImportError:
+            pass
+
+        if not derived_criteria:
+            _criteria_prompt = (
+                f"Based on this agent specification:\n{cdc_full[:1200]}\n\n"
+                "List 4 to 6 evaluation criteria for this agent's output. "
+                "Each criterion must be a single sentence starting with a verb "
+                "(e.g. 'Output must contain...', 'Response must be...', 'Agent must...'). "
+                "Return a JSON array of strings only, no explanation."
+            )
+            _raw_criteria = llm_fn(_criteria_prompt, llm_cfg, 300) or "[]"
+            try:
+                import json as _json  # noqa: PLC0415
+                import re as _re  # noqa: PLC0415
+
+                _m = _re.search(r"\[.*\]", _raw_criteria, _re.DOTALL)
+                derived_criteria = _json.loads(_m.group()) if _m else []
+            except Exception:  # noqa: BLE001
+                derived_criteria = []
+
         judge = AtlasJudgeAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
         events = list(
             judge.run(
@@ -1392,6 +1421,7 @@ def _judge_scaffold(
                 output=agent_output,
                 agent_name=agent_name,
                 context=cdc_full,
+                criteria=derived_criteria or None,
             )
         )
         summary = next((e for e in events if e.get("summary")), None)
