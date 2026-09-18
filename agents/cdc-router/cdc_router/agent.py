@@ -84,6 +84,19 @@ class CdcRouterAgent:
         if kg_graph.get("nodes"):
             yield self._info(f"KG: {len(kg_graph['nodes'])} agents in graph")
 
+        yield self._info("Pass 0: detecting CDC gaps...")
+        from cdc_router.gaps import detect_cdc_gaps  # noqa: PLC0415
+
+        gaps = detect_cdc_gaps(text, self._llm, self.llm_cfg, kg_graph=kg_graph)
+        if gaps:
+            high = [g for g in gaps if g.get("impact") == "high"]
+            yield self._info(
+                f"Pass 0: {len(gaps)} gap(s) detected"
+                + (f" ({len(high)} high-impact)" if high else "")
+            )
+        else:
+            yield self._info("Pass 0: no blocking gaps detected")
+
         yield self._info("Segmenting via LLM...")
         from cdc_router.segmenter import segment  # noqa: PLC0415
 
@@ -150,6 +163,7 @@ class CdcRouterAgent:
             "requires_tools": routing.get("requires_tools", []),
             "atlas_agents_reused": routing["atlas_agents_reused"],
             "atlas_tools_reused": routing.get("atlas_tools_reused", []),
+            "cdc_gaps": gaps,
         }
 
     def _load_cdc(self, cdc_text: str, cdc_path: str) -> str:

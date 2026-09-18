@@ -1,4 +1,41 @@
-"""Prompts for cdc-router LLM calls — three-pass architecture."""
+"""Prompts for cdc-router LLM calls — four-pass architecture (pass 0 + passes 1-2-3)."""
+
+# ── Passe 0 : détection des flous, manques et incohérences ───────────────────
+DETECT_GAPS_PROMPT = """\
+Tu es un architecte logiciel expert. Tu reçois un cahier des charges (CDC) et tu dois \
+identifier les points qui rendraient impossible une implémentation fiable.
+
+## CDC à analyser
+{cdc_text}
+
+## Types de problèmes à détecter
+
+**vague** : instruction présente mais non actionnable (trop ambiguë pour être testée)
+  Exemples : "gérer les cas limites", "performance acceptable", "interface conviviale"
+
+**missing** : information nécessaire à l'implémentation qui n'est pas dans le CDC
+  Exemples : langue de sortie non spécifiée, format de date non précisé, niveaux de priorité non définis
+
+**incoherent** : deux blocs ou contraintes qui se contredisent
+  Exemples : "répondre en moins de 100ms" mais "appeler 3 APIs externes synchrones"
+
+## Règles
+- Ne signale QUE les problèmes bloquants pour l'implémentation
+- Maximum 5 gaps — priorise par impact sur le scaffold
+- Sois précis : cite le bloc concerné ou la phrase exacte
+- Ne signale pas les choix stylistiques ou préférences — uniquement ce qui crée une ambiguïté fonctionnelle
+
+## Format — JSON strict, tableau, aucun texte avant/après
+[
+  {{
+    "type": "vague"|"missing"|"incoherent",
+    "description": "<description du problème — une phrase>",
+    "bloc_concerned": "<titre ou phrase du CDC concerné>",
+    "impact": "high"|"medium"|"low"
+  }}
+]
+Si aucun problème bloquant n'est détecté, retourne [] (tableau vide).
+"""
 
 # ── Passe 1 : segmentation fonctionnelle ─────────────────────────────────────
 SEGMENTATION_PROMPT = """\

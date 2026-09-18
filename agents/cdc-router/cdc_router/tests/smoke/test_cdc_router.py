@@ -344,6 +344,128 @@ def test_check_dependencies():
     assert result["untested_versions"] == []
 
 
+# ── pass 0 gap detection tests ───────────────────────────────────────────────
+
+_GAPS_RESPONSE = json.dumps(
+    [
+        {
+            "type": "missing",
+            "description": "Langue de sortie non spécifiée — français ou anglais ?",
+            "bloc_concerned": "Classifier les tickets de support",
+            "impact": "high",
+        },
+        {
+            "type": "vague",
+            "description": "'gérer les cas limites' n'est pas actionnable",
+            "bloc_concerned": "gérer les cas limites",
+            "impact": "medium",
+        },
+    ]
+)
+
+_NO_GAPS_RESPONSE = "[]"
+
+
+def _mock_llm_with_gaps(prompt: str, cfg: dict, max_tokens: int) -> str:
+    if (
+        "passe 0" in prompt.lower()
+        or "gaps" in prompt.lower()
+        or "vague" in prompt.lower()
+        or "missing" in prompt.lower()
+        or "incoherent" in prompt.lower()
+    ):
+        return _GAPS_RESPONSE
+    return _mock_llm_ok(prompt, cfg, max_tokens)
+
+
+def test_detect_cdc_gaps_returns_structured_list():
+    from cdc_router.gaps import detect_cdc_gaps
+
+    gaps = detect_cdc_gaps("CDC avec problèmes.", _mock_llm_with_gaps, {})
+    assert isinstance(gaps, list)
+    assert len(gaps) == 2
+    assert gaps[0]["type"] == "missing"
+    assert gaps[0]["impact"] == "high"
+    assert gaps[1]["type"] == "vague"
+
+
+def test_detect_cdc_gaps_empty_on_llm_failure():
+    from cdc_router.gaps import detect_cdc_gaps
+
+    gaps = detect_cdc_gaps("CDC.", lambda p, c, t: None, {})
+    assert gaps == []
+
+
+def test_detect_cdc_gaps_invalid_json_returns_empty():
+    from cdc_router.gaps import detect_cdc_gaps
+
+    gaps = detect_cdc_gaps("CDC.", lambda p, c, t: "not json", {})
+    assert gaps == []
+
+
+def test_detect_cdc_gaps_no_gaps():
+    from cdc_router.gaps import detect_cdc_gaps
+
+    gaps = detect_cdc_gaps("CDC complet.", lambda p, c, t: _NO_GAPS_RESPONSE, {})
+    assert gaps == []
+
+
+def test_filter_known_gaps_removes_resolved():
+    from cdc_router.gaps import _filter_known_gaps
+
+    gaps = [
+        {
+            "type": "missing",
+            "description": "Langue de sortie non spécifiée",
+            "bloc_concerned": "",
+            "impact": "high",
+        },
+        {
+            "type": "vague",
+            "description": "format de date ambigu",
+            "bloc_concerned": "",
+            "impact": "medium",
+        },
+    ]
+    kg_graph = {
+        "links": [
+            {
+                "relation": "RESOLVED_BY",
+                "source": "output_language",
+                "target": "client_answer_fr_labels",
+            }
+        ]
+    }
+    filtered = _filter_known_gaps(gaps, kg_graph)
+    assert len(filtered) == 2  # keywords "fr" "labels" don't match "date" → both kept
+
+
+def test_filter_known_gaps_no_kg_links():
+    from cdc_router.gaps import _filter_known_gaps
+
+    gaps = [
+        {
+            "type": "missing",
+            "description": "langue de sortie",
+            "bloc_concerned": "",
+            "impact": "high",
+        }
+    ]
+    filtered = _filter_known_gaps(gaps, {"links": []})
+    assert filtered == gaps
+
+
+def test_run_summary_includes_cdc_gaps():
+    from cdc_router.agent import CdcRouterAgent
+
+    agent = CdcRouterAgent(llm_fn=_mock_llm_with_gaps)
+    events = list(agent.run(cdc_text="Classifier les tickets. Gérer les cas limites."))
+    summary = next((e for e in events if e.get("summary")), None)
+    assert summary is not None
+    assert "cdc_gaps" in summary
+    assert isinstance(summary["cdc_gaps"], list)
+
+
 def test_prompts_contain_type_rules():
     from cdc_router.prompts import CLASSIFICATION_PROMPT
 
