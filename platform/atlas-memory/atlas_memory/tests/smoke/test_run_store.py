@@ -70,3 +70,48 @@ def test_invalid_decision(store: RunStore) -> None:
     run_id = store.create_run()
     with pytest.raises(ValueError):
         store.set_review_decision(run_id, "maybe")
+
+
+# ── waiting_for_client flow ───────────────────────────────────────────────────
+
+
+def test_set_pending_questions(store: RunStore) -> None:
+    run_id = store.create_run()
+    questions = [
+        {"id": "q_001", "agent": "MyAgent", "criterion": "output_language", "question": "Q?"}
+    ]
+    store.set_pending_questions(run_id, "MyAgent", questions)
+    run = store.get_run(run_id)
+    assert run["status"] == "waiting_for_client"
+    assert run["pending_agent"] == "MyAgent"
+    assert len(run["pending_questions"]) == 1
+    assert run["pending_questions"][0]["id"] == "q_001"
+
+
+def test_save_agent_state_merges(store: RunStore) -> None:
+    run_id = store.create_run()
+    store.save_agent_state(run_id, "MyAgent", {"cr_context": "ctx1", "attempts_log": []})
+    store.save_agent_state(run_id, "MyAgent", {"user_answers": ["yes"]})
+    run = store.get_run(run_id)
+    state = run["agent_state"]["MyAgent"]
+    assert state["cr_context"] == "ctx1"
+    assert state["user_answers"] == ["yes"]
+
+
+def test_set_client_answers_resumes(store: RunStore) -> None:
+    run_id = store.create_run()
+    store.set_pending_questions(run_id, "MyAgent", [])
+    assert store.get_run(run_id)["status"] == "waiting_for_client"
+    store.set_client_answers(run_id, {"output_language": "fr"})
+    run = store.get_run(run_id)
+    assert run["status"] == "scaffolding"
+    assert run["client_answers"]["output_language"] == "fr"
+
+
+def test_set_client_answers_accumulates(store: RunStore) -> None:
+    run_id = store.create_run()
+    store.set_client_answers(run_id, {"output_language": "fr"})
+    store.set_client_answers(run_id, {"priority_labels": "haute/normale"})
+    run = store.get_run(run_id)
+    assert run["client_answers"]["output_language"] == "fr"
+    assert run["client_answers"]["priority_labels"] == "haute/normale"

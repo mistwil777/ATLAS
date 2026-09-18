@@ -122,6 +122,41 @@ class RunStore:
         run.setdefault("scaffold_diagnosis", {})[agent_name] = diagnosis
         self._write(run_id, run)
 
+    def set_pending_questions(
+        self,
+        run_id: str,
+        agent_name: str,
+        questions: list[dict[str, Any]],
+    ) -> None:
+        """Store generated questions and set run status to waiting_for_client."""
+        run = self._read(run_id)
+        run["pending_questions"] = questions
+        run["pending_agent"] = agent_name
+        run["status"] = "waiting_for_client"
+        self._write(run_id, run)
+
+    def save_agent_state(
+        self,
+        run_id: str,
+        agent_name: str,
+        state: dict[str, Any],
+    ) -> None:
+        """Merge state into run['agent_state'][agent_name] (for scaffold resume)."""
+        run = self._read(run_id)
+        run.setdefault("agent_state", {}).setdefault(agent_name, {}).update(state)
+        self._write(run_id, run)
+
+    def set_client_answers(
+        self,
+        run_id: str,
+        answers: dict[str, str],
+    ) -> None:
+        """Store client answers keyed by criterion name and resume scaffolding."""
+        run = self._read(run_id)
+        run.setdefault("client_answers", {}).update(answers)
+        run["status"] = "scaffolding"
+        self._write(run_id, run)
+
     def set_review_decision(
         self,
         run_id: str,

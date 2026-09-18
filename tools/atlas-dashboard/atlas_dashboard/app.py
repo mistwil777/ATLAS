@@ -34,6 +34,10 @@ class ImproveRequest(BaseModel):
     run_id: str | None = None
 
 
+class AnswerRequest(BaseModel):
+    answers: dict[str, str]
+
+
 _DEFAULT_RUN_STORE_DIR = Path.home() / ".atlas" / "runs"
 
 app = FastAPI(title="ATLAS Dashboard", version="1.0.0")
@@ -155,6 +159,134 @@ def api_reject(run_id: str):
         raise HTTPException(status_code=404, detail="Run not found")
     store.set_review_decision(run_id, "rejected")
     return {"status": "rejected"}
+
+
+@app.post("/api/runs/{run_id}/answer")
+def api_answer(run_id: str, body: AnswerRequest):
+    """Receive client answers for a waiting_for_client run and resume scaffold."""
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.get("status") != "waiting_for_client":
+        raise HTTPException(status_code=400, detail="Run is not waiting for client answers")
+
+    # Map question ids to criterion names
+    pending_qs = {q["id"]: q["criterion"] for q in run.get("pending_questions", [])}
+    criterion_answers = {
+        pending_qs[qid]: ans for qid, ans in body.answers.items() if qid in pending_qs
+    }
+
+    store.set_client_answers(run_id, criterion_answers)
+
+    agent_name = run.get("pending_agent", "")
+    if not agent_name:
+        raise HTTPException(status_code=400, detail="No pending agent found in run")
+
+    agent_state = run.get("agent_state", {}).get(agent_name, {})
+    saved_cr_context = agent_state.get("cr_context", "")
+    saved_attempts_log = agent_state.get("attempts_log", [])
+    saved_user_answers = agent_state.get("user_answers", [])
+    saved_selected_patches = agent_state.get("selected_patches", [])
+
+    # Rebuild context with client answers injected
+    ctx = _build_consolidated_context(
+        agent_name, saved_attempts_log, client_answers=criterion_answers
+    )
+    formatted = _format_consolidated_context_for_prompt(ctx)
+    new_cr_context = saved_cr_context + ("\n\n" + formatted if formatted else "")
+
+    try:
+        from agent_forge.agent import AgentForgeAgent  # noqa: PLC0415
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail="agent-forge not installed") from exc
+
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+    cdc_full = run.get("metadata", {}).get(
+        "cdc_full", run.get("metadata", {}).get("cdc_preview", "")
+    )
+
+    import re as _re  # noqa: PLC0415
+
+    agent_slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
+    meta = run.get("metadata", {})
+    project_dir = meta.get("project_dir", "")
+    if meta.get("project_owner") == "capgemini" or not project_dir:
+        base_output_dir = _Path.home() / ".atlas" / "scaffolded"
+    else:
+        base_output_dir = _Path(project_dir) / "agents"
+
+    body_compat = ScaffoldRequest(
+        user_answers=saved_user_answers,
+        selected_patches=saved_selected_patches,
+    )
+
+    success, result, attempts_log2, last_output_path, last_spec, last_files = _run_scaffold_cycle(
+        cr_context=new_cr_context,
+        cdc_full=cdc_full,
+        agent_slug=agent_slug,
+        agent_name=agent_name,
+        run_id=run_id,
+        store=store,
+        base_output_dir=base_output_dir,
+        llm_fn=llm_fn,
+        llm_cfg=llm_cfg,
+        body=body_compat,
+        forge_cls=AgentForgeAgent,
+    )
+    if success:
+        result["resumed_from_client_answers"] = True  # type: ignore[index]
+        return result
+
+    # Still failing — try advisor then diagnose
+    all_attempts = saved_attempts_log + attempts_log2
+    advisor_actions = _run_improvement_advisor(agent_name, store)
+    if advisor_actions:
+        advisor_context = (
+            new_cr_context
+            + "\n\n# Improvement-advisor suggested actions:\n"
+            + "\n".join(f"- {a['action']}" for a in advisor_actions)
+        )
+        success3, result3, attempts_log3, last_output_path, last_spec, last_files = (
+            _run_scaffold_cycle(
+                cr_context=advisor_context,
+                cdc_full=cdc_full,
+                agent_slug=agent_slug,
+                agent_name=agent_name,
+                run_id=run_id,
+                store=store,
+                base_output_dir=base_output_dir,
+                llm_fn=llm_fn,
+                llm_cfg=llm_cfg,
+                body=body_compat,
+                forge_cls=AgentForgeAgent,
+            )
+        )
+        all_attempts.extend(attempts_log3)
+        if success3:
+            result3["advisor_used"] = True  # type: ignore[index]
+            result3["resumed_from_client_answers"] = True  # type: ignore[index]
+            return result3
+
+    diagnosis = _run_diagnose(all_attempts, agent_name, cdc_full, llm_fn, llm_cfg)
+    store.set_scaffold_result(
+        run_id,
+        agent_name,
+        last_output_path,
+        last_spec,
+        user_answers=saved_user_answers,
+        selected_patches=saved_selected_patches,
+        model_id=llm_cfg.get("model_id", ""),
+    )
+    store.set_scaffold_diagnosis(run_id, agent_name, diagnosis)
+    return {
+        "agent_name": agent_name,
+        "output_path": last_output_path,
+        "spec": last_spec,
+        "files": last_files,
+        "attempts": len(all_attempts),
+        "diagnosis": diagnosis,
+    }
 
 
 @app.delete("/api/runs/{run_id}")
@@ -878,7 +1010,32 @@ def api_scaffold(
     if success:
         return result  # type: ignore[return-value]
 
-    # Cycle 1 exhausted — call improvement-advisor before giving up
+    # Cycle 1 exhausted — check cause distribution before next action
+    ctx1 = _build_consolidated_context(agent_name, attempts_log)
+    missing_issues = [i for i in ctx1["open_issues"] if i.get("cause") == "missing_spec"]
+
+    if missing_issues:
+        # Suspend and ask client — only the client can resolve missing_spec
+        questions = _generate_questions(missing_issues, agent_name, cdc_full, llm_fn, llm_cfg)
+        if questions:
+            store.set_pending_questions(run_id, agent_name, questions)
+            store.save_agent_state(
+                run_id,
+                agent_name,
+                {
+                    "cr_context": cr_context,
+                    "attempts_log": attempts_log,
+                    "user_answers": body.user_answers,
+                    "selected_patches": body.selected_patches,
+                },
+            )
+            return {
+                "status": "waiting_for_client",
+                "agent_name": agent_name,
+                "pending_questions": questions,
+            }
+
+    # Only model_error/code_error — call improvement-advisor before giving up
     advisor_actions = _run_improvement_advisor(agent_name, store)
     if advisor_actions:
         advisor_context = (
