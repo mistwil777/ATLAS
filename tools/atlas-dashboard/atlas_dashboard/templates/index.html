@@ -713,7 +713,7 @@
       } else if (state === 'building') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Building…</span>`;
       } else if (state === 'built') {
-        const files = _toolState[key]?.files || {};
+        const files = _toolState[key]?.files || existing?.files || {};
         _agentFiles[`tool-${name}`] = files;
         const fns = _toolState[key]?.functions || existing?.functions || [];
         const fileNames = Object.keys(files);
