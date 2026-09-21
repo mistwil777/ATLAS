@@ -78,6 +78,7 @@ You are an expert software architect. You have a list of functional blocs to cla
 - Input is unstructured natural language (email, ticket, contract, free text)
 - Task requires semantic interpretation (classification, summarisation, extraction, intent)
 - Result is ambiguous or context-dependent — a deterministic function cannot produce it
+- Task requires iterating over its own outputs — the system must decide autonomously when to stop, retry, or escalate based on intermediate results
 
 **TOOL (type="tool")** if ALL of these (and NOT "ia"):
 - Fully deterministic: same input → same output, no LLM needed
