@@ -1242,11 +1242,12 @@
 
   async function bulkDeleteSkipped() {
     const runs = await fetch('/api/runs').then(r => r.json());
-    const TEST_PREVIEWS = ['Extraire les noms clients depuis les emails entrants.'];
     const toDelete = runs.filter(r => {
+      const hasWork = Object.keys(r.scaffolded || {}).length > 0 || Object.keys(r.tools_built || {}).length > 0;
+      if (hasWork) return false;
       const allSkipped = r.blocs && r.blocs.length > 0 && r.blocs.every(b => b.status === 'skipped');
-      const isTestFixture = TEST_PREVIEWS.some(p => (r.cdc_preview || '').startsWith(p));
-      return allSkipped || isTestFixture;
+      const noBlocs = !r.blocs || r.blocs.length === 0;
+      return allSkipped || noBlocs;
     });
     if (!toDelete.length) { alert('No debug runs to delete.'); return; }
     if (!confirm(`Delete ${toDelete.length} debug run(s)?`)) return;
