@@ -728,7 +728,7 @@
           </div>
           ${fileNames.length ? `<div class="scaffold-section" style="margin-top:10px">
             <div class="file-select-row">
-              <select onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
+              <select class="file-select" onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
               <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
             </div>
             <pre class="code-block" id="code-tool-${name}">${firstContent}</pre>
@@ -750,7 +750,7 @@
           </div>
           ${fileNames.length ? `<div class="scaffold-section" style="margin-top:10px">
             <div class="file-select-row">
-              <select onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
+              <select class="file-select" onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
               <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
             </div>
             <pre class="code-block" id="code-tool-${name}">${firstContent}</pre>
