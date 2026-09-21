@@ -15,7 +15,7 @@ from pathlib import Path
 from pathlib import Path as _Path
 
 from atlas_memory.run_store import RunStore
-from fastapi import Cookie, FastAPI, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Cookie, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -45,6 +45,9 @@ _store: RunStore | None = None
 
 # Session store: cookie_value → True (in-memory, single-process)
 _sessions: set[str] = set()
+
+# Background job tracking: "{run_id}:{agent_name}" → {"status": "running"|"done"|"error", "error": str}
+_bg_jobs: dict[str, dict] = {}
 
 
 def _token() -> str | None:
@@ -1082,11 +1085,23 @@ def _run_improvement_advisor(agent_name: str, store) -> list[dict]:
         return []
 
 
+def _do_scaffold(run_id: str, agent_name: str, body: ScaffoldRequest) -> None:
+    """Background worker — runs scaffold cycle and updates run store when done."""
+    job_key = f"{run_id}:{agent_name}"
+    _bg_jobs[job_key] = {"status": "running"}
+    try:
+        result = _scaffold_sync(run_id, agent_name, body)
+        _bg_jobs[job_key] = {"status": "done", "result": result}
+    except Exception as exc:  # noqa: BLE001
+        _bg_jobs[job_key] = {"status": "error", "error": str(exc)}
+
+
 @app.post("/api/runs/{run_id}/scaffold/{agent_name}")
 def api_scaffold(
     run_id: str,
     agent_name: str,
     body: ScaffoldRequest | None = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),  # noqa: B008
 ):
     store = get_store()
     run = store.get_run(run_id)
@@ -1100,12 +1115,14 @@ def api_scaffold(
         raise HTTPException(status_code=400, detail="No CDC text stored for this run")
 
     try:
-        from agent_forge.agent import AgentForgeAgent  # noqa: PLC0415
+        import importlib.util as _ilu  # noqa: PLC0415
+
+        if _ilu.find_spec("agent_forge") is None:
+            raise ImportError
     except ImportError as exc:
         raise HTTPException(status_code=500, detail="agent-forge not installed") from exc
 
     llm_fn, llm_cfg = _llm_fn_for_dashboard()
-
     _probe = llm_fn("Reply OK", llm_cfg, 8)
     if not _probe:
         raise HTTPException(
@@ -1113,7 +1130,29 @@ def api_scaffold(
             detail="LLM probe failed — check atlas.toml [llm] config and credentials",
         )
 
+    job_key = f"{run_id}:{agent_name}"
+    if _bg_jobs.get(job_key, {}).get("status") == "running":
+        return {"status": "scaffolding", "run_id": run_id, "agent_name": agent_name}
+
+    background_tasks.add_task(_do_scaffold, run_id, agent_name, body or ScaffoldRequest())
+    return {"status": "scaffolding", "run_id": run_id, "agent_name": agent_name}
+
+
+def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
+    """Synchronous scaffold logic — runs in a background thread."""
     import re as _re  # noqa: PLC0415
+
+    from agent_forge.agent import AgentForgeAgent  # noqa: PLC0415
+
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise ValueError(f"Run {run_id} not found")
+
+    cdc_full = run.get("metadata", {}).get(
+        "cdc_full", run.get("metadata", {}).get("cdc_preview", "")
+    )
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
 
     agent_slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
 
@@ -1126,7 +1165,6 @@ def api_scaffold(
         base_output_dir = _Path(project_dir) / "agents"
     base_output_dir.mkdir(parents=True, exist_ok=True)
 
-    body = body or ScaffoldRequest()
     cr_context = ""
     if body.user_answers:
         cr_context += "\n\n# User answers to diagnostic questions:\n" + "\n".join(
@@ -1159,12 +1197,11 @@ def api_scaffold(
     if success:
         return result  # type: ignore[return-value]
 
-    # Cycle 1 exhausted — check cause distribution before next action
+    # Cycle 1 exhausted — check cause distribution
     ctx1 = _build_consolidated_context(agent_name, attempts_log)
     missing_issues = [i for i in ctx1["open_issues"] if i.get("cause") == "missing_spec"]
 
     if missing_issues:
-        # Suspend and ask client — only the client can resolve missing_spec
         questions = _generate_questions(missing_issues, agent_name, cdc_full, llm_fn, llm_cfg)
         if questions:
             store.set_pending_questions(run_id, agent_name, questions)
@@ -1235,8 +1272,23 @@ def api_scaffold(
     }
 
 
+def _do_build_tool(run_id: str, tool_name: str) -> None:
+    """Background worker for tool building."""
+    job_key = f"{run_id}:tool:{tool_name}"
+    _bg_jobs[job_key] = {"status": "running"}
+    try:
+        result = _build_tool_sync(run_id, tool_name)
+        _bg_jobs[job_key] = {"status": "done", "result": result}
+    except Exception as exc:  # noqa: BLE001
+        _bg_jobs[job_key] = {"status": "error", "error": str(exc)}
+
+
 @app.post("/api/runs/{run_id}/build-tool/{tool_name}")
-def api_build_tool(run_id: str, tool_name: str):
+def api_build_tool(
+    run_id: str,
+    tool_name: str,
+    background_tasks: BackgroundTasks = BackgroundTasks(),  # noqa: B008
+):
     store = get_store()
     run = store.get_run(run_id)
     if run is None:
@@ -1245,15 +1297,32 @@ def api_build_tool(run_id: str, tool_name: str):
         raise HTTPException(
             status_code=400, detail=f"{tool_name} is not in requires_tools for this run"
         )
-
     try:
-        from tool_forge.agent import ToolForgeAgent  # noqa: PLC0415
+        import importlib.util as _ilu2  # noqa: PLC0415
+
+        if _ilu2.find_spec("tool_forge") is None:
+            raise ImportError
     except ImportError as exc:
         raise HTTPException(status_code=500, detail="tool-forge not installed") from exc
 
-    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+    job_key = f"{run_id}:tool:{tool_name}"
+    if _bg_jobs.get(job_key, {}).get("status") == "running":
+        return {"status": "building", "run_id": run_id, "tool_name": tool_name}
 
-    # Build spec from the matching bloc + CDC context
+    background_tasks.add_task(_do_build_tool, run_id, tool_name)
+    return {"status": "building", "run_id": run_id, "tool_name": tool_name}
+
+
+def _build_tool_sync(run_id: str, tool_name: str) -> dict:
+    """Synchronous tool build logic — runs in a background thread."""
+    from tool_forge.agent import ToolForgeAgent  # noqa: PLC0415
+
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise ValueError(f"Run {run_id} not found")
+
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
     cdc_full = run.get("metadata", {}).get("cdc_full", "")
     tool_bloc = next(
         (
@@ -1287,7 +1356,7 @@ def api_build_tool(run_id: str, tool_name: str):
     summary = next((e for e in events if e.get("summary")), None)
     if summary is None:
         errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
-        raise HTTPException(status_code=500, detail=f"Tool generation failed: {errors}")
+        raise ValueError(f"Tool generation failed: {errors}")
 
     store.set_tool_result(run_id, tool_name, summary["output_path"], summary)
     _index_tool_in_rag(tool_name, spec_text, summary)
@@ -1306,8 +1375,8 @@ def api_build_tool(run_id: str, tool_name: str):
     return {
         "tool_name": tool_name,
         "output_path": summary["output_path"],
-        "module_name": summary["module_name"],
-        "functions": summary["functions"],
+        "module_name": summary.get("module_name", ""),
+        "functions": summary.get("functions", []),
         "files": files,
     }
 

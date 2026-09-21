@@ -768,15 +768,32 @@
         const err = await res.json();
         alert('Build failed: ' + (err.detail || JSON.stringify(err)));
         _toolState[key] = { state: 'pending' };
-      } else {
-        const data = await res.json();
-        _toolState[key] = { state: 'built', files: data.files, functions: data.functions, outputPath: data.output_path };
+        await showRun(runId);
+        return;
       }
+      // Background task — poll until tools_built updated
+      for (let i = 0; i < 120; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const r = await fetch(`/api/runs/${runId}`);
+          if (!r.ok) continue;
+          const run = await r.json();
+          const tb = (run.tools_built || {})[toolName];
+          if (tb) {
+            _toolState[key] = { state: 'built', files: tb.files || {}, functions: tb.functions || [], outputPath: tb.output_path || '' };
+            await showRun(runId);
+            return;
+          }
+        } catch(_) {}
+      }
+      _toolState[key] = { state: 'pending' };
+      alert('Build timeout');
+      await showRun(runId);
     } catch(e) {
       alert('Build error: ' + e.message);
       _toolState[key] = { state: 'pending' };
+      await showRun(runId);
     }
-    await showRun(runId);
   }
 
   // ── Agents to Create ─────────────────────────────────────────────────────────
@@ -925,19 +942,15 @@
         const err = await res.json();
         alert('Retry failed: ' + (err.detail || JSON.stringify(err)));
         _scaffoldState[key] = { state: 'diagnosis', diagnosis: _scaffoldState[key]?.diagnosis || {} };
-      } else {
-        const data = await res.json();
-        if (data.diagnosis) {
-          _scaffoldState[key] = { state: 'diagnosis', diagnosis: data.diagnosis };
-        } else {
-          _scaffoldState[key] = { state: 'scaffolded', files: data.files, outputPath: data.output_path };
-        }
+        await showRun(runId);
+        return;
       }
+      await _pollScaffold(runId, agent, key);
     } catch(e) {
       alert('Retry error: ' + e.message);
       _scaffoldState[key] = { state: 'diagnosis', diagnosis: _scaffoldState[key]?.diagnosis || {} };
+      await showRun(runId);
     }
-    await showRun(runId);
   }
 
   function escHtml(s) {
@@ -959,18 +972,45 @@
         const err = await res.json();
         alert('Scaffold failed: ' + (err.detail || JSON.stringify(err)));
         _scaffoldState[key] = { state: 'pending' };
-      } else {
-        const data = await res.json();
-        if (data.diagnosis) {
-          _scaffoldState[key] = { state: 'diagnosis', diagnosis: data.diagnosis };
-        } else {
-          _scaffoldState[key] = { state: 'scaffolded', files: data.files, outputPath: data.output_path };
-        }
+        await showRun(runId);
+        return;
       }
+      // Background task started — poll until run store updated
+      await _pollScaffold(runId, agentName, key);
     } catch(e) {
       alert('Scaffold error: ' + e.message);
       _scaffoldState[key] = { state: 'pending' };
+      await showRun(runId);
     }
+  }
+
+  async function _pollScaffold(runId, agentName, key) {
+    for (let i = 0; i < 120; i++) {  // max 6 min
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        const r = await fetch(`/api/runs/${runId}`);
+        if (!r.ok) continue;
+        const run = await r.json();
+        const scaffolded = run.scaffolded || {};
+        const diag = (run.scaffold_diagnosis || {})[agentName];
+        if (scaffolded[agentName]) {
+          const s = scaffolded[agentName];
+          _scaffoldState[key] = { state: diag ? 'diagnosis' : 'scaffolded',
+            files: s.spec?.files || {}, outputPath: s.output_path || '', diagnosis: diag };
+          await showRun(runId);
+          return;
+        }
+        // waiting_for_client set by background task
+        if (run.status === 'waiting_for_client' && run.pending_agent === agentName) {
+          _scaffoldState[key] = { state: 'pending' };
+          await showRun(runId);
+          return;
+        }
+      } catch(_) {}
+    }
+    // Timeout
+    _scaffoldState[key] = { state: 'pending' };
+    alert('Scaffold timeout — le serveur n\'a pas répondu en 6 minutes');
     await showRun(runId);
   }
 
@@ -1512,12 +1552,16 @@
       } else {
         document.getElementById('adv-custom-input').value = '';
         document.getElementById('advisor-panel').style.display = 'none';
-        await loadRuns(currentFilter);
         const targetRunId = data.run_id || _lastRunId;
+        const key = _stateKey(targetRunId, agent);
+        _scaffoldState[key] = { state: 'scaffolding' };
+        await loadRuns(currentFilter);
         if (targetRunId) {
           showTabRuns();
           await showRun(targetRunId);
         }
+        btn.textContent = 'Scaffolding…';
+        await _pollScaffold(targetRunId, agent, key);
         loadTrend(agent);
       }
     } finally {
