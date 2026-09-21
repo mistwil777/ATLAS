@@ -194,6 +194,7 @@ def _resume_pipeline_with_answers(
         run_store_dir=store_dir,
         project_dir=meta.get("project_dir", ""),
         project_owner=meta.get("project_owner", "client"),
+        skip_gap_criteria=list(criterion_answers.keys()),
     )
     if report is None:
         raise HTTPException(status_code=500, detail="Orchestration failed after client answers")
@@ -217,9 +218,16 @@ def _resume_pipeline_with_answers(
                 )
                 _add_resolved_by_edges("cdc-router", criterion, resolution_key)
 
+    new_run_id = report.get("run_id")
+    if new_run_id:
+        import contextlib as _cl  # noqa: PLC0415
+
+        with _cl.suppress(Exception):
+            store.mark_resumed(run_id, new_run_id)
+
     return {
         "status": "resumed",
-        "new_run_id": report.get("run_id"),
+        "new_run_id": new_run_id,
         "pending_questions": new_pending,
         "run_status": report.get("status", "pending"),
     }
@@ -1373,13 +1381,19 @@ def _judge_scaffold(
                 except ImportError:
                     continue
 
-            class_name = next(
-                (k for k in dir(mod) if k.endswith("Agent") and not k.startswith("_")),
-                None,
-            ) if mod else None
+            class_name = (
+                next(
+                    (k for k in dir(mod) if k.endswith("Agent") and not k.startswith("_")),
+                    None,
+                )
+                if mod
+                else None
+            )
 
             if class_name and mod:
-                agent_instance = getattr(mod, class_name)(llm_fn=llm_fn, config={"llm": llm_cfg}, llm_cfg=llm_cfg)
+                agent_instance = getattr(mod, class_name)(
+                    llm_fn=llm_fn, config={"llm": llm_cfg}, llm_cfg=llm_cfg
+                )
                 output_events = list(agent_instance.run(cdc_bloc=test_input, context=cdc_full))
                 agent_output = " ".join(
                     str(e.get("output", e.get("summary", e.get("msg", ""))))
@@ -1447,6 +1461,32 @@ def _judge_scaffold(
                 if isinstance(c.get("score"), int | float)
             ]
             score_val = sum(scores) / len(scores) if scores else None
+
+        # Enrich feedback with explicit patch targets for low-score criteria
+        patch_hints: list[str] = []
+        for c in criteria_scores:
+            if isinstance(c.get("score"), int | float) and c["score"] < 3:
+                cr_text = c.get("criterion", "")
+                fb_text = c.get("feedback", "")
+                if cr_text:
+                    hint = f"PATCH TARGET — criterion '{cr_text}': {fb_text}"
+                    if "prompts.py" not in hint and any(
+                        kw in (cr_text + fb_text).lower()
+                        for kw in (
+                            "label",
+                            "level",
+                            "priority",
+                            "langue",
+                            "language",
+                            "format",
+                            "output",
+                        )
+                    ):
+                        hint += " — Fix in: prompts.py (system prompt / output format)"
+                    patch_hints.append(hint)
+        if patch_hints:
+            feedback = feedback + "\n\n" + "\n".join(patch_hints)
+
         return score_val, criteria_scores, feedback
 
     except Exception as exc:  # noqa: BLE001

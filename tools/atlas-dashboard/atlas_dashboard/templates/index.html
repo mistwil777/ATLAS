@@ -68,6 +68,7 @@
     .badge-skipped           { background: #1a1a1a; color: var(--ink-dim); border: 1px solid var(--border); }
     .badge-waiting_for_client{ background: #1a1230; color: var(--blue);   border: 1px solid var(--blue); }
     .badge-scaffolding       { background: #1a1230; color: var(--violet); border: 1px solid var(--violet); }
+    .badge-resumed           { background: #141a14; color: #6a9f6a;       border: 1px solid #6a9f6a; opacity: 0.6; }
 
     /* ── Waiting panel ── */
     .waiting-panel { background: #0d1220; border: 1px solid var(--blue); border-radius: 6px; padding: 16px 20px; margin-bottom: 18px; }
@@ -438,6 +439,7 @@
     const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
     const isPending = run.status === 'pending';
     const isWaiting = run.status === 'waiting_for_client';
+    const isResumed = run.status === 'resumed';
     const statusLabel = isWaiting ? 'En attente de validation' : run.status;
     document.getElementById('detail').innerHTML = `
       <h2>Run ${run.run_id}</h2>
@@ -445,6 +447,7 @@
         <span class="badge badge-${run.status}">${statusLabel}</span>
         ${run.requires_review && !isWaiting ? '<span class="badge badge-review">requires review</span>' : ''}
         <span style="color:var(--ink-dim);font-size:11px">${fmtDate(run.created_at)}</span>
+        ${isResumed && run.resumed_as ? `<span style="font-size:11px;color:#6a9f6a">→ <a href="#" onclick="showRun('${run.resumed_as}');return false;" style="color:#6a9f6a">run repris</a></span>` : ''}
       </div>
       ${buildProgressBanner(run)}
       ${isWaiting ? buildWaitingPanel(run) : ''}
@@ -633,8 +636,8 @@
         if (panel) panel.style.opacity = '1';
         return;
       }
-      await showRun(runId);
       await loadRuns(currentFilter);
+      await showRun(data.new_run_id || runId);
     } catch (e) {
       alert('Erreur réseau : ' + e.message);
       btn.disabled = false;
@@ -1023,6 +1026,12 @@
       });
       const data = await res.json();
       if (data.error || data.detail) { alert('Erreur: ' + (data.error || JSON.stringify(data.detail))); return; }
+      if (data.status === 'waiting_for_client') {
+        // Scaffold needs client input before proceeding — show the waiting panel
+        await loadRuns(currentFilter);
+        await showRun(runId);
+        return;
+      }
       const key = _stateKey(runId, agentName);
       if (data.diagnosis) {
         _scaffoldState[key] = { state: 'diagnosis', diagnosis: data.diagnosis };
@@ -1475,6 +1484,12 @@
       } else {
         document.getElementById('adv-custom-input').value = '';
         document.getElementById('advisor-panel').style.display = 'none';
+        await loadRuns(currentFilter);
+        const targetRunId = data.run_id || _lastRunId;
+        if (targetRunId) {
+          showTabRuns();
+          await showRun(targetRunId);
+        }
         loadTrend(agent);
       }
     } finally {

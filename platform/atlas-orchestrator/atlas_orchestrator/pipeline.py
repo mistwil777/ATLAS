@@ -23,18 +23,21 @@ def orchestrate(
     project_dir: str | None = None,
     project_owner: str = "client",
     cdc_router_cls: type | None = None,
+    skip_gap_criteria: list[str] | None = None,
 ) -> dict | None:
     """Run the full orchestration flow and return the raw report dict.
 
     Args:
-        cdc_text:        CDC content as plain text.
-        llm_fn:          LLM callable (prompt, cfg, max_tokens) -> str | None.
-        llm_cfg:         LLM config dict.
-        memory_path:     Optional path for atlas-memory storage.
-        bus_fn:          Optional injectable Bus factory for tests (returns Bus instance).
-        judge_fn:        Optional injectable AtlasJudgeAgent factory for tests.
-        run_store_dir:   Directory for HITL run persistence (default: ~/.atlas/runs).
-        cdc_router_cls:  Optional injectable CdcRouterAgent class for tests.
+        cdc_text:           CDC content as plain text.
+        llm_fn:             LLM callable (prompt, cfg, max_tokens) -> str | None.
+        llm_cfg:            LLM config dict.
+        memory_path:        Optional path for atlas-memory storage.
+        bus_fn:             Optional injectable Bus factory for tests (returns Bus instance).
+        judge_fn:           Optional injectable AtlasJudgeAgent factory for tests.
+        run_store_dir:      Directory for HITL run persistence (default: ~/.atlas/runs).
+        cdc_router_cls:     Optional injectable CdcRouterAgent class for tests.
+        skip_gap_criteria:  Criteria already answered by the client — gaps matching these
+                            are not re-asked (used when resuming after a waiting_for_client run).
     """
     from atlas_orchestrator.report import build_report  # noqa: PLC0415
 
@@ -80,23 +83,31 @@ def orchestrate(
         high_gaps = [g for g in cdc_gaps if g.get("impact") == "high"]
         if high_gaps:
             questions = _gaps_to_questions(high_gaps)
-            run_store.set_pending_questions(run_id, "cdc-router", questions)
-            _log.warning(
-                "Run %s suspended — %d high-impact CDC gap(s) require client input",
-                run_id,
-                len(high_gaps),
-            )
-            report = build_report(
-                cdc_path=routing_summary.get("cdc_path", "inline"),
-                routing_summary=routing_summary,
-                bloc_results=[],
-            )
-            if report is not None:
-                report["run_id"] = run_id
-                report["status"] = "waiting_for_client"
-                report["pending_questions"] = questions
-                report["requires_review"] = False
-            return report
+            # Filter out gaps whose criteria were already answered in a previous run
+            _skip = set(skip_gap_criteria or [])
+            if _skip:
+                questions = [q for q in questions if q.get("criterion", "") not in _skip]
+            if not questions:
+                # All high-impact gaps were already answered — proceed without suspension
+                _log.info("Run %s: all high-impact gaps already answered — proceeding", run_id)
+            else:
+                run_store.set_pending_questions(run_id, "cdc-router", questions)
+                _log.warning(
+                    "Run %s suspended — %d high-impact CDC gap(s) require client input",
+                    run_id,
+                    len(questions),
+                )
+                report = build_report(
+                    cdc_path=routing_summary.get("cdc_path", "inline"),
+                    routing_summary=routing_summary,
+                    bloc_results=[],
+                )
+                if report is not None:
+                    report["run_id"] = run_id
+                    report["status"] = "waiting_for_client"
+                    report["pending_questions"] = questions
+                    report["requires_review"] = False
+                return report
 
     if os.environ.get("ATLAS_MODE", "saas") != "airgap":
         try:

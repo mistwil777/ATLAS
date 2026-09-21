@@ -157,6 +157,13 @@ class RunStore:
         run["status"] = "scaffolding"
         self._write(run_id, run)
 
+    def mark_resumed(self, run_id: str, new_run_id: str) -> None:
+        """Mark a waiting_for_client run as resumed after client answers were processed."""
+        run = self._read(run_id)
+        run["status"] = "resumed"
+        run["resumed_as"] = new_run_id
+        self._write(run_id, run)
+
     def set_review_decision(
         self,
         run_id: str,
