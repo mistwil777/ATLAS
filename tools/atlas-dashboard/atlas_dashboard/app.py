@@ -413,7 +413,8 @@ def api_answer(run_id: str, body: AnswerRequest):
     if advisor_actions:
         advisor_context = (
             new_cr_context
-            + "\n\n# Improvement-advisor suggested actions:\n"
+            + _build_prev_files_section(agent_name, store)
+            + "\n\n# Corrections requises (improvement-advisor) :\n"
             + "\n".join(f"- {a['action']}" for a in advisor_actions)
         )
         (
@@ -672,6 +673,27 @@ def _get_latest_files_for_agent(agent_name: str, runs: list[dict]) -> dict[str, 
         if entry and entry.get("files"):
             return entry["files"]
     return {}
+
+
+_FORGE_KEY_FILES = ("agent.py", "prompts.py", "__init__.py", "__main__.py")
+
+
+def _build_prev_files_section(agent_name: str, store) -> str:
+    """Format previously generated files for injection into forge spec context."""
+    runs = sorted(store.list_runs(), key=lambda r: r.get("created_at", ""))
+    files = _get_latest_files_for_agent(agent_name, runs)
+    if not files:
+        return ""
+    snippets = [
+        f"### {fname}\n```python\n{content[:3000]}\n```"
+        for fname, content in files.items()
+        if any(fname.endswith(k) for k in _FORGE_KEY_FILES) and "/tests/" not in fname
+    ]
+    if not snippets:
+        return ""
+    return "\n\n# Code actuel (à corriger, NE PAS réécrire from scratch) :\n" + "\n\n".join(
+        snippets
+    )
 
 
 @app.get("/api/stats/trend")
@@ -1310,7 +1332,8 @@ def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
     if advisor_actions:
         advisor_context = (
             cr_context
-            + "\n\n# Improvement-advisor suggested actions:\n"
+            + _build_prev_files_section(agent_name, store)
+            + "\n\n# Corrections requises (improvement-advisor) :\n"
             + "\n".join(f"- {a['action']}" for a in advisor_actions)
         )
         (
