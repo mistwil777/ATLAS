@@ -47,6 +47,7 @@ class ImprovementAdvisorAgent:
         *,
         agent_name: str,
         trend_points: list[dict],
+        generated_files: dict[str, str] | None = None,
     ) -> Generator[dict, None, None]:
         yield self._info(f"Analysing trajectory for '{agent_name}' ({len(trend_points)} points)")
 
@@ -63,6 +64,7 @@ class ImprovementAdvisorAgent:
             n_points=n,
             trend_json=json.dumps(trend_points, ensure_ascii=False, indent=2),
             confidence_tier=confidence_tier,
+            generated_files_section=_fmt_generated_files(generated_files),
         )
 
         raw = self._llm(prompt, self._cfg, 1500)
@@ -139,3 +141,19 @@ class ImprovementAdvisorAgent:
     def _error(self, msg: str) -> dict:
         _log.error(msg)
         return {"level": "error", "msg": msg}
+
+
+def _fmt_generated_files(files: dict[str, str] | None) -> str:
+    if not files:
+        return "Aucun fichier source disponible.\n"
+    # Prioritize main logic files; skip tests and __init__ for brevity
+    priority = [f for f in files if not f.startswith("tests/") and f != "__init__.py"]
+    selected = priority[:4] or list(files.keys())[:4]
+    parts = []
+    for fname in selected:
+        content = files[fname]
+        # Truncate very long files to avoid flooding the context
+        if len(content) > 2000:
+            content = content[:2000] + "\n... [truncated]"
+        parts.append(f"### {fname}\n```python\n{content}\n```")
+    return "\n\n".join(parts) + "\n"

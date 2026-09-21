@@ -665,6 +665,15 @@ def _build_trend_points_from_scaffold(agent: str, runs: list[dict]) -> list[dict
     return points
 
 
+def _get_latest_files_for_agent(agent_name: str, runs: list[dict]) -> dict[str, str]:
+    """Return the most recent scaffolded files for agent_name across all runs."""
+    for run in reversed(runs):
+        entry = (run.get("scaffolded") or {}).get(agent_name)
+        if entry and entry.get("files"):
+            return entry["files"]
+    return {}
+
+
 @app.get("/api/stats/trend")
 def api_stats_trend(agent: str):
     runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
@@ -694,8 +703,15 @@ def api_improve(agent_name: str, body: ImproveRequest | None = None):
         }
 
     llm_fn, llm_cfg = _llm_fn_for_dashboard()
+    generated_files = _get_latest_files_for_agent(agent_name, runs)
     advisor = ImprovementAdvisorAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
-    events = list(advisor.run(agent_name=agent_name, trend_points=trend_points))
+    events = list(
+        advisor.run(
+            agent_name=agent_name,
+            trend_points=trend_points,
+            generated_files=generated_files,
+        )
+    )
     summary = next((e for e in events if e.get("summary")), None)
     if not summary:
         errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
@@ -1116,8 +1132,15 @@ def _run_improvement_advisor(agent_name: str, store) -> list[dict]:
             )
             return []
 
+        generated_files = _get_latest_files_for_agent(agent_name, runs)
         advisor = ImprovementAdvisorAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
-        events = list(advisor.run(agent_name=agent_name, trend_points=trend_points))
+        events = list(
+            advisor.run(
+                agent_name=agent_name,
+                trend_points=trend_points,
+                generated_files=generated_files,
+            )
+        )
         summary = next((e for e in events if e.get("summary")), None)
         if not summary:
             return []
