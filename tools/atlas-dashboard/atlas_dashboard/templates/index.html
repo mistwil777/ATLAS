@@ -1098,16 +1098,17 @@
   async function rejudge(runId, agentName) {
     const key = _stateKey(runId, agentName);
     const prev = _scaffoldState[key] || {};
+    // Show spinner on the button
+    const btn = document.querySelector(`button.btn-rejudge[onclick*="${agentName}"]`);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Évaluation…'; }
     _scaffoldState[key] = { ...prev, judgeScore: null, judgeCriteria: [], judgeFeedback: '' };
     await showRun(runId);
     try {
       const res = await fetch(`/api/runs/${runId}/rejudge/${encodeURIComponent(agentName)}`, { method: 'POST' });
       if (!res.ok) { const e = await res.json(); alert('Re-juge échoué: ' + (e.detail || '')); return; }
-      // Poll until run store has updated judge data (job done or error)
       const jobKey = `${runId}:rejudge:${agentName}`;
       for (let i = 0; i < 60; i++) {
         await new Promise(r => setTimeout(r, 3000));
-        // Check job status via dedicated endpoint
         const rj = await fetch(`/api/bg-job/${encodeURIComponent(jobKey)}`);
         if (rj.ok) {
           const job = await rj.json();
