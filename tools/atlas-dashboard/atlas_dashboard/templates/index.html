@@ -882,7 +882,10 @@
                   <span style="font-size:22px;font-weight:700;color:${scoreColor}">${scoreLabel}</span>
                   ${judgeScore !== null ? `<span style="font-size:12px;color:var(--ink-dim)"> / 5</span>` : ''}
                 </div>
-                <button class="btn-rejudge" onclick="rejudge('${run.run_id}','${agent}')">Re-évaluer</button>
+                ${_scaffoldState[key]?.rejudging
+                  ? `<button class="btn-rejudge" disabled>⏳ Évaluation…</button>`
+                  : `<button class="btn-rejudge" onclick="rejudge('${run.run_id}','${agent}')">Re-évaluer</button>`
+                }
               </div>
               ${criteriaRows ? `<table style="border-collapse:collapse;width:100%">${criteriaRows}</table>` : ''}
               ${feedbackShort ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-dim);font-style:italic">${escHtml(feedbackShort.slice(0,250))}</div>` : ''}
@@ -896,7 +899,10 @@
               <pre class="code-block" id="code-${agent}">${firstContent}</pre>
             </div>
             <div class="scaffold-actions">
-              <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
+              ${judgeScore !== null && judgeScore < 3
+                ? `<button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--yellow);color:var(--yellow)">Re-scaffold</button>`
+                : `<button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>`
+              }
               <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
             </div>
           </div>`;
@@ -1098,14 +1104,17 @@
   async function rejudge(runId, agentName) {
     const key = _stateKey(runId, agentName);
     const prev = _scaffoldState[key] || {};
-    // Show spinner on the button
-    const btn = document.querySelector(`button.btn-rejudge[onclick*="${agentName}"]`);
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Évaluation…'; }
-    _scaffoldState[key] = { ...prev, judgeScore: null, judgeCriteria: [], judgeFeedback: '' };
+    _scaffoldState[key] = { ...prev, rejudging: true, judgeScore: null, judgeCriteria: [], judgeFeedback: '' };
     await showRun(runId);
     try {
       const res = await fetch(`/api/runs/${runId}/rejudge/${encodeURIComponent(agentName)}`, { method: 'POST' });
-      if (!res.ok) { const e = await res.json(); alert('Re-juge échoué: ' + (e.detail || '')); return; }
+      if (!res.ok) {
+        const e = await res.json();
+        _scaffoldState[key] = { ...(_scaffoldState[key] || {}), rejudging: false };
+        await showRun(runId);
+        alert('Re-juge échoué: ' + (e.detail || ''));
+        return;
+      }
       const jobKey = `${runId}:rejudge:${agentName}`;
       for (let i = 0; i < 60; i++) {
         await new Promise(r => setTimeout(r, 3000));
@@ -1118,7 +1127,7 @@
               const run = await r2.json();
               const s = (run.scaffolded || {})[agentName];
               if (s) {
-                _scaffoldState[key] = { ...(_scaffoldState[key] || {}),
+                _scaffoldState[key] = { ...(_scaffoldState[key] || {}), rejudging: false,
                   judgeScore: s.judge_score ?? null, judgeCriteria: s.judge_criteria || [], judgeFeedback: s.judge_feedback || '' };
               }
             }
@@ -1128,9 +1137,14 @@
           }
         }
       }
+      _scaffoldState[key] = { ...(_scaffoldState[key] || {}), rejudging: false };
+      await showRun(runId);
       alert('Timeout re-juge');
-    } catch(e) { alert('Erreur re-juge: ' + e.message); }
-    await showRun(runId);
+    } catch(e) {
+      _scaffoldState[key] = { ...(_scaffoldState[key] || {}), rejudging: false };
+      await showRun(runId);
+      alert('Erreur re-juge: ' + e.message);
+    }
   }
 
   async function installAgent(runId, agentName) {
