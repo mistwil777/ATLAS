@@ -107,7 +107,7 @@ If a name is ambiguous → choose "ia" if reasoning is required, "tool" otherwis
 ## CDC context
 {cdc_text}
 
-## Output — return ONLY valid JSON, no markdown, no explanation
+{coherence_feedback_section}## Output — return ONLY valid JSON, no markdown, no explanation
 
 REQUIRED fields:
 - type "ia"   → agent_suggested REQUIRED (PascalCase). called_by: null.

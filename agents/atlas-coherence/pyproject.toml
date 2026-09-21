@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-coherence"
+version = "1.0.0"
+description = "Autonomous agent: detects semantic overlap and redundancy between agents and tools in a CDC decomposition."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.entry-points."atlas.tools"]
+atlas-coherence = "atlas_coherence.agent:AtlasCoherenceAgent"
+
+[project.scripts]
+atlas-coherence = "atlas_coherence.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atlas_coherence*"]

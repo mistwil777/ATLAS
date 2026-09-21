@@ -64,6 +64,7 @@ class CdcRouterAgent:
         self,
         cdc_text: str = "",
         cdc_path: str = "",
+        coherence_feedback: list[dict] | None = None,
     ) -> Generator[dict, None, None]:
         """Segment a CDC and produce a routing plan. Yields log dicts then summary."""
         from atlas_core import collect  # noqa: PLC0415
@@ -101,7 +102,7 @@ class CdcRouterAgent:
         from cdc_router.segmenter import segment  # noqa: PLC0415
 
         segmentation, judge_verdict, attempts = segment(
-            text, rag_examples, kg_graph, self._llm, self.llm_cfg
+            text, rag_examples, kg_graph, self._llm, self.llm_cfg, coherence_feedback
         )
         if segmentation is None:
             yield self._error("LLM segmentation failed — check LLM config or CDC content")

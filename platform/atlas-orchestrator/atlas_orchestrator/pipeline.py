@@ -41,7 +41,9 @@ def orchestrate(
     """
     from atlas_orchestrator.report import build_report  # noqa: PLC0415
 
-    routing_summary = _segment(cdc_text, llm_fn, llm_cfg, memory_path, cdc_router_cls)
+    routing_summary = _segment_with_coherence(
+        cdc_text, llm_fn, llm_cfg, memory_path, cdc_router_cls
+    )
     if routing_summary is None:
         return None
 
@@ -172,6 +174,7 @@ def _segment(
     llm_cfg: dict,
     memory_path: Path | None,
     cdc_router_cls: type | None = None,
+    coherence_feedback: list[dict] | None = None,
 ) -> dict | None:
     if cdc_router_cls is None:
         try:
@@ -187,7 +190,7 @@ def _segment(
         kwargs["memory_storage_path"] = memory_path
 
     agent = cdc_router_cls(**kwargs)
-    events = list(agent.run(cdc_text=cdc_text))
+    events = list(agent.run(cdc_text=cdc_text, coherence_feedback=coherence_feedback))
     for e in events:
         if e.get("level") == "error":
             _log.error("cdc-router: %s", e.get("msg"))
@@ -195,6 +198,86 @@ def _segment(
             _log.debug("cdc-router: %s", e.get("msg"))
     summary = next((e for e in events if e.get("summary")), None)
     return summary
+
+
+_MAX_COHERENCE_PASSES = 3
+
+
+def _segment_with_coherence(
+    cdc_text: str,
+    llm_fn: Callable,
+    llm_cfg: dict,
+    memory_path: Path | None,
+    cdc_router_cls: type | None = None,
+) -> dict | None:
+    """Segment, then run coherence loop until clean or max passes reached."""
+    coherence_feedback: list[dict] | None = None
+
+    for pass_n in range(_MAX_COHERENCE_PASSES):
+        routing_summary = _segment(
+            cdc_text, llm_fn, llm_cfg, memory_path, cdc_router_cls, coherence_feedback
+        )
+        if routing_summary is None:
+            return None
+
+        blocs = routing_summary.get("blocs", [])
+        coherence = _check_coherence(blocs, llm_fn, llm_cfg)
+
+        if coherence["clean"]:
+            if pass_n > 0:
+                _log.info("Coherence clean after %d pass(es)", pass_n + 1)
+            return routing_summary
+
+        full = [c for c in coherence["conflicts"] if c.get("type") == "full"]
+        partial = [c for c in coherence["conflicts"] if c.get("type") == "partial"]
+
+        # Full overlaps resolved deterministically — remove redundant bloc
+        if full:
+            redundant = {c["redundant"] for c in full}
+            blocs = [b for b in blocs if b.get("agent_suggested") not in redundant]
+            routing_summary["blocs"] = blocs
+            for name in redundant:
+                _log.info("Coherence: removed fully redundant bloc '%s'", name)
+
+        if not partial:
+            # Only full overlaps — resolved, no need to re-segment
+            return routing_summary
+
+        # Partial overlaps require re-segmentation with feedback
+        coherence_feedback = partial
+        _log.info(
+            "Coherence pass %d: %d partial overlap(s) — re-segmenting with feedback",
+            pass_n + 1,
+            len(partial),
+        )
+
+    # Max passes reached — return last result and log warning
+    _log.warning(
+        "Coherence: max passes (%d) reached with unresolved partial overlaps — proceeding",
+        _MAX_COHERENCE_PASSES,
+    )
+    return routing_summary
+
+
+def _check_coherence(
+    blocs: list[dict],
+    llm_fn: Callable,
+    llm_cfg: dict,
+) -> dict:
+    """Call atlas-coherence agent. Returns {clean, conflicts}. Fails open (clean=True)."""
+    try:
+        from atlas_coherence.agent import AtlasCoherenceAgent  # noqa: PLC0415
+
+        agent = AtlasCoherenceAgent(llm_fn=llm_fn, config={"llm": llm_cfg})
+        events = list(agent.run(blocs=blocs))
+        summary = next((e for e in events if e.get("summary")), None)
+        if summary:
+            return {"clean": summary.get("clean", True), "conflicts": summary.get("conflicts", [])}
+    except ImportError:
+        _log.debug("atlas-coherence not installed — skipping coherence check")
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("atlas-coherence failed: %s — proceeding", exc)
+    return {"clean": True, "conflicts": []}
 
 
 def _process_bloc(

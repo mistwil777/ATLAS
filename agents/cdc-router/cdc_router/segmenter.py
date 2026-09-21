@@ -28,6 +28,7 @@ def segment(
     kg_agents: dict,
     llm_fn: Callable[[str, dict, int], str | None],
     llm_cfg: dict,
+    coherence_feedback: list[dict] | None = None,
 ) -> tuple[dict | None, dict | None, int]:
     """Segment a CDC into typed blocs using three LLM passes.
 
@@ -40,7 +41,9 @@ def segment(
         return None, None, 0
 
     # Pass 2 — classification with judge iterations
-    result, verdict, attempts = _pass2_classify(segments, cdc_text, kg_agents, llm_fn, llm_cfg)
+    result, verdict, attempts = _pass2_classify(
+        segments, cdc_text, kg_agents, llm_fn, llm_cfg, coherence_feedback
+    )
     if not result:
         return None, verdict, attempts
 
@@ -100,12 +103,15 @@ def _pass2_classify(
     kg_agents: dict,
     llm_fn: Callable,
     llm_cfg: dict,
+    coherence_feedback: list[dict] | None = None,
 ) -> tuple[dict | None, dict | None, int]:
+    feedback_section = _fmt_coherence_feedback(coherence_feedback)
     prompt = CLASSIFICATION_PROMPT.format(
         cdc_text=cdc_text,
         segments_json=json.dumps({"segments": segments}, ensure_ascii=False, indent=2),
         kg_agents=_fmt_agents(kg_agents, node_type="agent"),
         kg_tools=_fmt_agents(kg_agents, node_type="tool"),
+        coherence_feedback_section=feedback_section,
     )
 
     raw = llm_fn(prompt, llm_cfg, 2048)
@@ -277,6 +283,25 @@ def _build_correction_prompt(previous_output: str, failed_criteria: list[dict]) 
         for c in failed_criteria
     )
     return CORRECTION_PROMPT.format(previous_output=previous_output, failures=failures)
+
+
+def _fmt_coherence_feedback(conflicts: list[dict] | None) -> str:
+    if not conflicts:
+        return ""
+    lines = [
+        "## Coherence correction required\n"
+        "The previous segmentation had the following partial overlaps to fix:\n"
+    ]
+    for c in conflicts:
+        lines.append(
+            f"- {c.get('redundant')} overlaps with {c.get('primary')}: "
+            f"{c.get('issue')} → {c.get('fix')}"
+        )
+    lines.append(
+        "\nApply these corrections in your classification. "
+        "Do NOT reproduce the overlapping responsibilities.\n\n"
+    )
+    return "\n".join(lines)
 
 
 def _fmt_agents(kg_agents: dict, node_type: str = "agent") -> str:
