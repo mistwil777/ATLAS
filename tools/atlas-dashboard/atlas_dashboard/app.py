@@ -15,7 +15,7 @@ from pathlib import Path
 from pathlib import Path as _Path
 
 from atlas_memory.run_store import RunStore
-from fastapi import Cookie, FastAPI, HTTPException, Request
+from fastapi import Cookie, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -132,6 +132,71 @@ async def auth_middleware(request: Request, call_next):
 @app.get("/api/runs")
 def api_list_runs(review: bool = False):
     return get_store().list_runs(only_review=review)
+
+
+@app.post("/api/runs")
+async def api_new_run(
+    file: UploadFile,  # multipart file upload
+    project_name: str = Form(""),
+) -> dict:
+    """Upload a CDC file (txt/md/pdf/docx) and launch the full pipeline."""
+    suffix = _Path(file.filename or "cdc.txt").suffix.lower() or ".txt"
+    content = await file.read()
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        try:
+            from pair_forge.extractors import extract_content  # noqa: PLC0415
+
+            cdc_text, _ = extract_content(_Path(tmp_path))
+        except ImportError:
+            cdc_text = content.decode("utf-8", errors="replace")
+    finally:
+        with contextlib.suppress(OSError):
+            _Path(tmp_path).unlink()
+
+    if not cdc_text.strip():
+        raise HTTPException(status_code=400, detail="Le fichier CDC est vide ou illisible")
+
+    try:
+        from atlas_orchestrator.pipeline import orchestrate  # noqa: PLC0415
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail="atlas-orchestrator not installed") from exc
+
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+    _probe = llm_fn("Reply OK", llm_cfg, 8)
+    if not _probe:
+        raise HTTPException(
+            status_code=500,
+            detail="LLM probe failed — check atlas.toml [llm] config and credentials",
+        )
+
+    store_dir = _Path(os.environ.get("ATLAS_RUN_STORE_DIR", str(_DEFAULT_RUN_STORE_DIR)))
+    if project_name.strip():
+        project_dir = str(_Path.home() / ".atlas" / "projects" / project_name.strip())
+        _Path(project_dir).mkdir(parents=True, exist_ok=True)
+    else:
+        project_dir = str(_Path.home() / ".atlas" / "scaffolded")
+
+    report = orchestrate(
+        cdc_text=cdc_text,
+        llm_fn=llm_fn,
+        llm_cfg=llm_cfg,
+        run_store_dir=store_dir,
+        project_dir=project_dir,
+        project_owner="client",
+    )
+    if report is None:
+        raise HTTPException(status_code=500, detail="Pipeline failed — check dashboard logs")
+
+    return {
+        "run_id": report.get("run_id"),
+        "status": report.get("status", "pending"),
+        "project_dir": project_dir,
+    }
 
 
 @app.get("/api/runs/{run_id}")
