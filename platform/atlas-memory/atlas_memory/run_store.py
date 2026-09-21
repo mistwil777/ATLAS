@@ -85,6 +85,10 @@ class RunStore:
         user_answers: list[str] | None = None,
         selected_patches: list[str] | None = None,
         model_id: str | None = None,
+        judge_score: float | None = None,
+        judge_criteria: list[dict[str, Any]] | None = None,
+        judge_feedback: str | None = None,
+        files: dict[str, str] | None = None,
     ) -> None:
         run = self._read(run_id)
         run.setdefault("scaffolded", {})[agent_name] = {
@@ -94,7 +98,27 @@ class RunStore:
             "user_answers": user_answers or [],
             "selected_patches": selected_patches or [],
             "model_id": model_id or "",
+            "judge_score": judge_score,
+            "judge_criteria": judge_criteria or [],
+            "judge_feedback": judge_feedback or "",
+            "files": files or {},
         }
+        self._write(run_id, run)
+
+    def set_scaffold_judge(
+        self,
+        run_id: str,
+        agent_name: str,
+        judge_score: float | None,
+        judge_criteria: list[dict[str, Any]],
+        judge_feedback: str,
+    ) -> None:
+        """Update judge results for an already-scaffolded agent."""
+        run = self._read(run_id)
+        entry = run.setdefault("scaffolded", {}).setdefault(agent_name, {})
+        entry["judge_score"] = judge_score
+        entry["judge_criteria"] = judge_criteria
+        entry["judge_feedback"] = judge_feedback
         self._write(run_id, run)
 
     def set_agent_installed(self, run_id: str, agent_name: str) -> None:

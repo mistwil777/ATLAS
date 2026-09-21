@@ -370,7 +370,17 @@ def api_answer(run_id: str, body: AnswerRequest):
         selected_patches=saved_selected_patches,
     )
 
-    success, result, attempts_log2, last_output_path, last_spec, last_files = _run_scaffold_cycle(
+    (
+        success,
+        result,
+        attempts_log2,
+        last_output_path,
+        last_spec,
+        last_files,
+        last_js,
+        last_jc,
+        last_jf,
+    ) = _run_scaffold_cycle(
         cr_context=new_cr_context,
         cdc_full=cdc_full,
         agent_slug=agent_slug,
@@ -385,7 +395,6 @@ def api_answer(run_id: str, body: AnswerRequest):
     )
     if success:
         result["resumed_from_client_answers"] = True  # type: ignore[index]
-        # Index: client answers resolved missing_spec criteria
         _index_scaffold_resolutions(agent_name, saved_attempts_log, attempts_log2)
         return result
 
@@ -398,20 +407,28 @@ def api_answer(run_id: str, body: AnswerRequest):
             + "\n\n# Improvement-advisor suggested actions:\n"
             + "\n".join(f"- {a['action']}" for a in advisor_actions)
         )
-        success3, result3, attempts_log3, last_output_path, last_spec, last_files = (
-            _run_scaffold_cycle(
-                cr_context=advisor_context,
-                cdc_full=cdc_full,
-                agent_slug=agent_slug,
-                agent_name=agent_name,
-                run_id=run_id,
-                store=store,
-                base_output_dir=base_output_dir,
-                llm_fn=llm_fn,
-                llm_cfg=llm_cfg,
-                body=body_compat,
-                forge_cls=AgentForgeAgent,
-            )
+        (
+            success3,
+            result3,
+            attempts_log3,
+            last_output_path,
+            last_spec,
+            last_files,
+            last_js,
+            last_jc,
+            last_jf,
+        ) = _run_scaffold_cycle(
+            cr_context=advisor_context,
+            cdc_full=cdc_full,
+            agent_slug=agent_slug,
+            agent_name=agent_name,
+            run_id=run_id,
+            store=store,
+            base_output_dir=base_output_dir,
+            llm_fn=llm_fn,
+            llm_cfg=llm_cfg,
+            body=body_compat,
+            forge_cls=AgentForgeAgent,
         )
         all_attempts.extend(attempts_log3)
         if success3:
@@ -429,6 +446,10 @@ def api_answer(run_id: str, body: AnswerRequest):
         user_answers=saved_user_answers,
         selected_patches=saved_selected_patches,
         model_id=llm_cfg.get("model_id", ""),
+        judge_score=last_js,
+        judge_criteria=last_jc,
+        judge_feedback=last_jf,
+        files=last_files,
     )
     store.set_scaffold_diagnosis(run_id, agent_name, diagnosis)
     return {
@@ -924,13 +945,17 @@ def _run_scaffold_cycle(
     forge_cls,
     max_attempts: int = 3,
     quality_threshold: float = 4.0,
-) -> tuple[bool, dict | None, list[dict], str, dict, dict]:
+) -> tuple[bool, dict | None, list[dict], str, dict, dict, float | None, list, str]:
     """Run one scaffold cycle (up to max_attempts). Returns (success, result, attempts_log,
-    last_output_path, last_spec, last_files). result is None on failure."""
+    last_output_path, last_spec, last_files, last_judge_score, last_judge_criteria, last_judge_feedback).
+    result is None on failure."""
     attempts_log: list[dict] = []
     last_output_path = ""
     last_spec: dict = {}
     last_files: dict = {}
+    last_judge_score: float | None = None
+    last_judge_criteria: list = []
+    last_judge_feedback: str = ""
 
     for attempt in range(1, max_attempts + 1):
         constraints = cr_context
@@ -983,6 +1008,9 @@ def _run_scaffold_cycle(
         last_output_path = str(target_path)
         last_spec = summary
         last_files = _read_generated_files(target_path)
+        last_judge_score = judge_score
+        last_judge_criteria = judge_criteria or []
+        last_judge_feedback = judge_feedback or ""
 
         from atlas_dashboard.atlas_mlflow import log_scaffold_attempt  # noqa: PLC0415
 
@@ -1024,6 +1052,10 @@ def _run_scaffold_cycle(
                 user_answers=body.user_answers,
                 selected_patches=body.selected_patches,
                 model_id=llm_cfg.get("model_id", ""),
+                judge_score=judge_score,
+                judge_criteria=judge_criteria,
+                judge_feedback=judge_feedback,
+                files=last_files,
             )
             return (
                 True,
@@ -1041,7 +1073,17 @@ def _run_scaffold_cycle(
                 last_files,
             )
 
-    return False, None, attempts_log, last_output_path, last_spec, last_files
+    return (
+        False,
+        None,
+        attempts_log,
+        last_output_path,
+        last_spec,
+        last_files,
+        last_judge_score,
+        last_judge_criteria,
+        last_judge_feedback,
+    )
 
 
 def _run_improvement_advisor(agent_name: str, store) -> list[dict]:
@@ -1181,7 +1223,17 @@ def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
         )
 
     # Cycle 1
-    success, result, attempts_log, last_output_path, last_spec, last_files = _run_scaffold_cycle(
+    (
+        success,
+        result,
+        attempts_log,
+        last_output_path,
+        last_spec,
+        last_files,
+        last_js,
+        last_jc,
+        last_jf,
+    ) = _run_scaffold_cycle(
         cr_context=cr_context,
         cdc_full=cdc_full,
         agent_slug=agent_slug,
@@ -1229,20 +1281,28 @@ def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
             + "\n\n# Improvement-advisor suggested actions:\n"
             + "\n".join(f"- {a['action']}" for a in advisor_actions)
         )
-        success2, result2, attempts_log2, last_output_path, last_spec, last_files = (
-            _run_scaffold_cycle(
-                cr_context=advisor_context,
-                cdc_full=cdc_full,
-                agent_slug=agent_slug,
-                agent_name=agent_name,
-                run_id=run_id,
-                store=store,
-                base_output_dir=base_output_dir,
-                llm_fn=llm_fn,
-                llm_cfg=llm_cfg,
-                body=body,
-                forge_cls=AgentForgeAgent,
-            )
+        (
+            success2,
+            result2,
+            attempts_log2,
+            last_output_path,
+            last_spec,
+            last_files,
+            last_js,
+            last_jc,
+            last_jf,
+        ) = _run_scaffold_cycle(
+            cr_context=advisor_context,
+            cdc_full=cdc_full,
+            agent_slug=agent_slug,
+            agent_name=agent_name,
+            run_id=run_id,
+            store=store,
+            base_output_dir=base_output_dir,
+            llm_fn=llm_fn,
+            llm_cfg=llm_cfg,
+            body=body,
+            forge_cls=AgentForgeAgent,
         )
         attempts_log.extend(attempts_log2)
         if success2:
@@ -1260,6 +1320,10 @@ def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
         user_answers=body.user_answers,
         selected_patches=body.selected_patches,
         model_id=llm_cfg.get("model_id", ""),
+        judge_score=last_js,
+        judge_criteria=last_jc,
+        judge_feedback=last_jf,
+        files=last_files,
     )
     store.set_scaffold_diagnosis(run_id, agent_name, diagnosis)
     return {
@@ -1270,6 +1334,53 @@ def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
         "attempts": len(attempts_log),
         "diagnosis": diagnosis,
     }
+
+
+def _do_rejudge(run_id: str, agent_name: str) -> None:
+    """Background worker — re-runs judge on an already-scaffolded agent."""
+    job_key = f"{run_id}:rejudge:{agent_name}"
+    _bg_jobs[job_key] = {"status": "running"}
+    try:
+        store = get_store()
+        run = store.get_run(run_id)
+        if run is None:
+            raise ValueError(f"Run {run_id} not found")
+        sc = run.get("scaffolded", {}).get(agent_name)
+        if sc is None:
+            raise ValueError(f"Agent {agent_name} not scaffolded in run {run_id}")
+        target_path = _Path(sc["output_path"])
+        cdc_full = run.get("metadata", {}).get(
+            "cdc_full", run.get("metadata", {}).get("cdc_preview", "")
+        )
+        llm_fn, llm_cfg = _llm_fn_for_dashboard()
+        judge_score, judge_criteria, judge_feedback = _judge_scaffold(
+            target_path, agent_name, cdc_full, llm_fn, llm_cfg
+        )
+        store.set_scaffold_judge(run_id, agent_name, judge_score, judge_criteria, judge_feedback)
+        _bg_jobs[job_key] = {"status": "done", "judge_score": judge_score}
+    except Exception as exc:  # noqa: BLE001
+        _bg_jobs[job_key] = {"status": "error", "error": str(exc)}
+
+
+@app.post("/api/runs/{run_id}/rejudge/{agent_name}")
+def api_rejudge(
+    run_id: str,
+    agent_name: str,
+    background_tasks: BackgroundTasks = BackgroundTasks(),  # noqa: B008
+):
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if agent_name not in run.get("scaffolded", {}):
+        raise HTTPException(status_code=400, detail=f"{agent_name} not scaffolded")
+
+    job_key = f"{run_id}:rejudge:{agent_name}"
+    if _bg_jobs.get(job_key, {}).get("status") == "running":
+        return {"status": "judging", "run_id": run_id, "agent_name": agent_name}
+
+    background_tasks.add_task(_do_rejudge, run_id, agent_name)
+    return {"status": "judging", "run_id": run_id, "agent_name": agent_name}
 
 
 def _do_build_tool(run_id: str, tool_name: str) -> None:

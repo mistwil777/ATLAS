@@ -819,16 +819,39 @@
       } else if (state === 'scaffolding') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Scaffolding…</span>`;
       } else if (state === 'scaffolded') {
-        const files = _scaffoldState[key]?.files || {};
+        const files = _scaffoldState[key]?.files || sc?.files || {};
         const fileNames = Object.keys(files);
         const selectOpts = fileNames.map(f => `<option value="${f}">${f}</option>`).join('');
         const firstContent = fileNames.length ? escHtml(files[fileNames[0]]) : '';
+        const judgeScore = _scaffoldState[key]?.judgeScore ?? sc?.judge_score ?? null;
+        const judgeCriteria = _scaffoldState[key]?.judgeCriteria || sc?.judge_criteria || [];
+        const judgeFeedback = _scaffoldState[key]?.judgeFeedback || sc?.judge_feedback || '';
+        const scoreColor = judgeScore === null ? 'var(--ink-dim)' : judgeScore >= 4 ? 'var(--aqua)' : judgeScore >= 2 ? 'var(--yellow)' : 'var(--red)';
+        const scoreLabel = judgeScore === null ? '— score non disponible' : `Score juge : ${judgeScore.toFixed(1)} / 5`;
+        const criteriaHtml = judgeCriteria.length ? `
+          <div style="margin:8px 0 4px;font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.05em">Critères</div>
+          ${judgeCriteria.map(c => {
+            const s = c.score ?? null;
+            const col = s === null ? 'var(--ink-dim)' : s >= 4 ? 'var(--aqua)' : s >= 2 ? 'var(--yellow)' : 'var(--red)';
+            return `<div style="display:flex;gap:6px;align-items:baseline;font-size:12px;margin-bottom:3px">
+              <span style="color:${col};font-weight:600;min-width:22px">${s !== null ? s : '—'}</span>
+              <span style="color:var(--ink)">${escHtml(c.criterion || '')}</span>
+            </div>`;
+          }).join('')}` : '';
+        const feedbackHtml = judgeFeedback ? `<div style="margin-top:6px;font-size:11px;color:var(--ink-dim);white-space:pre-wrap">${escHtml(judgeFeedback.slice(0,400))}</div>` : '';
         controls = `
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <div style="margin-bottom:8px">
+            <span style="font-size:13px;font-weight:600;color:${scoreColor}">${scoreLabel}</span>
+            <button style="margin-left:10px;font-size:11px;padding:2px 8px;background:transparent;border:1px solid var(--ink-dim);color:var(--ink-dim);border-radius:3px;cursor:pointer"
+              onclick="rejudge('${run.run_id}','${agent}')">Re-évaluer</button>
+          </div>
+          ${criteriaHtml}
+          ${feedbackHtml}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
             <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
             <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
           </div>
-          <div class="code-viewer" id="viewer-${agent}">
+          <div class="code-viewer" id="viewer-${agent}" style="margin-top:8px">
             <select onchange="switchFile('${agent}',this.value,${JSON.stringify(JSON.stringify(files))})">${selectOpts}</select>
             <pre id="code-${agent}">${firstContent}</pre>
           </div>`;
@@ -995,12 +1018,18 @@
         const diag = (run.scaffold_diagnosis || {})[agentName];
         if (scaffolded[agentName]) {
           const s = scaffolded[agentName];
-          _scaffoldState[key] = { state: diag ? 'diagnosis' : 'scaffolded',
-            files: s.spec?.files || {}, outputPath: s.output_path || '', diagnosis: diag };
+          _scaffoldState[key] = {
+            state: diag ? 'diagnosis' : 'scaffolded',
+            files: s.files || {},
+            outputPath: s.output_path || '',
+            diagnosis: diag,
+            judgeScore: s.judge_score ?? null,
+            judgeCriteria: s.judge_criteria || [],
+            judgeFeedback: s.judge_feedback || '',
+          };
           await showRun(runId);
           return;
         }
-        // waiting_for_client set by background task
         if (run.status === 'waiting_for_client' && run.pending_agent === agentName) {
           _scaffoldState[key] = { state: 'pending' };
           await showRun(runId);
@@ -1008,9 +1037,35 @@
         }
       } catch(_) {}
     }
-    // Timeout
     _scaffoldState[key] = { state: 'pending' };
     alert('Scaffold timeout — le serveur n\'a pas répondu en 6 minutes');
+    await showRun(runId);
+  }
+
+  async function rejudge(runId, agentName) {
+    const key = _stateKey(runId, agentName);
+    const prev = _scaffoldState[key] || {};
+    _scaffoldState[key] = { ...prev, judgeScore: null, judgeCriteria: [], judgeFeedback: '' };
+    await showRun(runId);
+    try {
+      const res = await fetch(`/api/runs/${runId}/rejudge/${encodeURIComponent(agentName)}`, { method: 'POST' });
+      if (!res.ok) { const e = await res.json(); alert('Re-juge échoué: ' + (e.detail || '')); return; }
+      // Poll until judge_score updated in run store
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const r2 = await fetch(`/api/runs/${runId}`);
+        if (!r2.ok) continue;
+        const run = await r2.json();
+        const s = (run.scaffolded || {})[agentName];
+        if (s && s.judge_score !== null && s.judge_score !== undefined) {
+          _scaffoldState[key] = { ...(_scaffoldState[key] || {}),
+            judgeScore: s.judge_score, judgeCriteria: s.judge_criteria || [], judgeFeedback: s.judge_feedback || '' };
+          await showRun(runId);
+          return;
+        }
+      }
+      alert('Timeout re-juge');
+    } catch(e) { alert('Erreur re-juge: ' + e.message); }
     await showRun(runId);
   }
 
