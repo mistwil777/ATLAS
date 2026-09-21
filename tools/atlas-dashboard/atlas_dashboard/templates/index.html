@@ -726,20 +726,35 @@
             <button class="btn-install" onclick="installTool('${run.run_id}','${name}')">Install</button>
             <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
           </div>
-          ${fileNames.length ? `<div class="code-viewer">
-            <select onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
-            <pre id="code-tool-${name}">${firstContent}</pre>
+          ${fileNames.length ? `<div class="scaffold-section" style="margin-top:10px">
+            <div class="file-select-row">
+              <select onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
+              <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
+            </div>
+            <pre class="code-block" id="code-tool-${name}">${firstContent}</pre>
           </div>` : ''}`;
       } else if (state === 'installing') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
       } else if (state === 'installed') {
+        const files = _toolState[key]?.files || existing?.files || {};
+        _agentFiles[`tool-${name}`] = files;
         const fns = _toolState[key]?.functions || existing?.functions || [];
+        const fileNames = Object.keys(files);
+        const selectOpts = fileNames.map(f => `<option value="${f}">${f}</option>`).join('');
+        const firstContent = fileNames.length ? escHtml(files[fileNames[0]]) : '';
         controls = `
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <span class="badge badge-approved">installed</span>
             ${fns.length ? `<span style="font-size:11px;color:var(--ink-dim)">${fns.join(', ')}</span>` : ''}
             <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
-          </div>`;
+          </div>
+          ${fileNames.length ? `<div class="scaffold-section" style="margin-top:10px">
+            <div class="file-select-row">
+              <select onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
+              <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
+            </div>
+            <pre class="code-block" id="code-tool-${name}">${firstContent}</pre>
+          </div>` : ''}`;
       }
 
       return `

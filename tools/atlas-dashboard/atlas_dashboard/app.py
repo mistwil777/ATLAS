@@ -1478,7 +1478,8 @@ def _build_tool_sync(run_id: str, tool_name: str) -> dict:
         errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
         raise ValueError(f"Tool generation failed: {errors}")
 
-    store.set_tool_result(run_id, tool_name, summary["output_path"], summary)
+    files = _read_generated_files(_Path(summary["output_path"]))
+    store.set_tool_result(run_id, tool_name, summary["output_path"], summary, files=files)
     _index_tool_in_rag(tool_name, spec_text, summary)
 
     from atlas_dashboard.atlas_mlflow import log_tool_build  # noqa: PLC0415
@@ -1491,7 +1492,6 @@ def _build_tool_sync(run_id: str, tool_name: str) -> dict:
         atlas_run_id=run_id,
     )
 
-    files = _read_generated_files(_Path(summary["output_path"]))
     return {
         "tool_name": tool_name,
         "output_path": summary["output_path"],

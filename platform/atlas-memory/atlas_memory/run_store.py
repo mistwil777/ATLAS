@@ -64,7 +64,12 @@ class RunStore:
         self._write(run_id, run)
 
     def set_tool_result(
-        self, run_id: str, tool_name: str, output_path: str, spec: dict[str, Any]
+        self,
+        run_id: str,
+        tool_name: str,
+        output_path: str,
+        spec: dict[str, Any],
+        files: dict[str, str] | None = None,
     ) -> None:
         run = self._read(run_id)
         run.setdefault("tools_built", {})[tool_name] = {
@@ -73,6 +78,7 @@ class RunStore:
             "functions": spec.get("functions", []),
             "description": spec.get("description", ""),
             "installed": False,
+            "files": files or {},
         }
         self._write(run_id, run)
 
