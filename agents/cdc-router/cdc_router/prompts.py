@@ -81,15 +81,16 @@ You are an expert software architect. You have a list of functional blocs to cla
 - Task requires iterating over its own outputs — the system must decide autonomously when to stop, retry, or escalate based on intermediate results
 
 **TOOL (type="tool")** if ALL of these (and NOT "ia"):
-- Fully deterministic: same input → same output, no LLM needed
+- Stateless callable with single responsibility: same input → same output, no memory, no side effects beyond its return value
+- No decision loop: executes once and returns — it never decides to retry or escalate
+- No LLM required: purely algorithmic or rule-based
 - Reusable as-is by another team on a different project (reusable library function)
-- Worthy of a unit test and a docstring
 - Examples: OutputFormatter, JsonValidator, ConfidenceScorer, TextNormalizer
 
 **INTEGRATION CODE (type="code")** if ALL of these (and NOT "ia" or "tool"):
-- Trivial transformation specific to this project (1-3 lines inline)
-- Another team on another project could never reuse it as-is
-- Not worth naming or documenting
+- Pure glue code: adapts interfaces or transforms data formats between two components
+- No business logic, no autonomy, no reusable abstraction
+- Project-specific wiring that would be meaningless outside this pipeline (1-3 lines inline)
 
 **EXCLUSIVITY RULE**: a PascalCase name cannot be "ia" in one bloc and "tool" in another.
 If a name is ambiguous → choose "ia" if reasoning is required, "tool" otherwise.
