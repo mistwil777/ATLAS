@@ -162,6 +162,14 @@
     .btn-download { padding: 5px 14px; background: transparent; border: 1px solid var(--blue); color: var(--blue); border-radius: 4px; cursor: pointer; font-size: 12px; text-decoration: none; }
     .btn-download:hover { background: var(--blue); color: #fff; }
     .btn-rerun { padding: 7px 18px; background: var(--blue); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; margin-top: 12px; }
+    .btn-rejudge { padding: 3px 10px; background: transparent; border: 1px solid var(--ink-dim); color: var(--ink-dim); border-radius: 3px; cursor: pointer; font-size: 11px; }
+    .btn-rejudge:hover { border-color: var(--blue); color: var(--blue); }
+    .scaffold-panel { display: flex; flex-direction: column; gap: 0; width: 100%; }
+    .scaffold-section { padding: 12px 16px; border-bottom: 1px solid #1e2535; }
+    .scaffold-judge { background: #0d1117; }
+    .scaffold-actions { display: flex; gap: 8px; padding: 12px 16px; align-items: center; }
+    .file-select { width: 100%; background: #0d1117; color: var(--ink); border: 1px solid #1e2535; border-radius: 3px; padding: 4px 8px; font-family: monospace; font-size: 12px; margin-bottom: 8px; }
+    .code-block { background: #0a0e17; color: var(--ink); font-family: monospace; font-size: 12px; line-height: 1.5; padding: 12px; border-radius: 4px; overflow-x: auto; max-height: 320px; overflow-y: auto; white-space: pre; margin: 0; }
     .btn-rerun:hover { opacity: .85; }
     .code-viewer { margin-top: 8px; width: 100%; }
     .code-viewer select { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 4px; font-size: 11px; margin-bottom: 6px; }
@@ -709,7 +717,7 @@
             <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
           </div>
           ${fileNames.length ? `<div class="code-viewer">
-            <select onchange="switchFile('tool-${name}',this.value,${JSON.stringify(JSON.stringify(files))})">${selectOpts}</select>
+            <select onchange="switchFileData(this,'code-tool-${name}')" data-files="${escHtml(JSON.stringify(files))}">${selectOpts}</select>
             <pre id="code-tool-${name}">${firstContent}</pre>
           </div>` : ''}`;
       } else if (state === 'installing') {
@@ -820,41 +828,49 @@
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Scaffolding…</span>`;
       } else if (state === 'scaffolded') {
         const files = _scaffoldState[key]?.files || sc?.files || {};
-        const fileNames = Object.keys(files);
-        const selectOpts = fileNames.map(f => `<option value="${f}">${f}</option>`).join('');
-        const firstContent = fileNames.length ? escHtml(files[fileNames[0]]) : '';
+        _agentFiles[agent] = files;
+        const fileNames = Object.keys(files).filter(f => !['manifest.py','tools.py','docker.py','install.py','__main__.py'].includes(f));
+        const allFileNames = Object.keys(files);
+        const defaultFile = fileNames[0] || allFileNames[0] || '';
+        const selectOpts = allFileNames.map(f => `<option value="${f}"${f===defaultFile?' selected':''}>${f}</option>`).join('');
+        const firstContent = defaultFile ? escHtml(files[defaultFile]) : '';
         const judgeScore = _scaffoldState[key]?.judgeScore ?? sc?.judge_score ?? null;
         const judgeCriteria = _scaffoldState[key]?.judgeCriteria || sc?.judge_criteria || [];
         const judgeFeedback = _scaffoldState[key]?.judgeFeedback || sc?.judge_feedback || '';
         const scoreColor = judgeScore === null ? 'var(--ink-dim)' : judgeScore >= 4 ? 'var(--aqua)' : judgeScore >= 2 ? 'var(--yellow)' : 'var(--red)';
-        const scoreLabel = judgeScore === null ? '— score non disponible' : `${judgeScore.toFixed(1)} / 5`;
+        const scoreLabel = judgeScore === null ? '—' : judgeScore.toFixed(1);
         const criteriaRows = judgeCriteria.map(c => {
           const s = c.score ?? null;
           const col = s === null ? 'var(--ink-dim)' : s >= 4 ? 'var(--aqua)' : s >= 2 ? 'var(--yellow)' : 'var(--red)';
           return `<tr>
-            <td style="color:${col};font-weight:700;padding:2px 10px 2px 0;white-space:nowrap">${s !== null ? s : '—'}</td>
-            <td style="color:var(--ink);font-size:12px;padding:2px 0">${escHtml(c.criterion || '')}</td>
+            <td style="color:${col};font-weight:700;width:28px;padding:3px 8px 3px 0;vertical-align:top">${s !== null ? s : '—'}</td>
+            <td style="color:var(--ink);font-size:12px;line-height:1.4;padding:3px 0">${escHtml(c.criterion || '')}</td>
           </tr>`;
         }).join('');
-        const criteriaHtml = judgeCriteria.length ? `
-          <table style="border-collapse:collapse;margin:6px 0 4px;width:100%">${criteriaRows}</table>` : '';
         const feedbackShort = judgeFeedback ? judgeFeedback.split('\n\nPATCH TARGET')[0].trim() : '';
-        const feedbackHtml = feedbackShort ? `<div style="margin-top:4px;font-size:11px;color:var(--ink-dim)">${escHtml(feedbackShort.slice(0,300))}</div>` : '';
         controls = `
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-            <span style="font-size:14px;font-weight:700;color:${scoreColor}">Score juge : ${scoreLabel}</span>
-            <button style="font-size:11px;padding:2px 8px;background:transparent;border:1px solid var(--ink-dim);color:var(--ink-dim);border-radius:3px;cursor:pointer"
-              onclick="rejudge('${run.run_id}','${agent}')">Re-évaluer</button>
-          </div>
-          ${criteriaHtml}
-          ${feedbackHtml}
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
-            <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
-            <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
-          </div>
-          <div class="code-viewer" id="viewer-${agent}" style="margin-top:10px">
-            <select onchange="switchFile('${agent}',this.value,${JSON.stringify(JSON.stringify(files))})">${selectOpts}</select>
-            <pre id="code-${agent}">${firstContent}</pre>
+          <div class="scaffold-panel">
+            <div class="scaffold-section scaffold-judge">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+                <div>
+                  <span style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em">Score juge</span><br>
+                  <span style="font-size:22px;font-weight:700;color:${scoreColor}">${scoreLabel}</span>
+                  ${judgeScore !== null ? `<span style="font-size:12px;color:var(--ink-dim)"> / 5</span>` : ''}
+                </div>
+                <button class="btn-rejudge" onclick="rejudge('${run.run_id}','${agent}')">Re-évaluer</button>
+              </div>
+              ${criteriaRows ? `<table style="border-collapse:collapse;width:100%">${criteriaRows}</table>` : ''}
+              ${feedbackShort ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-dim);font-style:italic">${escHtml(feedbackShort.slice(0,250))}</div>` : ''}
+            </div>
+            <div class="scaffold-section">
+              <div style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Code généré</div>
+              <select class="file-select" onchange="switchFileData(this,'code-${agent}')" data-files="${escHtml(JSON.stringify(files))}">${selectOpts}</select>
+              <pre class="code-block" id="code-${agent}">${firstContent}</pre>
+            </div>
+            <div class="scaffold-actions">
+              <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
+              <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
+            </div>
           </div>`;
       } else if (state === 'installing') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
@@ -981,9 +997,16 @@
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function switchFile(agent, fname, filesJson) {
-    const files = JSON.parse(filesJson);
+  const _agentFiles = {}; // agent → {filename: content}
+
+  function switchFile(agent, fname) {
+    const files = _agentFiles[agent] || {};
     document.getElementById(`code-${agent}`).textContent = files[fname] || '';
+  }
+
+  function switchFileData(selectEl, codeId) {
+    const files = JSON.parse(selectEl.dataset.files || '{}');
+    document.getElementById(codeId).textContent = files[selectEl.value] || '';
   }
 
   async function scaffold(runId, agentName) {
@@ -1019,6 +1042,7 @@
         const diag = (run.scaffold_diagnosis || {})[agentName];
         if (scaffolded[agentName]) {
           const s = scaffolded[agentName];
+          _agentFiles[agentName] = s.files || {};
           _scaffoldState[key] = {
             state: diag ? 'diagnosis' : 'scaffolded',
             files: s.files || {},
