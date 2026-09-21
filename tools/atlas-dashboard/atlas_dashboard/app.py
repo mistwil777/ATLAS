@@ -148,12 +148,17 @@ async def api_new_run(
         tmp_path = tmp.name
 
     try:
-        try:
-            from pair_forge.extractors import extract_content  # noqa: PLC0415
-
-            cdc_text, _ = extract_content(_Path(tmp_path))
-        except ImportError:
+        # For plain text formats, decode directly — avoids importing pair_forge
+        # (which may download ML models at import time in non-airgap environments)
+        if suffix in (".txt", ".md", ".rst"):
             cdc_text = content.decode("utf-8", errors="replace")
+        else:
+            try:
+                from pair_forge.extractors import extract_content  # noqa: PLC0415
+
+                cdc_text, _ = extract_content(_Path(tmp_path))
+            except ImportError:
+                cdc_text = content.decode("utf-8", errors="replace")
     finally:
         with contextlib.suppress(OSError):
             _Path(tmp_path).unlink()
