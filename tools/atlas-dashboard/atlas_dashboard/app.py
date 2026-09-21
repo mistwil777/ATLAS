@@ -215,6 +215,15 @@ def api_get_run(run_id: str):
     return run
 
 
+@app.get("/api/bg-job/{job_key:path}")
+def api_bg_job(job_key: str):
+    """Return current status of a background job."""
+    job = _bg_jobs.get(job_key)
+    if job is None:
+        return {"status": "unknown"}
+    return job
+
+
 @app.post("/api/runs/{run_id}/approve")
 def api_approve(run_id: str, body: ApproveRequest | None = None):
     store = get_store()

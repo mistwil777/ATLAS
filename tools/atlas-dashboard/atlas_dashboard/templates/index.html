@@ -1050,18 +1050,28 @@
     try {
       const res = await fetch(`/api/runs/${runId}/rejudge/${encodeURIComponent(agentName)}`, { method: 'POST' });
       if (!res.ok) { const e = await res.json(); alert('Re-juge échoué: ' + (e.detail || '')); return; }
-      // Poll until judge_score updated in run store
+      // Poll until run store has updated judge data (job done or error)
+      const jobKey = `${runId}:rejudge:${agentName}`;
       for (let i = 0; i < 60; i++) {
         await new Promise(r => setTimeout(r, 3000));
-        const r2 = await fetch(`/api/runs/${runId}`);
-        if (!r2.ok) continue;
-        const run = await r2.json();
-        const s = (run.scaffolded || {})[agentName];
-        if (s && s.judge_score !== null && s.judge_score !== undefined) {
-          _scaffoldState[key] = { ...(_scaffoldState[key] || {}),
-            judgeScore: s.judge_score, judgeCriteria: s.judge_criteria || [], judgeFeedback: s.judge_feedback || '' };
-          await showRun(runId);
-          return;
+        // Check job status via dedicated endpoint
+        const rj = await fetch(`/api/bg-job/${encodeURIComponent(jobKey)}`);
+        if (rj.ok) {
+          const job = await rj.json();
+          if (job.status === 'done' || job.status === 'error') {
+            const r2 = await fetch(`/api/runs/${runId}`);
+            if (r2.ok) {
+              const run = await r2.json();
+              const s = (run.scaffolded || {})[agentName];
+              if (s) {
+                _scaffoldState[key] = { ...(_scaffoldState[key] || {}),
+                  judgeScore: s.judge_score ?? null, judgeCriteria: s.judge_criteria || [], judgeFeedback: s.judge_feedback || '' };
+              }
+            }
+            if (job.status === 'error') alert('Re-juge échoué: ' + job.error);
+            await showRun(runId);
+            return;
+          }
         }
       }
       alert('Timeout re-juge');
