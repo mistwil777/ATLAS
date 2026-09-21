@@ -827,22 +827,23 @@
         const judgeCriteria = _scaffoldState[key]?.judgeCriteria || sc?.judge_criteria || [];
         const judgeFeedback = _scaffoldState[key]?.judgeFeedback || sc?.judge_feedback || '';
         const scoreColor = judgeScore === null ? 'var(--ink-dim)' : judgeScore >= 4 ? 'var(--aqua)' : judgeScore >= 2 ? 'var(--yellow)' : 'var(--red)';
-        const scoreLabel = judgeScore === null ? '— score non disponible' : `Score juge : ${judgeScore.toFixed(1)} / 5`;
+        const scoreLabel = judgeScore === null ? '— score non disponible' : `${judgeScore.toFixed(1)} / 5`;
+        const criteriaRows = judgeCriteria.map(c => {
+          const s = c.score ?? null;
+          const col = s === null ? 'var(--ink-dim)' : s >= 4 ? 'var(--aqua)' : s >= 2 ? 'var(--yellow)' : 'var(--red)';
+          return `<tr>
+            <td style="color:${col};font-weight:700;padding:2px 10px 2px 0;white-space:nowrap">${s !== null ? s : '—'}</td>
+            <td style="color:var(--ink);font-size:12px;padding:2px 0">${escHtml(c.criterion || '')}</td>
+          </tr>`;
+        }).join('');
         const criteriaHtml = judgeCriteria.length ? `
-          <div style="margin:8px 0 4px;font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.05em">Critères</div>
-          ${judgeCriteria.map(c => {
-            const s = c.score ?? null;
-            const col = s === null ? 'var(--ink-dim)' : s >= 4 ? 'var(--aqua)' : s >= 2 ? 'var(--yellow)' : 'var(--red)';
-            return `<div style="display:flex;gap:6px;align-items:baseline;font-size:12px;margin-bottom:3px">
-              <span style="color:${col};font-weight:600;min-width:22px">${s !== null ? s : '—'}</span>
-              <span style="color:var(--ink)">${escHtml(c.criterion || '')}</span>
-            </div>`;
-          }).join('')}` : '';
-        const feedbackHtml = judgeFeedback ? `<div style="margin-top:6px;font-size:11px;color:var(--ink-dim);white-space:pre-wrap">${escHtml(judgeFeedback.slice(0,400))}</div>` : '';
+          <table style="border-collapse:collapse;margin:6px 0 4px;width:100%">${criteriaRows}</table>` : '';
+        const feedbackShort = judgeFeedback ? judgeFeedback.split('\n\nPATCH TARGET')[0].trim() : '';
+        const feedbackHtml = feedbackShort ? `<div style="margin-top:4px;font-size:11px;color:var(--ink-dim)">${escHtml(feedbackShort.slice(0,300))}</div>` : '';
         controls = `
-          <div style="margin-bottom:8px">
-            <span style="font-size:13px;font-weight:600;color:${scoreColor}">${scoreLabel}</span>
-            <button style="margin-left:10px;font-size:11px;padding:2px 8px;background:transparent;border:1px solid var(--ink-dim);color:var(--ink-dim);border-radius:3px;cursor:pointer"
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <span style="font-size:14px;font-weight:700;color:${scoreColor}">Score juge : ${scoreLabel}</span>
+            <button style="font-size:11px;padding:2px 8px;background:transparent;border:1px solid var(--ink-dim);color:var(--ink-dim);border-radius:3px;cursor:pointer"
               onclick="rejudge('${run.run_id}','${agent}')">Re-évaluer</button>
           </div>
           ${criteriaHtml}
@@ -851,7 +852,7 @@
             <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
             <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
           </div>
-          <div class="code-viewer" id="viewer-${agent}" style="margin-top:8px">
+          <div class="code-viewer" id="viewer-${agent}" style="margin-top:10px">
             <select onchange="switchFile('${agent}',this.value,${JSON.stringify(JSON.stringify(files))})">${selectOpts}</select>
             <pre id="code-${agent}">${firstContent}</pre>
           </div>`;
