@@ -1242,11 +1242,14 @@
 
   async function bulkDeleteSkipped() {
     const runs = await fetch('/api/runs').then(r => r.json());
-    const toDelete = runs.filter(r =>
-      r.blocs && r.blocs.length > 0 && r.blocs.every(b => b.status === 'skipped')
-    );
-    if (!toDelete.length) { alert('No all-skipped runs to delete.'); return; }
-    if (!confirm(`Delete ${toDelete.length} debug run(s) where all blocs are skipped?`)) return;
+    const TEST_PREVIEWS = ['Extraire les noms clients depuis les emails entrants.'];
+    const toDelete = runs.filter(r => {
+      const allSkipped = r.blocs && r.blocs.length > 0 && r.blocs.every(b => b.status === 'skipped');
+      const isTestFixture = TEST_PREVIEWS.some(p => (r.cdc_preview || '').startsWith(p));
+      return allSkipped || isTestFixture;
+    });
+    if (!toDelete.length) { alert('No debug runs to delete.'); return; }
+    if (!confirm(`Delete ${toDelete.length} debug run(s)?`)) return;
     await Promise.all(toDelete.map(r => fetch(`/api/runs/${r.run_id}`, { method: 'DELETE' })));
     if (toDelete.some(r => r.run_id === selectedId)) {
       selectedId = null;

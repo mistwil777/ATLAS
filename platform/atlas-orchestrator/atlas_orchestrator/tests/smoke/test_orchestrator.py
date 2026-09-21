@@ -95,7 +95,7 @@ def _mock_llm(prompt: str, cfg: dict, max_tokens: int) -> str:
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 
-def test_orchestrate_full_mock(monkeypatch):
+def test_orchestrate_full_mock(monkeypatch, tmp_path):
     """Full happy-path: 2 blocs, both pass judge."""
     monkeypatch.setattr(
         "atlas_orchestrator.pipeline.CdcRouterAgent",
@@ -113,6 +113,7 @@ def test_orchestrate_full_mock(monkeypatch):
         llm_cfg={},
         bus_fn=_make_mock_bus(passed=True),
         judge_fn=_make_mock_judge(passed=True),
+        run_store_dir=tmp_path,
     )
 
     assert report is not None
@@ -121,7 +122,7 @@ def test_orchestrate_full_mock(monkeypatch):
     assert report["blocs_total"] == 2
 
 
-def test_orchestrate_agent_not_found(monkeypatch):
+def test_orchestrate_agent_not_found(monkeypatch, tmp_path):
     """Bus returns 'not found' → bloc skipped, overall_passed False."""
     import atlas_orchestrator.pipeline as p
 
@@ -133,6 +134,7 @@ def test_orchestrate_agent_not_found(monkeypatch):
         llm_cfg={},
         bus_fn=_make_mock_bus(not_found=True),
         judge_fn=_make_mock_judge(),
+        run_store_dir=tmp_path,
     )
 
     assert report is not None
@@ -141,7 +143,7 @@ def test_orchestrate_agent_not_found(monkeypatch):
     assert report["overall_passed"] is False
 
 
-def test_orchestrate_agent_failure(monkeypatch):
+def test_orchestrate_agent_failure(monkeypatch, tmp_path):
     """Bus returns passed=False → bloc status=failed."""
     import atlas_orchestrator.pipeline as p
 
@@ -153,6 +155,7 @@ def test_orchestrate_agent_failure(monkeypatch):
         llm_cfg={},
         bus_fn=_make_mock_bus(passed=False),
         judge_fn=_make_mock_judge(),
+        run_store_dir=tmp_path,
     )
 
     assert report is not None
@@ -160,7 +163,7 @@ def test_orchestrate_agent_failure(monkeypatch):
     assert len(failed) == 2
 
 
-def test_orchestrate_judge_skipped(monkeypatch):
+def test_orchestrate_judge_skipped(monkeypatch, tmp_path):
     """judge_fn raises ImportError → judge_passed=None, bloc not blocking."""
     import atlas_orchestrator.pipeline as p
 
@@ -175,6 +178,7 @@ def test_orchestrate_judge_skipped(monkeypatch):
         llm_cfg={},
         bus_fn=_make_mock_bus(passed=True),
         judge_fn=_no_judge_fn,
+        run_store_dir=tmp_path,
     )
 
     assert report is not None
@@ -183,7 +187,7 @@ def test_orchestrate_judge_skipped(monkeypatch):
             assert r["judge_passed"] is None
 
 
-def test_orchestrate_cdc_router_failure(monkeypatch):
+def test_orchestrate_cdc_router_failure(monkeypatch, tmp_path):
     """cdc-router returns None → orchestrate returns None."""
     import atlas_orchestrator.pipeline as p
 
@@ -195,12 +199,13 @@ def test_orchestrate_cdc_router_failure(monkeypatch):
         llm_cfg={},
         bus_fn=_make_mock_bus(),
         judge_fn=_make_mock_judge(),
+        run_store_dir=tmp_path,
     )
 
     assert report is None
 
 
-def test_run_generator_yields_summary(monkeypatch):
+def test_run_generator_yields_summary(monkeypatch, tmp_path):
     """AtlasOrchestratorAgent.run() yields a summary event."""
     import atlas_orchestrator.pipeline as p
 
@@ -210,6 +215,7 @@ def test_run_generator_yields_summary(monkeypatch):
         llm_fn=_mock_llm,
         bus_fn=_make_mock_bus(passed=True),
         judge_fn=_make_mock_judge(passed=True),
+        run_store_dir=tmp_path,
     )
     events = list(agent.run(cdc_text=_CDC_TEXT))
     summary = next((e for e in events if e.get("summary")), None)

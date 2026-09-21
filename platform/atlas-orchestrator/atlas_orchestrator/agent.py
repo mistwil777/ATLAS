@@ -62,6 +62,7 @@ class AtlasOrchestratorAgent:
         memory_storage_path: Path | None = None,
         bus_fn: Callable | None = None,
         judge_fn: Callable | None = None,
+        run_store_dir: Path | None = None,
     ) -> None:
         self.config = config or {}
         self.llm_cfg = self.config.get("llm", {})
@@ -69,6 +70,7 @@ class AtlasOrchestratorAgent:
         self._memory_path = memory_storage_path
         self._bus_fn = bus_fn
         self._judge_fn = judge_fn
+        self._run_store_dir = run_store_dir
 
     def run(
         self,
@@ -104,6 +106,7 @@ class AtlasOrchestratorAgent:
             memory_path=self._memory_path,
             bus_fn=self._bus_fn,
             judge_fn=self._judge_fn,
+            run_store_dir=self._run_store_dir,
         )
 
         if report is None:
