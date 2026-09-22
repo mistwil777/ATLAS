@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ATLAS — Base vivante : confiance évolutive</title>
+  <style>
+    :root {
+      --bg: #0e0e14;
+      --surface: #1a1a24;
+      --border: #2a2a3a;
+      --blue: #3987e5;
+      --aqua: #1baf7a;
+      --red: #e66767;
+      --yellow: #e8a600;
+      --violet: #9085e9;
+      --ink: #c8c0d8;
+      --ink-dim: #7a748a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    code {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .doc-header {
+      padding: 32px 48px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+    .doc-header h1 { font-size: 18px; color: var(--ink); font-weight: normal; }
+    .doc-header .tag {
+      font-size: 10px;
+      color: var(--aqua);
+      border: 1px solid var(--aqua);
+      padding: 2px 8px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .doc-body { max-width: 900px; margin: 0 auto; padding: 40px 48px 80px; }
+    h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--violet);
+      margin: 48px 0 16px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 12px;
+      color: var(--blue);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      margin: 28px 0 10px;
+    }
+    p { color: var(--ink); margin-bottom: 12px; line-height: 1.7; }
+    .lead {
+      font-size: 14px;
+      color: var(--ink);
+      border-left: 3px solid var(--violet);
+      padding-left: 16px;
+      margin: 24px 0;
+      line-height: 1.8;
+    }
+    .callout {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin: 20px 0;
+    }
+    .callout.rule  { border-left: 3px solid var(--aqua); }
+    .callout.warn  { border-left: 3px solid var(--yellow); }
+    .callout.info  { border-left: 3px solid var(--blue); }
+    .callout-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      margin-bottom: 8px;
+    }
+    .callout.rule  .callout-title { color: var(--aqua); }
+    .callout.warn  .callout-title { color: var(--yellow); }
+    .callout.info  .callout-title { color: var(--blue); }
+    pre {
+      background: #0a0e17;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 16px;
+      overflow-x: auto;
+      font-size: 12px;
+      line-height: 1.5;
+      margin: 12px 0 20px;
+      color: var(--ink);
+    }
+    pre .c  { color: var(--ink-dim); font-style: italic; }
+    pre .k  { color: var(--violet); }
+    pre .s  { color: var(--aqua); }
+    pre .n  { color: var(--blue); }
+    pre .num { color: var(--yellow); }
+
+    /* ── Cycle diagram ── */
+    .cycle { display: flex; align-items: center; gap: 0; margin: 24px 0; flex-wrap: wrap; }
+    .cycle-step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 8px 14px;
+      font-size: 11px;
+      text-align: center;
+      min-width: 110px;
+    }
+    .cycle-step .score { font-size: 18px; font-weight: bold; margin-bottom: 2px; }
+    .cycle-step .label { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .05em; }
+    .cycle-arrow { color: var(--border); padding: 0 8px; font-size: 16px; }
+    .s1 .score { color: var(--red); }
+    .s2 .score { color: var(--yellow); }
+    .s3 .score { color: var(--aqua); }
+
+    /* ── Comparison table ── */
+    .compare { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .compare th {
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--ink-dim);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-weight: normal;
+    }
+    .compare td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      font-size: 12px;
+    }
+    .compare tr:last-child td { border-bottom: none; }
+    .compare .bad  { color: var(--red); }
+    .compare .good { color: var(--aqua); }
+
+    /* ── Search result blocks ── */
+    .results { margin: 16px 0; }
+    .result-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+    .result-item .rank { color: var(--ink-dim); width: 16px; text-align: right; }
+    .result-item .name { flex: 1; }
+    .result-item .score-col { color: var(--ink-dim); font-size: 11px; min-width: 120px; text-align: right; }
+    .result-item.top    { border-color: var(--aqua); background: #0d1a14; }
+    .result-item.mid    { opacity: 0.6; }
+    .result-item.bottom { opacity: 0.3; }
+
+    /* ── File table ── */
+    .file-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .file-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); font-size: 12px; vertical-align: top; }
+    .file-table tr:last-child td { border-bottom: none; }
+    .file-table td:first-child { color: var(--blue); white-space: nowrap; padding-right: 24px; }
+
+    /* ── Operations ── */
+    .op-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin: 16px 0;
+      overflow: hidden;
+    }
+    .op-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .op-name { color: var(--yellow); font-size: 12px; }
+    .op-desc { color: var(--ink-dim); font-size: 11px; }
+    .op-block pre { margin: 0; border: none; border-radius: 0; }
+
+    footer { padding: 24px 48px; color: var(--ink-dim); font-size: 11px; border-top: 1px solid var(--border); margin-top: 60px; }
+  </style>
+</head>
+<body>
+
+<div class="doc-header">
+  <h1>Atlas Memory — Base vivante avec confiance évolutive</h1>
+  <span class="tag">Approuvé</span>
+  <span class="tag" style="color:var(--violet);border-color:var(--violet)">platform/atlas-memory</span>
+</div>
+
+<div class="doc-body">
+
+  <!-- PROBLÈME -->
+  <h2>Problème</h2>
+  <p>Aujourd'hui, la base mémoire d'ATLAS stocke des expériences <strong>sans qualifier leur fiabilité</strong>.</p>
+  <p>Un agent scaffoldé avec un score juge de 2.0 (mauvais) et un agent avec un score de 5.0 (excellent) ont le même poids dans la base. Quand ATLAS cherche un template pour construire un nouvel agent, il peut tomber sur un mauvais exemple et croire que c'est du gold.</p>
+
+  <div class="callout warn">
+    <div class="callout-title">Conséquence concrète</div>
+    <p>Sur un nouveau projet similaire, ATLAS retrouve le scaffold raté de CategoryClassifier (score 1.0, prompt avec TODO) parce qu'il ressemble textuellement à la requête — et l'utilise comme point de départ. Le scaffold suivant repart d'une mauvaise base.</p>
+  </div>
+
+  <!-- PRINCIPE -->
+  <h2>Principe fondamental</h2>
+  <div class="lead">On ne supprime jamais. On qualifie.</div>
+  <p>Chaque entrée en base reste pour toujours — elle porte l'histoire. Ce qui change, c'est sa <strong>confiance</strong> : un score entre 0.0 et 1.0 qui dit à ATLAS « dans quelle mesure tu peux te fier à cette information ».</p>
+
+  <div class="callout info">
+    <div class="callout-title">Analogie cerveau humain</div>
+    <p>« Je me souviens d'un agent de classification avec un prompt incomplet. Confiance : 0.2 — je sais que c'était raté. Je me souviens aussi d'un agent similaire qui marchait parfaitement. Confiance : 0.95 — validé par le juge. Je privilégie le second pour répondre à ta demande. »</p>
+    <p style="margin-top:8px">Le KG, c'est ce que tu <em>sais</em>. Le RAG, c'est ce dont tu <em>te souviens</em>. Les deux s'affinent avec le temps.</p>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <h2>Deux couches de mémoire</h2>
+
+  <h3>RAG — La mémoire épisodique</h3>
+  <p>Stocke des expériences concrètes : du code généré, des évaluations de juge, des traces de pipeline. Technologie : Qdrant (base vectorielle locale, airGap-compatible).</p>
+  <p>Chaque expérience indexée contient désormais un champ <code>confidence</code> :</p>
+  <pre>{
+  <span class="s">"entry_type"</span>: <span class="s">"scaffold"</span>,
+  <span class="s">"content"</span>: <span class="s">"Agent CategoryClassifier — classifie des tickets support..."</span>,
+  <span class="s">"payload"</span>: {
+    <span class="s">"agent_name"</span>: <span class="s">"CategoryClassifier"</span>,
+    <span class="s">"run_id"</span>: <span class="s">"42b39d07-..."</span>,
+    <span class="s">"judge_score"</span>: <span class="num">5.0</span>
+  },
+  <span class="s">"confidence"</span>: <span class="num">0.95</span>,   <span class="c">← nouveau</span>
+  <span class="s">"timestamp"</span>: <span class="s">"2026-09-22T09:00:00Z"</span>
+}</pre>
+
+  <h3>KG — La mémoire sémantique</h3>
+  <p>Stocke les relations entre concepts : quel agent produit quoi, qui enchaîne avec qui, quelles capacités sont maîtrisées. Chaque nœud agent porte maintenant son historique de scores :</p>
+  <pre>{
+  <span class="s">"name"</span>: <span class="s">"CategoryClassifier"</span>,
+  <span class="s">"node_type"</span>: <span class="s">"agent"</span>,
+  <span class="s">"capabilities"</span>: [<span class="s">"classification"</span>, <span class="s">"support-tickets"</span>],
+  <span class="s">"judge_score"</span>: <span class="num">5.0</span>,      <span class="c">← nouveau : score le plus récent</span>
+  <span class="s">"confidence"</span>: <span class="num">1.0</span>,       <span class="c">← nouveau : judge_score / 5.0</span>
+  <span class="s">"score_history"</span>: [         <span class="c">← nouveau : trajectoire complète</span>
+    { <span class="s">"score"</span>: <span class="num">1.0</span>, <span class="s">"run_id"</span>: <span class="s">"abc..."</span>, <span class="s">"timestamp"</span>: <span class="s">"..."</span> },
+    { <span class="s">"score"</span>: <span class="num">3.5</span>, <span class="s">"run_id"</span>: <span class="s">"def..."</span>, <span class="s">"timestamp"</span>: <span class="s">"..."</span> },
+    { <span class="s">"score"</span>: <span class="num">5.0</span>, <span class="s">"run_id"</span>: <span class="s">"42b..."</span>, <span class="s">"timestamp"</span>: <span class="s">"..."</span> }
+  ],
+  <span class="s">"coaching_history"</span>: [       <span class="c">← existait déjà</span>
+    { <span class="s">"patch"</span>: <span class="s">"Remplacer TODO dans MAIN_PROMPT"</span>, <span class="s">"criterion"</span>: <span class="s">"output_format"</span>, <span class="s">"delta"</span>: <span class="num">2.5</span> }
+  ]
+}</pre>
+
+  <!-- CYCLE DE VIE -->
+  <h2>Cycle de vie d'un agent dans la base</h2>
+
+  <div class="cycle">
+    <div class="cycle-step s1">
+      <div class="score">1.0</div>
+      <div class="label">Scaffold #1</div>
+      <div style="font-size:10px;color:var(--ink-dim);margin-top:4px">confidence 0.20</div>
+    </div>
+    <div class="cycle-arrow">→</div>
+    <div class="cycle-step s2">
+      <div class="score">3.5</div>
+      <div class="label">Scaffold #2</div>
+      <div style="font-size:10px;color:var(--ink-dim);margin-top:4px">confidence 0.70</div>
+    </div>
+    <div class="cycle-arrow">→</div>
+    <div class="cycle-step s3">
+      <div class="score">5.0</div>
+      <div class="label">Scaffold #3</div>
+      <div style="font-size:10px;color:var(--ink-dim);margin-top:4px">confidence 1.00</div>
+    </div>
+    <div class="cycle-arrow">→</div>
+    <div class="cycle-step" style="border-color:var(--aqua)">
+      <div class="score" style="color:var(--aqua);font-size:14px">✓ Install</div>
+      <div class="label">KG renforcé</div>
+      <div style="font-size:10px;color:var(--ink-dim);margin-top:4px">connexions +</div>
+    </div>
+  </div>
+
+  <p>À chaque scaffold, la confiance de l'expérience précédente est réduite (mais pas supprimée). La nouvelle expérience est indexée avec une confiance proportionnelle à son score juge.</p>
+
+  <!-- IMPACT RECHERCHE -->
+  <h2>Impact sur la recherche RAG</h2>
+  <p>Le score de pertinence combiné remplace le score cosine seul :</p>
+  <pre>score_combiné = similarité_cosine × confidence</pre>
+
+  <h3>Avant — triés par similarité cosine uniquement</h3>
+  <div class="results">
+    <div class="result-item bottom">
+      <span class="rank">1.</span>
+      <span class="name">CategoryClassifier — run abc (scaffold #1)</span>
+      <span class="score-col">cosine 0.92 — <span style="color:var(--red)">judge 1.0</span></span>
+    </div>
+    <div class="result-item mid">
+      <span class="rank">2.</span>
+      <span class="name">PriorityClassifier — run 42b (scaffold final)</span>
+      <span class="score-col">cosine 0.88 — <span style="color:var(--aqua)">judge 5.0</span></span>
+    </div>
+    <div class="result-item mid">
+      <span class="rank">3.</span>
+      <span class="name">CategoryClassifier — run def (scaffold #2)</span>
+      <span class="score-col">cosine 0.85 — <span style="color:var(--yellow)">judge 3.5</span></span>
+    </div>
+  </div>
+  <p style="color:var(--red);font-size:11px">← Le mauvais scaffold remonte en premier parce qu'il ressemble textuellement davantage à la requête.</p>
+
+  <h3>Après — triés par score combiné</h3>
+  <div class="results">
+    <div class="result-item top">
+      <span class="rank">1.</span>
+      <span class="name">PriorityClassifier — run 42b</span>
+      <span class="score-col">0.88 × 1.00 = <strong style="color:var(--aqua)">0.88</strong></span>
+    </div>
+    <div class="result-item mid">
+      <span class="rank">2.</span>
+      <span class="name">CategoryClassifier — run def</span>
+      <span class="score-col">0.85 × 0.35 = 0.30</span>
+    </div>
+    <div class="result-item bottom">
+      <span class="rank">3.</span>
+      <span class="name">CategoryClassifier — run abc (invalidé)</span>
+      <span class="score-col">0.92 × 0.00 = <span style="color:var(--red)">0.00</span></span>
+    </div>
+  </div>
+
+  <!-- NOUVELLES OPÉRATIONS -->
+  <h2>Nouvelles opérations</h2>
+
+  <div class="op-block">
+    <div class="op-header">
+      <span class="op-name">update_confidence</span>
+      <span class="op-desc">Affiner la fiabilité d'une expérience RAG existante</span>
+    </div>
+    <pre><span class="c"># Quand un re-scaffold arrive avec un meilleur score,
+# l'ancienne expérience perd de la confiance</span>
+memory.run(
+    operation=<span class="s">"update_confidence"</span>,
+    point_id=<span class="s">"uuid-de-l-ancienne-experience"</span>,
+    confidence=<span class="num">0.3</span>  <span class="c"># réduit car supplanté par mieux</span>
+)</pre>
+  </div>
+
+  <div class="op-block">
+    <div class="op-header">
+      <span class="op-name">invalidate</span>
+      <span class="op-desc">Marquer comme dépassé sans supprimer — confidence → 0.0</span>
+    </div>
+    <pre><span class="c"># Suppression d'un run de test par l'utilisateur</span>
+memory.run(
+    operation=<span class="s">"invalidate"</span>,
+    point_id=<span class="s">"uuid-du-scaffold"</span>,
+    invalidated_by=<span class="s">"user_delete"</span>  <span class="c"># ou run_id_meilleur</span>
+)
+<span class="c"># Résultat dans Qdrant :
+# confidence = 0.0, invalidated_by = "user_delete"
+# L'entrée reste — elle ne remonte plus dans les recherches</span></pre>
+  </div>
+
+  <div class="op-block">
+    <div class="op-header">
+      <span class="op-name">update_agent_score</span>
+      <span class="op-desc">Mettre à jour le score et l'historique du nœud KG</span>
+    </div>
+    <pre><span class="c"># Après chaque scaffold réussi ou installation</span>
+memory.run(
+    operation=<span class="s">"update_agent_score"</span>,
+    name=<span class="s">"CategoryClassifier"</span>,
+    judge_score=<span class="num">5.0</span>,
+    run_id=<span class="s">"42b39d07-..."</span>
+)
+<span class="c"># Résultat dans graph.json :
+# score_history += {score: 5.0, run_id: "42b...", timestamp: "..."}
+# confidence = 5.0 / 5.0 = 1.0</span></pre>
+  </div>
+
+  <!-- SUPPRESSION RUN -->
+  <h2>Suppression d'un run — niveau 1</h2>
+  <p>Endpoint : <code>DELETE /api/runs/{run_id}</code></p>
+
+  <table class="compare">
+    <tr>
+      <th>Action</th>
+      <th>Ce qui se passe</th>
+    </tr>
+    <tr>
+      <td>Run store JSON</td>
+      <td class="good">Supprimé — <code>~/.atlas/runs/{run_id}.json</code></td>
+    </tr>
+    <tr>
+      <td>Fichiers scaffoldés disque</td>
+      <td class="good">Supprimés — répertoires <code>output_path</code> du run</td>
+    </tr>
+    <tr>
+      <td>Entrées RAG liées au run</td>
+      <td class="good">Invalidées — <code>confidence = 0.0</code>, conservées pour l'historique</td>
+    </tr>
+    <tr>
+      <td>Nœuds KG installés</td>
+      <td style="color:var(--ink-dim)">Non touchés — un agent installé reste dans le KG</td>
+    </tr>
+    <tr>
+      <td>Nœuds KG non installés</td>
+      <td class="good"><code>confidence = 0.0</code> sur le nœud</td>
+    </tr>
+  </table>
+
+  <div class="callout rule">
+    <div class="callout-title">Règle</div>
+    <p>Rien n'est jamais physiquement supprimé de Qdrant ni de <code>graph.json</code>. La suppression d'un run est une opération réversible au niveau de la base — seul le fichier JSON et les fichiers disque sont définitivement effacés.</p>
+  </div>
+
+  <!-- FICHIERS MODIFIÉS -->
+  <h2>Fichiers modifiés</h2>
+  <table class="file-table">
+    <tr>
+      <td>platform/atlas-memory/atlas_memory/rag.py</td>
+      <td><code>confidence</code> dans payload · <code>update_confidence()</code> · <code>invalidate()</code> · tri combiné cosine × confidence</td>
+    </tr>
+    <tr>
+      <td>platform/atlas-memory/atlas_memory/kg.py</td>
+      <td><code>judge_score</code> / <code>confidence</code> sur nœuds · <code>update_agent_score()</code> · <code>score_history</code></td>
+    </tr>
+    <tr>
+      <td>platform/atlas-memory/atlas_memory/agent.py</td>
+      <td>3 nouvelles opérations dans le dispatch : <code>update_confidence</code>, <code>invalidate</code>, <code>update_agent_score</code></td>
+    </tr>
+    <tr>
+      <td>platform/atlas-memory/atlas_memory/tests/smoke/test_memory.py</td>
+      <td>Tests pour les nouvelles opérations</td>
+    </tr>
+    <tr>
+      <td>tools/atlas-dashboard/atlas_dashboard/app.py</td>
+      <td>Passer <code>confidence</code> à l'install · endpoint <code>DELETE /api/runs/{run_id}</code></td>
+    </tr>
+    <tr>
+      <td>tools/atlas-dashboard/atlas_dashboard/templates/index.html</td>
+      <td>Bouton "Supprimer ce run" avec confirmation modale</td>
+    </tr>
+  </table>
+
+</div>
+
+<footer>
+  ATLAS — platform/atlas-memory &nbsp;·&nbsp; Approuvé 2026-09-22
+</footer>
+
+</body>
+</html>
