@@ -20,6 +20,32 @@ Specification:
 JSON:"""
 
 
+PROMPT_GENERATION = """\
+You are an ATLAS agent prompt engineer.
+
+Given the agent specification below, write the body of the MAIN_PROMPT string that will be injected \
+into the agent's prompts.py file.
+
+Rules:
+- Write the instructions in the SAME LANGUAGE as the specification (French if the spec is in French).
+- Extract ALL enumerated values VERBATIM from the spec and list them as strict constraints.
+  Example: if the spec says "priorité: critique | haute | normale | basse", the prompt must say
+  "Valeurs autorisées pour priorité: critique, haute, normale, basse — aucune autre valeur n'est acceptée."
+- For numeric fields (confidence, score…): specify the exact type and range (e.g. float between 0.0 and 1.0).
+- For categorical fields: list every allowed value on a dedicated line.
+- Output format: describe the exact JSON structure expected, field by field.
+- The prompt must be self-contained: the agent must not need any external context to produce correct output.
+- Do NOT include placeholder text like "TODO" or "define what the agent should do".
+
+Return ONLY the prompt body (plain text, no Python string delimiters, no markdown fences).
+The result will be used as-is inside a Python triple-quoted string.
+
+Specification:
+{spec_content}
+
+Prompt body:"""
+
+
 # Interactive mode — fixed questions, not LLM prompts
 INTERACTIVE_QUESTIONS = [
     ("agent_name", "Agent name (kebab-case, e.g. text-classifier): "),

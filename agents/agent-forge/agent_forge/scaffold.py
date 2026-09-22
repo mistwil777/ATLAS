@@ -37,7 +37,7 @@ def generate(params: dict, output_dir: Path) -> Path:
     # collect.py no longer generated — agents import from atlas_core
     _write(pkg_dir / "docker.py", _docker(slug, pkg))
     _write(pkg_dir / "install.py", _install(slug, pkg))
-    _write(pkg_dir / "prompts.py", _prompts(slug, domain, out))
+    _write(pkg_dir / "prompts.py", _prompts(slug, domain, out, params.get("main_prompt_body")))
     _write(pkg_dir / "manifest.py", _tools(slug, pkg))
     _write(pkg_dir / "tests" / "__init__.py", "")
     _write(pkg_dir / "tests" / "smoke" / "__init__.py", "")
@@ -514,7 +514,18 @@ def _git_commit_and_tag(capability: str, new_pip: str) -> None:
 '''
 
 
-def _prompts(slug: str, domain: str, out: str) -> str:
+def _prompts(slug: str, domain: str, out: str, main_prompt_body: str | None = None) -> str:
+    if main_prompt_body:
+        body = main_prompt_body.replace('"""', "'''")
+    else:
+        body = (
+            f"You are an agent specialized in {domain}.\n\n"
+            f"Input: {{input}}\n\n"
+            f"Instructions:\n"
+            f"- TODO: define what the agent should do with the input\n"
+            f"- Output format: {out}\n\n"
+            f"Output:"
+        )
     return f'''\
 """Prompt templates for {slug}."""
 
@@ -522,15 +533,8 @@ from __future__ import annotations
 
 
 MAIN_PROMPT = """\\
-You are an agent specialized in {domain}.
-
-Input: {{input}}
-
-Instructions:
-- TODO: define what the agent should do with the input
-- Output format: {out}
-
-Output:"""
+{body}
+"""
 '''
 
 

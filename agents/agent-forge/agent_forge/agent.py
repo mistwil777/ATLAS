@@ -19,7 +19,7 @@ import time
 from collections.abc import Callable, Generator
 from pathlib import Path
 
-from agent_forge.prompts import INTERACTIVE_QUESTIONS, SPEC_EXTRACTION
+from agent_forge.prompts import INTERACTIVE_QUESTIONS, PROMPT_GENERATION, SPEC_EXTRACTION
 
 
 def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 1024) -> str | None:
@@ -175,6 +175,17 @@ class AgentForgeAgent:
             "yes",
             "1",
         )
+
+        # Generate the actual prompt body from the full spec (second LLM call)
+        if spec_dict.get("uses_llm"):
+            yield self._info("Generating prompt instructions from spec...")
+            prompt_gen = PROMPT_GENERATION.format(spec_content=content)
+            main_prompt_body = self._llm(prompt_gen, self.llm_cfg, 2048)
+            if main_prompt_body:
+                spec_dict["main_prompt_body"] = main_prompt_body.strip()
+            else:
+                yield self._warn("Prompt generation returned no output — using TODO placeholder")
+
         return spec_dict
 
     # ── Interactive mode ───────────────────────────────────────────────────────
@@ -212,6 +223,7 @@ class AgentForgeAgent:
             "output_type": spec_dict.get("output_type", ""),
             "domain": spec_dict.get("domain", ""),
             "uses_llm": bool(spec_dict.get("uses_llm", False)),
+            "main_prompt_body": spec_dict.get("main_prompt_body"),
         }
 
         yield self._info("Generating scaffolding...")
