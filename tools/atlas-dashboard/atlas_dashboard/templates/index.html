@@ -318,7 +318,7 @@
   <div style="background:#1a1a2e;border:1px solid var(--blue);border-radius:12px;padding:32px;width:480px;max-width:90vw">
     <h3 style="margin:0 0 20px;color:var(--blue)">New CDC</h3>
 
-    <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--ink-dim)">FICHIER CDC (txt, md, pdf, docx)</label>
+    <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--ink-dim)">CDC FILE (txt, md, pdf, docx)</label>
     <div id="cdc-drop-zone" style="border:2px dashed var(--blue);border-radius:8px;padding:24px;text-align:center;cursor:pointer;margin-bottom:16px;transition:background .2s"
          onclick="document.getElementById('cdc-file-input').click()"
          ondragover="event.preventDefault();this.style.background='rgba(57,135,229,.1)'"
@@ -328,14 +328,14 @@
     </div>
     <input type="file" id="cdc-file-input" accept=".txt,.md,.pdf,.docx" style="display:none" onchange="onCdcFileSelected(this)">
 
-    <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--ink-dim)">NOM DU PROJET (optionnel)</label>
+    <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--ink-dim)">PROJECT NAME (optional)</label>
     <input type="text" id="cdc-project-name" placeholder="ex: crm-support-2026" style="width:100%;box-sizing:border-box;background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:8px 12px;color:#fff;font-size:13px;margin-bottom:20px">
 
     <div id="cdc-modal-error" style="color:var(--red);font-size:12px;margin-bottom:12px;display:none"></div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button onclick="closeNewCdcModal()" style="background:none;border-color:#555;color:var(--ink-dim)">Cancel</button>
-      <button id="cdc-submit-btn" onclick="submitNewCdc()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600" disabled>Lancer le pipeline</button>
+      <button id="cdc-submit-btn" onclick="submitNewCdc()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600" disabled>Launch pipeline</button>
     </div>
   </div>
 </div>
@@ -390,7 +390,7 @@
     <div class="adv-custom">
       <input type="text" id="adv-custom-input" placeholder="Ajouter une action personnalisée…" class="adv-custom-field" oninput="updateValidateBtn()" />
     </div>
-    <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Valider et lancer scaffold</button>
+    <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Validate and launch scaffold</button>
   </div>
 </div>
 
@@ -639,7 +639,7 @@
     return `<div class="waiting-panel" id="waiting-panel-${run.run_id}">
       ${header}
       ${questions}
-      <button class="btn-submit-answers" onclick="submitAnswers('${run.run_id}', this)">Valider et continuer</button>
+      <button class="btn-submit-answers" onclick="submitAnswers('${run.run_id}', this)">Submit and continue</button>
     </div>`;
   }
 
@@ -1665,7 +1665,7 @@
 
   async function validateAdvice() {
     const agent = document.getElementById('trend-agent-select').value;
-    if (!agent || !_lastRunId) { alert('Pas de run disponible pour lancer le scaffold.'); return; }
+    if (!agent || !_lastRunId) { alert('No run available to launch scaffold.'); return; }
 
     const actions = JSON.parse(document.getElementById('advisor-panel').dataset.actions || '[]');
     const checks = document.querySelectorAll('[id^="adv-act-"]');
@@ -1704,7 +1704,7 @@
         loadTrend(agent);
       }
     } finally {
-      btn.textContent = 'Valider et lancer scaffold';
+      btn.textContent = 'Validate and launch scaffold';
       btn.disabled = false;
     }
   }
