@@ -899,10 +899,11 @@
               <pre class="code-block" id="code-${agent}">${firstContent}</pre>
             </div>
             <div class="scaffold-actions">
-              ${judgeScore !== null && judgeScore < 3
+              ${judgeScore !== null && judgeScore < 5
                 ? `<button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--yellow);color:var(--yellow)">Re-scaffold</button>`
-                : `<button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>`
+                : ''
               }
+              <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
               <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
             </div>
           </div>`;
@@ -912,6 +913,7 @@
         controls = `
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <span class="badge badge-approved">installed</span>
+            <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--ink-dim);color:var(--ink-dim);font-size:11px">Re-scaffold</button>
             <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
           </div>`;
       } else if (state === 'diagnosis') {
