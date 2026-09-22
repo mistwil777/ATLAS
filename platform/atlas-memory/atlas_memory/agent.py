@@ -77,6 +77,10 @@ class AtlasMemoryAgent:
             "add_edge": self._op_add_edge,
             "query_composable": self._op_query_composable,
             "get_graph": self._op_get_graph,
+            "update_confidence": self._op_update_confidence,
+            "invalidate": self._op_invalidate,
+            "invalidate_by_run": self._op_invalidate_by_run,
+            "update_agent_score": self._op_update_agent_score,
         }
         handler = dispatch.get(operation)
         if handler is None:
@@ -106,10 +110,33 @@ class AtlasMemoryAgent:
         content: str,
         payload: dict | None = None,
         metadata: dict | None = None,
+        confidence: float = 1.0,
         **_: object,
     ) -> dict:
-        point_id = self._get_rag().index(entry_type, content, payload, metadata)
+        point_id = self._get_rag().index(
+            entry_type, content, payload, metadata, confidence=confidence
+        )
         return {"id": point_id, "entry_type": entry_type}
+
+    def _op_update_confidence(self, point_id: str, confidence: float, **_: object) -> dict:
+        self._get_rag().update_confidence(point_id, confidence)
+        return {"point_id": point_id, "confidence": confidence}
+
+    def _op_invalidate(self, point_id: str, invalidated_by: str, **_: object) -> dict:
+        self._get_rag().invalidate(point_id, invalidated_by)
+        return {"point_id": point_id, "invalidated_by": invalidated_by}
+
+    def _op_invalidate_by_run(
+        self, run_id: str, invalidated_by: str = "user_delete", **_: object
+    ) -> dict:
+        count = self._get_rag().invalidate_by_run(run_id, invalidated_by)
+        return {"run_id": run_id, "invalidated": count}
+
+    def _op_update_agent_score(
+        self, name: str, judge_score: float, run_id: str, **_: object
+    ) -> dict:
+        self._get_kg().update_agent_score(name, judge_score, run_id)
+        return {"name": name, "judge_score": judge_score}
 
     def _op_search(
         self,
@@ -128,6 +155,8 @@ class AtlasMemoryAgent:
         inputs: list | None = None,
         outputs: list | None = None,
         tags: list | None = None,
+        judge_score: float | None = None,
+        confidence: float = 1.0,
         **_: object,
     ) -> dict:
         self._get_kg().register_agent(
@@ -138,6 +167,8 @@ class AtlasMemoryAgent:
             tags=tags or [],
             node_type="agent",
             shareable=_is_shareable(),
+            judge_score=judge_score,
+            confidence=confidence,
         )
         return {"registered": name}
 

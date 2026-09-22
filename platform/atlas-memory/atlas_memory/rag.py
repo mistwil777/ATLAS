@@ -80,6 +80,7 @@ class RAGStore:
         content: str,
         payload: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
+        confidence: float = 1.0,
     ) -> str:
         point_id = str(uuid.uuid4())
         vectors = self._embed([content])
@@ -94,12 +95,57 @@ class RAGStore:
                         "content": content,
                         "payload": payload or {},
                         "metadata": metadata or {},
+                        "confidence": max(0.0, min(1.0, confidence)),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
                 )
             ],
         )
         return point_id
+
+    def update_confidence(self, point_id: str, confidence: float) -> None:
+        """Update the confidence score of an existing point (0.0–1.0)."""
+        self._client.set_payload(
+            collection_name=_COLLECTION,
+            payload={"confidence": max(0.0, min(1.0, confidence))},
+            points=[point_id],
+        )
+
+    def invalidate(self, point_id: str, invalidated_by: str) -> None:
+        """Mark a point as superseded — confidence → 0.0, kept for audit."""
+        self._client.set_payload(
+            collection_name=_COLLECTION,
+            payload={
+                "confidence": 0.0,
+                "invalidated_by": invalidated_by,
+                "invalidated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            points=[point_id],
+        )
+
+    def invalidate_by_run(self, run_id: str, invalidated_by: str) -> int:
+        """Invalidate all points whose payload.run_id matches. Returns count."""
+        invalidated = 0
+        offset = None
+        while True:
+            result = self._client.scroll(
+                collection_name=_COLLECTION,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="payload.run_id", match=MatchValue(value=run_id))]
+                ),
+                limit=100,
+                offset=offset,
+                with_payload=False,
+                with_vectors=False,
+            )
+            points, next_offset = result
+            for p in points:
+                self.invalidate(str(p.id), invalidated_by)
+                invalidated += 1
+            if next_offset is None:
+                break
+            offset = next_offset
+        return invalidated
 
     def search(
         self,
@@ -108,15 +154,22 @@ class RAGStore:
         top_k: int = 5,
     ) -> list[dict[str, Any]]:
         vectors = self._embed([query])
-        query_filter = None
+        must = []
         if entry_type is not None:
-            query_filter = Filter(
-                must=[FieldCondition(key="entry_type", match=MatchValue(value=entry_type))]
-            )
+            must.append(FieldCondition(key="entry_type", match=MatchValue(value=entry_type)))
+        query_filter = Filter(must=must) if must else None
+        # Fetch more candidates to allow re-ranking by combined score
+        fetch_k = min(top_k * 4, 100)
         results = self._client.query_points(
             collection_name=_COLLECTION,
             query=vectors[0],
             query_filter=query_filter,
-            limit=top_k,
+            limit=fetch_k,
         )
-        return [{"id": h.id, "score": h.score, **h.payload} for h in results.points]
+        # Re-rank: combined_score = cosine_similarity × confidence
+        ranked = sorted(
+            [{"id": h.id, "cosine_score": h.score, **h.payload} for h in results.points],
+            key=lambda r: r["cosine_score"] * r.get("confidence", 1.0),
+            reverse=True,
+        )
+        return ranked[:top_k]

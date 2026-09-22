@@ -474,12 +474,55 @@ def api_answer(run_id: str, body: AnswerRequest):
 
 @app.delete("/api/runs/{run_id}")
 def api_delete_run(run_id: str):
+    import logging  # noqa: PLC0415
+    import shutil  # noqa: PLC0415
+
     store = get_store()
-    path = store._path(run_id)
-    if not path.exists():
+    run = store.get_run(run_id)
+    if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    path.unlink()
-    return {"status": "deleted"}
+
+    # 1. Supprimer les fichiers scaffoldés sur disque
+    deleted_paths: list[str] = []
+    for agent_name, sc in (run.get("scaffolded") or {}).items():
+        output_path = sc.get("output_path", "")
+        if output_path:
+            p = _Path(output_path)
+            if p.exists():
+                try:
+                    shutil.rmtree(p) if p.is_dir() else p.unlink()
+                    deleted_paths.append(output_path)
+                except OSError as exc:
+                    logging.getLogger("atlas_dashboard").warning(
+                        "delete_run: could not remove %s: %s", output_path, exc
+                    )
+
+    # 2. Invalider les entrées RAG liées à ce run (fail-open)
+    rag_invalidated = 0
+    try:
+        from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+        mem = AtlasMemoryAgent()
+        events = list(
+            mem.run(operation="invalidate_by_run", run_id=run_id, invalidated_by="user_delete")
+        )
+        summary = next((e for e in events if e.get("summary")), None)
+        if summary:
+            rag_invalidated = summary["result"].get("invalidated", 0)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "delete_run: RAG invalidation failed (non-blocking): %s", exc
+        )
+
+    # 3. Supprimer le fichier JSON du run store
+    store._path(run_id).unlink(missing_ok=True)
+
+    return {
+        "status": "deleted",
+        "run_id": run_id,
+        "scaffold_paths_removed": deleted_paths,
+        "rag_entries_invalidated": rag_invalidated,
+    }
 
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
@@ -1616,8 +1659,10 @@ def api_install(run_id: str, agent_name: str):
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=f"pip install failed: {result.stderr[:500]}")
 
-    # Register the new agent in the KG so cdc-router can find it at re-run
-    _register_agent_in_kg(agent_name, output_path)
+    # Register the new agent in the KG with judge score + confidence
+    sc_entry = (store.get_run(run_id) or {}).get("scaffolded", {}).get(agent_name, {})
+    judge_score = sc_entry.get("judge_score")
+    _register_agent_in_kg(agent_name, output_path, judge_score=judge_score, run_id=run_id)
 
     store.set_agent_installed(run_id, agent_name)
     return {"status": "installed", "agent_name": agent_name}
@@ -2115,13 +2160,19 @@ def _fix_entry_point(output_path: _Path, agent_name: str) -> None:
     pyproject.write_text(text, encoding="utf-8")
 
 
-def _register_agent_in_kg(agent_name: str, output_path: str) -> None:
-    """Add the freshly installed agent to atlas-memory KG."""
+def _register_agent_in_kg(
+    agent_name: str,
+    output_path: str,
+    judge_score: float | None = None,
+    run_id: str | None = None,
+) -> None:
+    """Add the freshly installed agent to atlas-memory KG with confidence."""
     import logging  # noqa: PLC0415
 
     try:
         from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
 
+        confidence = (judge_score / 5.0) if judge_score is not None else 1.0
         mem = AtlasMemoryAgent()
         events = list(
             mem.run(
@@ -2129,12 +2180,24 @@ def _register_agent_in_kg(agent_name: str, output_path: str) -> None:
                 name=agent_name,
                 capabilities=[f"Handles {agent_name} tasks as defined in CDC"],
                 tags=["scaffolded"],
+                judge_score=judge_score,
+                confidence=confidence,
             )
         )
         err = next((e for e in events if e.get("level") == "error"), None)
         if err:
             logging.getLogger("atlas_dashboard").warning(
                 "KG registration warning for %s: %s", agent_name, err.get("msg")
+            )
+        # Also record score history if we have a run_id
+        if judge_score is not None and run_id:
+            list(
+                mem.run(
+                    operation="update_agent_score",
+                    name=agent_name,
+                    judge_score=judge_score,
+                    run_id=run_id,
+                )
             )
     except Exception as exc:  # noqa: BLE001
         logging.getLogger("atlas_dashboard").warning(

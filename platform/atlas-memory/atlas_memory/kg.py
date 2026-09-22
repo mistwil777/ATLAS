@@ -30,16 +30,45 @@ class KGStore:
         tags: list[str],
         node_type: str = "agent",
         shareable: bool = True,
+        judge_score: float | None = None,
+        confidence: float = 1.0,
     ) -> None:
-        self._g.add_node(
-            name,
-            node_type=node_type,
-            capabilities=capabilities,
-            inputs=inputs,
-            outputs=outputs,
-            tags=tags,
-            shareable=shareable,
+        existing = dict(self._g.nodes.get(name, {}))
+        attrs: dict = {
+            "node_type": node_type,
+            "capabilities": capabilities,
+            "inputs": inputs,
+            "outputs": outputs,
+            "tags": tags,
+            "shareable": shareable,
+            "confidence": max(0.0, min(1.0, confidence)),
+            # preserve existing history lists
+            "score_history": existing.get("score_history", []),
+            "coaching_history": existing.get("coaching_history", []),
+        }
+        if judge_score is not None:
+            attrs["judge_score"] = judge_score
+        self._g.add_node(name, **attrs)
+        self.save()
+
+    def update_agent_score(self, name: str, judge_score: float, run_id: str) -> None:
+        """Record a new judge score and update confidence = judge_score / 5.0."""
+        if name not in self._g:
+            return
+        node = self._g.nodes[name]
+        history: list[dict] = list(node.get("score_history", []))
+        history.append(
+            {
+                "score": judge_score,
+                "run_id": run_id,
+                "timestamp": __import__("datetime")
+                .datetime.now(__import__("datetime").timezone.utc)
+                .isoformat(),
+            }
         )
+        node["score_history"] = history
+        node["judge_score"] = judge_score
+        node["confidence"] = max(0.0, min(1.0, judge_score / 5.0))
         self.save()
 
     def get_nodes_by_type(self, node_type: str) -> set[str]:
