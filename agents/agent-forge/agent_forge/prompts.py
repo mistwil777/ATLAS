@@ -36,7 +36,7 @@ Rules:
 - Output format: describe the EXACT JSON structure expected, with EXACT field names as defined in the spec.
   Do NOT invent field names. Do NOT add fields not present in the spec (e.g. no "confidence_score", no "secondary_category").
 - Include a concrete JSON example using the exact field names and example values.
-- The prompt must end with: "Input:\n{input}" so the agent receives the actual input to process.
+- The prompt must end with: "Input:\n{{input}}" so the agent receives the actual input to process.
 - The prompt must be self-contained: the agent must not need any external context to produce correct output.
 - Do NOT include placeholder text like "TODO" or "define what the agent should do".
 
