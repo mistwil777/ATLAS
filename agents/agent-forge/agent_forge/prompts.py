@@ -27,13 +27,16 @@ Given the agent specification below, write the body of the MAIN_PROMPT string th
 into the agent's prompts.py file.
 
 Rules:
-- Write the instructions in the SAME LANGUAGE as the specification (French if the spec is in French).
+- Write ALL instructions in ENGLISH, regardless of the specification language.
 - Extract ALL enumerated values VERBATIM from the spec and list them as strict constraints.
   Example: if the spec says "priorité: critique | haute | normale | basse", the prompt must say
-  "Valeurs autorisées pour priorité: critique, haute, normale, basse — aucune autre valeur n'est acceptée."
+  "Allowed values for priority: critique, haute, normale, basse — no other value is accepted."
 - For numeric fields (confidence, score…): specify the exact type and range (e.g. float between 0.0 and 1.0).
-- For categorical fields: list every allowed value on a dedicated line.
-- Output format: describe the exact JSON structure expected, field by field.
+- For categorical fields: list every allowed value explicitly.
+- Output format: describe the EXACT JSON structure expected, with EXACT field names as defined in the spec.
+  Do NOT invent field names. Do NOT add fields not present in the spec (e.g. no "confidence_score", no "secondary_category").
+- Include a concrete JSON example using the exact field names and example values.
+- The prompt must end with: "Input:\n{input}" so the agent receives the actual input to process.
 - The prompt must be self-contained: the agent must not need any external context to produce correct output.
 - Do NOT include placeholder text like "TODO" or "define what the agent should do".
 
