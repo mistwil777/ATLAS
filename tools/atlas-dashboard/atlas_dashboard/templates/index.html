@@ -308,15 +308,15 @@
   <button id="btn-review" onclick="showTabRuns(); loadRuns(true)">Needs review</button>
   <button onclick="refresh()">Refresh</button>
   <button id="btn-kg" onclick="showTabKG()">Knowledge Graph</button>
-  <button id="btn-trend" onclick="showTabTrend()">Tendances</button>
-  <button onclick="openNewCdcModal()" style="margin-left:auto;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">+ Nouveau CDC</button>
+  <button id="btn-trend" onclick="showTabTrend()">Trends</button>
+  <button onclick="openNewCdcModal()" style="margin-left:auto;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">+ New CDC</button>
   <button onclick="bulkDeleteSkipped()" style="border-color:var(--red);color:var(--red)" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
 </div>
 
 <!-- ── Modale Nouveau CDC ───────────────────────────────────────────────── -->
 <div id="cdc-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:none;align-items:center;justify-content:center">
   <div style="background:#1a1a2e;border:1px solid var(--blue);border-radius:12px;padding:32px;width:480px;max-width:90vw">
-    <h3 style="margin:0 0 20px;color:var(--blue)">Nouveau CDC</h3>
+    <h3 style="margin:0 0 20px;color:var(--blue)">New CDC</h3>
 
     <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--ink-dim)">FICHIER CDC (txt, md, pdf, docx)</label>
     <div id="cdc-drop-zone" style="border:2px dashed var(--blue);border-radius:8px;padding:24px;text-align:center;cursor:pointer;margin-bottom:16px;transition:background .2s"
@@ -324,7 +324,7 @@
          ondragover="event.preventDefault();this.style.background='rgba(57,135,229,.1)'"
          ondragleave="this.style.background=''"
          ondrop="handleCdcDrop(event)">
-      <div id="cdc-drop-label" style="color:var(--ink-dim);font-size:13px">Glisser-déposer ou cliquer pour choisir un fichier</div>
+      <div id="cdc-drop-label" style="color:var(--ink-dim);font-size:13px">Drag and drop or click to select a file</div>
     </div>
     <input type="file" id="cdc-file-input" accept=".txt,.md,.pdf,.docx" style="display:none" onchange="onCdcFileSelected(this)">
 
@@ -334,7 +334,7 @@
     <div id="cdc-modal-error" style="color:var(--red);font-size:12px;margin-bottom:12px;display:none"></div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button onclick="closeNewCdcModal()" style="background:none;border-color:#555;color:var(--ink-dim)">Annuler</button>
+      <button onclick="closeNewCdcModal()" style="background:none;border-color:#555;color:var(--ink-dim)">Cancel</button>
       <button id="cdc-submit-btn" onclick="submitNewCdc()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600" disabled>Lancer le pipeline</button>
     </div>
   </div>
@@ -370,7 +370,7 @@
 
 <div id="trend-panel">
   <div class="trend-toolbar">
-    <h2>Tendances — progression des agents</h2>
+    <h2>Trends — agent progression</h2>
     <select class="trend-select" id="trend-agent-select" onchange="loadTrend(this.value)">
       <option value="">— Choisir un agent —</option>
     </select>
@@ -500,9 +500,9 @@
         ${run.requires_review && isPending ? `
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--ink-dim)">
             <input type="checkbox" id="select-all" checked onchange="toggleSelectAll(this)" style="accent-color:var(--violet)">
-            Tout sélectionner
+            Select all
           </label>
-          <button class="btn-approve" onclick="decideSelected('${runId}','approve')">Approuver la sélection</button>
+          <button class="btn-approve" onclick="decideSelected('${runId}','approve')">Approve selection</button>
         ` : `<button class="btn-approve" ${isPending ? '' : 'disabled'} onclick="decide('${runId}','approve')">Approve</button>`}
         <button class="btn-reject"  ${isPending ? '' : 'disabled'} onclick="decide('${runId}','reject')">Reject</button>
         <button class="btn-reject" style="margin-left:auto;background:transparent;border:1px solid var(--red);color:var(--red)" onclick="deleteRun('${runId}')">Delete</button>
@@ -515,11 +515,11 @@
             <span class="badge badge-${b.status || 'skipped'}">${b.status || 'skipped'}</span>
             ${b.requires_review ? '<span class="badge badge-review">review</span>' : ''}
             <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
-            ${b.requires_review && isPending ? `<button class="btn-scaffold" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="improveBloc('${runId}','${escHtml(b.agent || '')}',this)">Améliorer</button>` : ''}
+            ${b.requires_review && isPending ? `<button class="btn-scaffold" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="improveBloc('${runId}','${escHtml(b.agent || '')}',this)">Improve</button>` : ''}
           </div>
           <div class="bloc-preview">${(b.output_preview || b.bloc || '').slice(0, 400)}</div>
-          ${b.justification ? `<div class="bloc-why"><span class="bloc-why-label">Décision</span> ${escHtml(b.justification)}</div>` : ''}
-          ${b.criteria && b.criteria.length ? `<div class="bloc-criteria"><span class="bloc-why-label">Critères d'évaluation</span><ul>${b.criteria.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>` : ''}
+          ${b.justification ? `<div class="bloc-why"><span class="bloc-why-label">Decision</span> ${escHtml(b.justification)}</div>` : ''}
+          ${b.criteria && b.criteria.length ? `<div class="bloc-criteria"><span class="bloc-why-label">Evaluation criteria</span><ul>${b.criteria.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>` : ''}
           ${buildJudgeDetail(b)}
         </div>`).join('')}
       ${buildToolsPanel(run)}
@@ -533,7 +533,7 @@
     const criteria = b.judge_criteria || [];
     const feedback = b.judge_feedback || '';
     if (!criteria.length && !feedback) return '';
-    const causeLabel = { model_error: 'IA', code_error: 'code', missing_spec: 'décision requise' };
+    const causeLabel = { model_error: 'AI', code_error: 'code', missing_spec: 'decision required' };
     const rows = criteria.map(c => {
       const sc = Math.round(c.score || 0);
       const cause = c.cause && sc < 3
@@ -573,7 +573,7 @@
       { label: 'Scaffold', done: scaffoldDone },
       { label: 'Install',  done: installDone },
       { label: 'Re-run',   done: rerunDone },
-      { label: 'Validé',   done: valideDone },
+      { label: 'Validated', done: valideDone },
     ];
 
     // First not-done step is current
@@ -583,9 +583,9 @@
     const hints = [
       null,
       'Scaffoldez les agents manquants',
-      'Installez les agents générés',
+      'Install the generated agents',
       'Relancez le pipeline',
-      'Approuvez le run',
+      'Approve the run',
     ];
 
     const html = steps.map((s, i) => {
@@ -608,7 +608,7 @@
     if (!qs.length) return '';
     const n = qs.length;
     const header = `
-      <div class="waiting-title">Décisions en attente — ${escHtml(agent)}</div>
+      <div class="waiting-title">Pending decisions — ${escHtml(agent)}</div>
       <div class="waiting-intro">Avant de finaliser cet agent, ${n === 1 ? '1 point nécessite' : n + ' points nécessitent'} votre validation métier.</div>`;
 
     const questions = qs.map((q, i) => {
@@ -660,7 +660,7 @@
       }
     }
     if (!Object.keys(answers).length) {
-      alert('Veuillez répondre à au moins une question avant de continuer.');
+      alert('Please answer at least one question before continuing.');
       return;
     }
     btn.disabled = true;
@@ -684,7 +684,7 @@
       await loadRuns(currentFilter);
       await showRun(data.new_run_id || runId);
     } catch (e) {
-      alert('Erreur réseau : ' + e.message);
+      alert('Network error: ' + e.message);
       btn.disabled = false;
       btn.textContent = 'Valider et continuer';
       if (panel) panel.style.opacity = '1';
@@ -878,13 +878,13 @@
             <div class="scaffold-section scaffold-judge">
               <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
                 <div>
-                  <span style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em">Score juge</span><br>
+                  <span style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em">Judge score</span><br>
                   <span style="font-size:22px;font-weight:700;color:${scoreColor}">${scoreLabel}</span>
                   ${judgeScore !== null ? `<span style="font-size:12px;color:var(--ink-dim)"> / 5</span>` : ''}
                 </div>
                 ${_scaffoldState[key]?.rejudging
-                  ? `<button class="btn-rejudge" disabled>⏳ Évaluation…</button>`
-                  : `<button class="btn-rejudge" onclick="rejudge('${run.run_id}','${agent}')">Re-évaluer</button>`
+                  ? `<button class="btn-rejudge" disabled>⏳ Evaluating…</button>`
+                  : `<button class="btn-rejudge" onclick="rejudge('${run.run_id}','${agent}')">Re-evaluate</button>`
                 }
               </div>
               ${criteriaRows ? `<table style="border-collapse:collapse;width:100%">${criteriaRows}</table>` : ''}
@@ -1099,7 +1099,7 @@
       } catch(_) {}
     }
     _scaffoldState[key] = { state: 'pending' };
-    alert('Scaffold timeout — le serveur n\'a pas répondu en 6 minutes');
+    alert('Scaffold timeout — server did not respond within 6 minutes');
     await showRun(runId);
   }
 
@@ -1114,7 +1114,7 @@
         const e = await res.json();
         _scaffoldState[key] = { ...(_scaffoldState[key] || {}), rejudging: false };
         await showRun(runId);
-        alert('Re-juge échoué: ' + (e.detail || ''));
+        alert('Re-evaluate failed: ' + (e.detail || ''));
         return;
       }
       const jobKey = `${runId}:rejudge:${agentName}`;
@@ -1133,7 +1133,7 @@
                   judgeScore: s.judge_score ?? null, judgeCriteria: s.judge_criteria || [], judgeFeedback: s.judge_feedback || '' };
               }
             }
-            if (job.status === 'error') alert('Re-juge échoué: ' + job.error);
+            if (job.status === 'error') alert('Re-evaluate failed: ' + job.error);
             await showRun(runId);
             return;
           }
@@ -1524,7 +1524,7 @@
     const prevStr = prev?.avg_score != null ? prev.avg_score.toFixed(2) + ' → ' : '';
     const deltaStr = p.delta != null ? (p.delta >= 0 ? `<span style="color:var(--aqua)">+${p.delta.toFixed(2)}</span>` : `<span style="color:var(--red)">${p.delta.toFixed(2)}</span>`) : '';
     const date = fmtDate(p.created_at);
-    const causeLabel = {initial_scaffold:'Scaffold initial', cr_retry:'CR retry', model_change:'Changement de modèle'}[p.cause] || p.cause;
+    const causeLabel = {initial_scaffold:'Initial scaffold', cr_retry:'CR retry', model_change:'Model change'}[p.cause] || p.cause;
 
     let html = `<div class="trend-detail">
       <h3>${escHtml(_trendData.agent)} — Run ${idx+1}</h3>
@@ -1646,8 +1646,8 @@
     const fc = data.forecast || {};
     const fcEl = document.getElementById('adv-forecast');
     if (fc.rationale) {
-      const range = fc.score_range ? ` → score estimé ${fc.score_range[0].toFixed(1)}–${fc.score_range[1].toFixed(1)}` : '';
-      fcEl.textContent = `Prévision${range} : ${fc.rationale}`;
+      const range = fc.score_range ? ` → estimated score ${fc.score_range[0].toFixed(1)}–${fc.score_range[1].toFixed(1)}` : '';
+      fcEl.textContent = `Forecast${range}: ${fc.rationale}`;
       fcEl.style.display = '';
     } else {
       fcEl.style.display = 'none';
@@ -1677,7 +1677,7 @@
     if (customText) selectedPatches.push(customText);
 
     const btn = document.getElementById('adv-validate-btn');
-    btn.textContent = 'Lancement…';
+    btn.textContent = 'Launching…';
     btn.disabled = true;
     try {
       const r = await fetch(`/api/runs/${_lastRunId}/scaffold/${encodeURIComponent(agent)}`, {
@@ -1716,7 +1716,7 @@
   function openNewCdcModal() {
     _cdcFile = null;
     document.getElementById('cdc-file-input').value = '';
-    document.getElementById('cdc-drop-label').textContent = 'Glisser-déposer ou cliquer pour choisir un fichier';
+    document.getElementById('cdc-drop-label').textContent = 'Drag and drop or click to select a file';
     document.getElementById('cdc-project-name').value = '';
     document.getElementById('cdc-modal-error').style.display = 'none';
     document.getElementById('cdc-submit-btn').disabled = true;
@@ -1753,7 +1753,7 @@
     const errDiv = document.getElementById('cdc-modal-error');
     errDiv.style.display = 'none';
     btn.disabled = true;
-    btn.textContent = 'Lancement du pipeline…';
+    btn.textContent = 'Launching pipeline…';
     try {
       const fd = new FormData();
       fd.append('file', _cdcFile);
@@ -1770,7 +1770,7 @@
       await loadRuns(currentFilter);
       if (data.run_id) await showRun(data.run_id);
     } catch (e) {
-      errDiv.textContent = 'Erreur réseau : ' + e.message;
+      errDiv.textContent = 'Network error: ' + e.message;
       errDiv.style.display = 'block';
     } finally {
       btn.disabled = false;
