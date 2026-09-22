@@ -165,7 +165,7 @@
     .btn-rejudge { padding: 3px 10px; background: transparent; border: 1px solid var(--ink-dim); color: var(--ink-dim); border-radius: 3px; cursor: pointer; font-size: 11px; }
     .btn-rejudge:hover { border-color: var(--blue); color: var(--blue); }
     .scaffold-panel { display: flex; flex-direction: column; gap: 0; width: 100%; }
-    .scaffold-section { padding: 12px 16px; border-bottom: 1px solid #1e2535; }
+    .scaffold-section { padding: 12px 16px; border-bottom: 1px solid #1e2535; width: 100%; box-sizing: border-box; overflow: hidden; }
     .scaffold-judge { background: #0d1117; }
     .scaffold-actions { display: flex; gap: 8px; padding: 12px 16px; align-items: center; }
     .file-select { flex: 1; background: #0d1117; color: var(--ink); border: 1px solid #1e2535; border-radius: 3px; padding: 4px 8px; font-family: monospace; font-size: 12px; appearance: none; -webkit-appearance: none; color-scheme: dark; }
@@ -869,7 +869,7 @@
           const col = s === null ? 'var(--ink-dim)' : s >= 4 ? 'var(--aqua)' : s >= 2 ? 'var(--yellow)' : 'var(--red)';
           return `<tr>
             <td style="color:${col};font-weight:700;width:28px;padding:3px 8px 3px 0;vertical-align:top">${s !== null ? s : '—'}</td>
-            <td style="color:var(--ink);font-size:12px;line-height:1.4;padding:3px 0">${escHtml(c.criterion || '')}</td>
+            <td style="color:var(--ink);font-size:12px;line-height:1.4;padding:3px 0;word-break:break-word;overflow-wrap:anywhere">${escHtml(c.criterion || '')}</td>
           </tr>`;
         }).join('');
         const feedbackShort = judgeFeedback ? judgeFeedback.split('\n\nPATCH TARGET')[0].trim() : '';
