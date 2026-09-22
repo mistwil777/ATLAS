@@ -10,6 +10,8 @@ import secrets
 import subprocess
 import sys
 import tempfile
+import threading
+import uuid
 import zipfile
 from pathlib import Path
 from pathlib import Path as _Path
@@ -48,6 +50,10 @@ _sessions: set[str] = set()
 
 # Background job tracking: "{run_id}:{agent_name}" → {"status": "running"|"done"|"error", "error": str}
 _bg_jobs: dict[str, dict] = {}
+
+# Async pipeline jobs: job_id → {"stage": str, "run_id": str|None, "error": str|None}
+# stages: "routing" | "done" | "error"
+_pipeline_jobs: dict[str, dict] = {}
 
 
 def _token() -> str | None:
@@ -142,7 +148,7 @@ async def api_new_run(
     file: UploadFile,  # multipart file upload
     project_name: str = Form(""),
 ) -> dict:
-    """Upload a CDC file (txt/md/pdf/docx) and launch the full pipeline."""
+    """Upload a CDC file and launch the pipeline asynchronously. Returns job_id immediately."""
     suffix = _Path(file.filename or "cdc.txt").suffix.lower() or ".txt"
     content = await file.read()
 
@@ -151,8 +157,6 @@ async def api_new_run(
         tmp_path = tmp.name
 
     try:
-        # For plain text formats, decode directly — avoids importing pair_forge
-        # (which may download ML models at import time in non-airgap environments)
         if suffix in (".txt", ".md", ".rst"):
             cdc_text = content.decode("utf-8", errors="replace")
         else:
@@ -167,7 +171,7 @@ async def api_new_run(
             _Path(tmp_path).unlink()
 
     if not cdc_text.strip():
-        raise HTTPException(status_code=400, detail="Le fichier CDC est vide ou illisible")
+        raise HTTPException(status_code=400, detail="CDC file is empty or unreadable")
 
     try:
         from atlas_orchestrator.pipeline import orchestrate  # noqa: PLC0415
@@ -189,22 +193,45 @@ async def api_new_run(
     else:
         project_dir = str(_Path.home() / ".atlas" / "scaffolded")
 
-    report = orchestrate(
-        cdc_text=cdc_text,
-        llm_fn=llm_fn,
-        llm_cfg=llm_cfg,
-        run_store_dir=store_dir,
-        project_dir=project_dir,
-        project_owner="client",
-    )
-    if report is None:
-        raise HTTPException(status_code=500, detail="Pipeline failed — check dashboard logs")
+    job_id = str(uuid.uuid4())
+    _pipeline_jobs[job_id] = {"stage": "routing", "run_id": None, "error": None}
 
-    return {
-        "run_id": report.get("run_id"),
-        "status": report.get("status", "pending"),
-        "project_dir": project_dir,
-    }
+    def _run_pipeline() -> None:
+        try:
+            report = orchestrate(
+                cdc_text=cdc_text,
+                llm_fn=llm_fn,
+                llm_cfg=llm_cfg,
+                run_store_dir=store_dir,
+                project_dir=project_dir,
+                project_owner="client",
+            )
+            if report is None:
+                _pipeline_jobs[job_id] = {
+                    "stage": "error",
+                    "run_id": None,
+                    "error": "Pipeline failed — check dashboard logs",
+                }
+            else:
+                _pipeline_jobs[job_id] = {
+                    "stage": "done",
+                    "run_id": report.get("run_id"),
+                    "error": None,
+                }
+        except Exception as exc:  # noqa: BLE001
+            _pipeline_jobs[job_id] = {"stage": "error", "run_id": None, "error": str(exc)[:300]}
+
+    threading.Thread(target=_run_pipeline, daemon=True).start()
+    return {"job_id": job_id, "status": "processing"}
+
+
+@app.get("/api/pipeline-jobs/{job_id}")
+def api_pipeline_job_status(job_id: str) -> dict:
+    """Poll async pipeline job status. Returns stage, run_id (when done), error (on failure)."""
+    job = _pipeline_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 @app.get("/api/runs/{run_id}")

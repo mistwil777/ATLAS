@@ -280,6 +280,23 @@
 </head>
 <body>
 
+<!-- ── Pipeline toast (persistent, survives navigation) ──────────────────── -->
+<div id="pipeline-toast" style="display:none;position:fixed;bottom:24px;right:24px;z-index:2000;
+     background:#1a1a2e;border:1px solid var(--blue);border-radius:10px;padding:16px 20px;
+     min-width:260px;max-width:340px;box-shadow:0 4px 24px rgba(0,0,0,.5);cursor:default">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <span style="font-size:12px;font-weight:600;color:var(--blue);text-transform:uppercase;letter-spacing:.06em">Pipeline</span>
+    <button onclick="_dismissToast()" style="background:none;border:none;color:var(--ink-dim);cursor:pointer;font-size:14px;padding:0;line-height:1">✕</button>
+  </div>
+  <div id="pipeline-toast-steps" style="display:flex;flex-direction:column;gap:8px"></div>
+  <div id="pipeline-toast-action" style="display:none;margin-top:12px">
+    <button id="pipeline-toast-btn" style="width:100%;padding:7px;background:var(--aqua);color:#000;border:none;border-radius:5px;font-weight:600;font-size:12px;cursor:pointer">
+      Open run →
+    </button>
+  </div>
+  <div id="pipeline-toast-error" style="display:none;margin-top:8px;font-size:11px;color:var(--red)"></div>
+</div>
+
 <header>
   <h1>ATLAS Dashboard</h1>
   <span class="tag">HITL Review</span>
@@ -1764,52 +1781,88 @@
     }
   }
 
-  const _CDC_STEPS = [
-    { label: 'Reading CDC',       duration: 1500 },
-    { label: 'Routing segments',  duration: 8000 },
-    { label: 'Coherence check',   duration: 6000 },
-    { label: 'Building run',      duration: 99999 },
-  ];
+  // ── Pipeline toast ────────────────────────────────────────────────────────
 
-  function _renderCdcProgress(activeIdx, done) {
-    const container = document.getElementById('cdc-progress-steps');
-    container.innerHTML = _CDC_STEPS.map((s, i) => {
+  const _TOAST_STEPS = ['Reading CDC', 'Routing segments', 'Coherence check', 'Building run'];
+  let _toastPollInterval = null;
+  let _toastReadyRunId = null;
+
+  function _renderToastSteps(activeIdx, done, error) {
+    const container = document.getElementById('pipeline-toast-steps');
+    container.innerHTML = _TOAST_STEPS.map((label, i) => {
       let icon, color;
-      if (done && i <= activeIdx)        { icon = '✓'; color = 'var(--aqua)'; }
+      if (error)                         { icon = i <= activeIdx ? '✓' : '○'; color = i < activeIdx ? 'var(--aqua)' : 'var(--ink-dim)'; }
+      else if (done)                     { icon = '✓'; color = 'var(--aqua)'; }
       else if (i < activeIdx)            { icon = '✓'; color = 'var(--aqua)'; }
-      else if (i === activeIdx && !done) { icon = '<span style="display:inline-block;animation:spin 1s linear infinite">⟳</span>'; color = 'var(--blue)'; }
+      else if (i === activeIdx)          { icon = '<span style="display:inline-block;animation:spin 1s linear infinite">⟳</span>'; color = 'var(--blue)'; }
       else                               { icon = '○'; color = 'var(--ink-dim)'; }
-      return `<div style="display:flex;align-items:center;gap:12px;font-size:13px;color:${color}">
-        <span style="width:18px;text-align:center">${icon}</span>
-        <span>${s.label}</span>
-      </div>`;
+      return `<div style="display:flex;align-items:center;gap:10px;font-size:12px;color:${color}">
+        <span style="width:16px;text-align:center">${icon}</span><span>${label}</span></div>`;
     }).join('');
   }
 
+  function _showToast(jobId) {
+    const toast = document.getElementById('pipeline-toast');
+    document.getElementById('pipeline-toast-action').style.display = 'none';
+    document.getElementById('pipeline-toast-error').style.display = 'none';
+    _toastReadyRunId = null;
+    toast.style.display = 'block';
+
+    let stepIdx = 0;
+    const stepTimers = [
+      setTimeout(() => { stepIdx = 1; _renderToastSteps(stepIdx, false, false); }, 2000),
+      setTimeout(() => { stepIdx = 2; _renderToastSteps(stepIdx, false, false); }, 12000),
+      setTimeout(() => { stepIdx = 3; _renderToastSteps(stepIdx, false, false); }, 20000),
+    ];
+    _renderToastSteps(stepIdx, false, false);
+
+    if (_toastPollInterval) clearInterval(_toastPollInterval);
+    _toastPollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/pipeline-jobs/${jobId}`);
+        if (!res.ok) return;
+        const job = await res.json();
+        if (job.stage === 'done') {
+          stepTimers.forEach(clearTimeout);
+          clearInterval(_toastPollInterval);
+          _toastPollInterval = null;
+          _renderToastSteps(_TOAST_STEPS.length - 1, true, false);
+          _toastReadyRunId = job.run_id;
+          const actionEl = document.getElementById('pipeline-toast-action');
+          actionEl.style.display = 'block';
+          document.getElementById('pipeline-toast-btn').onclick = async () => {
+            _dismissToast();
+            await loadRuns(currentFilter);
+            if (job.run_id) await showRun(job.run_id);
+          };
+          await loadRuns(currentFilter);
+        } else if (job.stage === 'error') {
+          stepTimers.forEach(clearTimeout);
+          clearInterval(_toastPollInterval);
+          _toastPollInterval = null;
+          _renderToastSteps(stepIdx, false, true);
+          const errEl = document.getElementById('pipeline-toast-error');
+          errEl.textContent = job.error || 'Pipeline failed';
+          errEl.style.display = 'block';
+        }
+      } catch (_) {}
+    }, 2000);
+  }
+
+  function _dismissToast() {
+    if (_toastPollInterval) { clearInterval(_toastPollInterval); _toastPollInterval = null; }
+    document.getElementById('pipeline-toast').style.display = 'none';
+  }
+
+  // ── Submit new CDC ─────────────────────────────────────────────────────────
+
   async function submitNewCdc() {
     if (!_cdcFile) return;
-
-    // Swap form → progress view
-    ['cdc-drop-zone','cdc-file-input','cdc-project-name','cdc-modal-error'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.style.display = 'none';
-    });
-    document.querySelectorAll('#cdc-modal-overlay label').forEach(l => l.style.display = 'none');
-    document.querySelector('#cdc-modal-overlay [style*="justify-content:flex-end"]').style.display = 'none';
-    const progressEl = document.getElementById('cdc-progress');
-    const progressErr = document.getElementById('cdc-progress-error');
-    progressEl.style.display = 'block';
-    progressErr.style.display = 'none';
-
-    // Animate steps while request is in-flight
-    let activeStep = 0;
-    _renderCdcProgress(activeStep, false);
-    const timers = [];
-    let elapsed = 0;
-    for (let i = 0; i < _CDC_STEPS.length - 1; i++) {
-      elapsed += _CDC_STEPS[i].duration;
-      const idx = i + 1;
-      timers.push(setTimeout(() => { activeStep = idx; _renderCdcProgress(activeStep, false); }, elapsed));
-    }
+    const errDiv = document.getElementById('cdc-modal-error');
+    errDiv.style.display = 'none';
+    const submitBtn = document.getElementById('cdc-submit-btn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Launching…';
 
     try {
       const fd = new FormData();
@@ -1818,33 +1871,23 @@
       if (projectName) fd.append('project_name', projectName);
       const res = await fetch('/api/runs', { method: 'POST', body: fd });
       const data = await res.json();
-      timers.forEach(clearTimeout);
 
       if (!res.ok) {
-        progressErr.textContent = 'Error: ' + (data.detail || res.status);
-        progressErr.style.display = 'block';
-        // Restore form so user can retry
-        setTimeout(() => {
-          progressEl.style.display = 'none';
-          ['cdc-drop-zone','cdc-project-name','cdc-modal-error'].forEach(id => {
-            const el = document.getElementById(id); if (el) el.style.display = '';
-          });
-          document.querySelectorAll('#cdc-modal-overlay label').forEach(l => l.style.display = '');
-          document.querySelector('#cdc-modal-overlay [style*="justify-content:flex-end"]').style.display = '';
-        }, 3000);
+        errDiv.textContent = 'Error: ' + (data.detail || res.status);
+        errDiv.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Launch pipeline';
         return;
       }
 
-      // All done — flash complete state then close
-      _renderCdcProgress(_CDC_STEPS.length - 1, true);
-      await new Promise(r => setTimeout(r, 600));
+      // Close modal immediately — toast takes over
       closeNewCdcModal();
-      await loadRuns(currentFilter);
-      if (data.run_id) await showRun(data.run_id);
+      _showToast(data.job_id);
     } catch (e) {
-      timers.forEach(clearTimeout);
-      progressErr.textContent = 'Network error: ' + e.message;
-      progressErr.style.display = 'block';
+      errDiv.textContent = 'Network error: ' + e.message;
+      errDiv.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Launch pipeline';
     }
   }
 
