@@ -516,7 +516,14 @@ def _git_commit_and_tag(capability: str, new_pip: str) -> None:
 
 def _prompts(slug: str, domain: str, out: str, main_prompt_body: str | None = None) -> str:
     if main_prompt_body:
+        # Escape literal braces so MAIN_PROMPT.format(input=...) doesn't crash on
+        # JSON examples in the body, then re-add {input} as the actual placeholder.
         body = main_prompt_body.replace('"""', "'''")
+        body = body.replace("{", "{{").replace("}", "}}")
+        # Ensure {input} placeholder is present (un-escape it if the LLM wrote it)
+        body = body.replace("{{input}}", "{input}")
+        if "{input}" not in body:
+            body = body + "\n\nInput:\n{input}"
     else:
         body = (
             f"You are an agent specialized in {domain}.\n\n"
