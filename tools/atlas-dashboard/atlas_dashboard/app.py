@@ -1748,6 +1748,12 @@ def _judge_scaffold(
         # Try to load the agent and run it on the synthetic test input
         try:
             import importlib  # noqa: PLC0415
+            import sys as _sys  # noqa: PLC0415
+
+            # Evict stale cached modules so each attempt loads fresh code from disk
+            stale = [k for k in _sys.modules if k == module_slug or k.startswith(f"{module_slug}.")]
+            for k in stale:
+                del _sys.modules[k]
 
             # Try {module}.agent first (agent-forge places class in agent.py, not __init__)
             mod = None
@@ -1772,11 +1778,18 @@ def _judge_scaffold(
                     llm_fn=llm_fn, config={"llm": llm_cfg}, llm_cfg=llm_cfg
                 )
                 output_events = list(agent_instance.run(cdc_bloc=test_input, context=cdc_full))
-                agent_output = " ".join(
-                    str(e.get("output", e.get("summary", e.get("msg", ""))))
-                    for e in output_events
-                    if isinstance(e, dict)
-                )
+                # Extract meaningful output: prefer "output" key, then non-boolean "summary", then "msg"
+                parts = []
+                for e in output_events:
+                    if not isinstance(e, dict):
+                        continue
+                    if "output" in e and e["output"] is not None:
+                        parts.append(str(e["output"]))
+                    elif "summary" in e and e["summary"] is not True:
+                        parts.append(str(e["summary"]))
+                    elif "msg" in e:
+                        parts.append(str(e["msg"]))
+                agent_output = " ".join(parts)
             else:
                 agent_output = "(agent loaded but no Agent class found)"
         except Exception as exc:  # noqa: BLE001
