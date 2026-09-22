@@ -109,6 +109,9 @@ class RunStore:
             "judge_feedback": judge_feedback or "",
             "files": files or {},
         }
+        # Clear any stale diagnosis so the UI shows the new result, not the old failure
+        if judge_score is not None:
+            run.get("scaffold_diagnosis", {}).pop(agent_name, None)
         self._write(run_id, run)
 
     def set_scaffold_judge(
