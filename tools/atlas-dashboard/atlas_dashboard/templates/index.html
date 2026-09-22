@@ -484,7 +484,7 @@
     }
     list.innerHTML = runs.map(r => {
       const isWaiting = r.status === 'waiting_for_client';
-      const statusLabel = isWaiting ? 'En attente de validation' : r.status;
+      const statusLabel = isWaiting ? 'Pending validation' : r.status;
       const badgeCls = `badge-${r.status}`;
       return `
       <div class="run-item${r.run_id === selectedId ? ' selected' : ''}" onclick="showRun('${r.run_id}')">
@@ -508,7 +508,7 @@
     const isPending = run.status === 'pending';
     const isWaiting = run.status === 'waiting_for_client';
     const isResumed = run.status === 'resumed';
-    const statusLabel = isWaiting ? 'En attente de validation' : run.status;
+    const statusLabel = isWaiting ? 'Pending validation' : run.status;
     document.getElementById('detail').innerHTML = `
       <h2>Run ${run.run_id}</h2>
       <div class="meta-row">
@@ -605,7 +605,7 @@
 
     const hints = [
       null,
-      'Scaffoldez les agents manquants',
+      'Scaffold the missing agents',
       'Install the generated agents',
       'Relancez le pipeline',
       'Approve the run',
@@ -632,7 +632,7 @@
     const n = qs.length;
     const header = `
       <div class="waiting-title">Pending decisions — ${escHtml(agent)}</div>
-      <div class="waiting-intro">Avant de finaliser cet agent, ${n === 1 ? '1 point nécessite' : n + ' points nécessitent'} votre validation métier.</div>`;
+      <div class="waiting-intro">${n === 1 ? '1 point requires' : n + ' points require'} your validation before finalising this agent.</div>`;
 
     const questions = qs.map((q, i) => {
       const num = `① ② ③ ④ ⑤`.split(' ')[i] || `(${i+1})`;
