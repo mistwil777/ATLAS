@@ -872,9 +872,9 @@ def _build_consolidated_context(
     for attempt_entry in attempts_log:
         for cs in attempt_entry.get("criteria_scores", []):
             name = cs.get("criterion", "")
-            score = cs.get("score", 5)
+            score = cs.get("score")
             cause = cs.get("cause")
-            if not name or score >= 4:
+            if not name or score is None or score >= 4:
                 continue
             if name not in history:
                 history[name] = {"occurrences": 0, "last_score": score, "last_cause": cause}
@@ -1100,10 +1100,15 @@ def _run_scaffold_cycle(
             attempt_spec_path.unlink(missing_ok=True)
 
         summary = next((e for e in events if e.get("summary")), None)
+        import logging as _log  # noqa: PLC0415
+        _log.getLogger("atlas_dashboard").warning(
+            "Forge events for %s: %s", agent_slug, [(e.get("level","?"), e.get("msg","")[:120]) for e in events]
+        )
         if summary is None:
             errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
             raise HTTPException(status_code=500, detail=f"Scaffolding failed: {errors}")
 
+        _log.getLogger("atlas_dashboard").warning("Forge summary for %s: %s", agent_slug, summary)
         generated_path = _Path(summary["output_path"])
         target_path = base_output_dir / agent_slug
         if generated_path != target_path and generated_path.exists():
@@ -1188,6 +1193,9 @@ def _run_scaffold_cycle(
                 last_output_path,
                 last_spec,
                 last_files,
+                last_judge_score,
+                last_judge_criteria,
+                last_judge_feedback,
             )
 
     return (
@@ -1253,13 +1261,17 @@ def _run_improvement_advisor(agent_name: str, store) -> list[dict]:
 
 def _do_scaffold(run_id: str, agent_name: str, body: ScaffoldRequest) -> None:
     """Background worker — runs scaffold cycle and updates run store when done."""
+    import logging as _log  # noqa: PLC0415
     job_key = f"{run_id}:{agent_name}"
+    _log.getLogger("atlas_dashboard").warning("_do_scaffold START %s", agent_name)
     _bg_jobs[job_key] = {"status": "running"}
     try:
         result = _scaffold_sync(run_id, agent_name, body)
         _bg_jobs[job_key] = {"status": "done", "result": result}
+        _log.getLogger("atlas_dashboard").warning("_do_scaffold DONE %s result=%s", agent_name, str(result)[:200])
     except Exception as exc:  # noqa: BLE001
         _bg_jobs[job_key] = {"status": "error", "error": str(exc)}
+        _log.getLogger("atlas_dashboard").warning("_do_scaffold ERROR %s: %s", agent_name, exc)
 
 
 @app.post("/api/runs/{run_id}/scaffold/{agent_name}")
@@ -1778,7 +1790,7 @@ def _judge_scaffold(
                     llm_fn=llm_fn, config={"llm": llm_cfg}, llm_cfg=llm_cfg
                 )
                 output_events = list(agent_instance.run(cdc_bloc=test_input, context=cdc_full))
-                # Extract meaningful output: prefer "output" key, then non-boolean "summary", then "msg"
+                # Extract meaningful output: prefer "output" key, skip info/warn messages
                 parts = []
                 for e in output_events:
                     if not isinstance(e, dict):
@@ -1787,9 +1799,16 @@ def _judge_scaffold(
                         parts.append(str(e["output"]))
                     elif "summary" in e and e["summary"] is not True:
                         parts.append(str(e["summary"]))
-                    elif "msg" in e:
-                        parts.append(str(e["msg"]))
+                    # intentionally skip "msg" events (info/warn) — not agent output
                 agent_output = " ".join(parts)
+                # Strip markdown code fences so the judge sees raw JSON
+                import re as _re  # noqa: PLC0415
+                _fence = _re.search(r"```(?:json)?\s*(\{.*?\})\s*```", agent_output, _re.DOTALL)
+                if _fence:
+                    agent_output = _fence.group(1)
+                logging.getLogger("atlas_dashboard").warning(
+                    "Judge scaffold agent_output for %s: %r", agent_name, agent_output[:500]
+                )
             else:
                 agent_output = "(agent loaded but no Agent class found)"
         except Exception as exc:  # noqa: BLE001
@@ -2054,8 +2073,8 @@ def _add_failed_on_edges(agent_name: str, criteria_scores: list) -> None:
         kg = KGStore(_kg_path)
         for c in criteria_scores:
             crit_name = c.get("criterion", "")
-            score = c.get("score", 5)
-            if not crit_name or score >= 3:
+            score = c.get("score")
+            if not crit_name or score is None or score >= 3:
                 continue
             if crit_name not in kg._g.nodes:
                 kg.register_agent(
