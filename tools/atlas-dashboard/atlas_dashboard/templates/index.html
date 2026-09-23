@@ -127,7 +127,8 @@
     .toggle-chevron { font-size: 9px; color: var(--ink-dim); display: inline-block; transition: transform .15s; margin-left: 4px; }
     .card-open > .card-toggle .toggle-chevron,
     .card-open.card-toggle .toggle-chevron { transform: rotate(90deg); }
-    .router-summary { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; margin-bottom: 10px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: nowrap; }
+    .router-summary { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; margin-bottom: 10px; cursor: pointer; display: flex; flex-direction: column; gap: 0; font-size: 12px; }
+    .router-summary .router-summary-header { display: flex; align-items: center; gap: 8px; width: 100%; }
     .router-summary-label { color: var(--ink); font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .bloc-card.card-collapsible .bloc-header { cursor: pointer; margin-bottom: 0; }
     .bloc-card.card-open .bloc-header { margin-bottom: 8px; }
@@ -583,11 +584,12 @@
           const parts = [`${blocs.length} component${blocs.length>1?'s':''}`];
           if (agentCount) parts.push(`${agentCount} agent${agentCount>1?'s':''}`);
           if (toolCount)  parts.push(`${toolCount} tool${toolCount>1?'s':''}`);
-          return `<div class="router-summary card-collapsible" data-card-key="${summaryKey}">
-            <span class="router-summary-label card-toggle" onclick="toggleCard('${summaryKey}',event)">
-              Router analysis — ${parts.join(' · ')} <span class="toggle-chevron">▶</span>
-            </span>
-            <div class="card-body" style="margin-top:10px;width:100%">
+          return `<div class="router-summary card-collapsible" data-card-key="${summaryKey}" onclick="toggleCard('${summaryKey}',event)">
+            <div class="router-summary-header">
+              <span class="router-summary-label">Router analysis — ${parts.join(' · ')}</span>
+              <span class="toggle-chevron">▶</span>
+            </div>
+            <div class="card-body" style="margin-top:10px;width:100%" onclick="event.stopPropagation()">
               ${blocs.map(b => `<div class="bloc-card" style="margin-bottom:6px">
                 <div class="bloc-header">
                   <span class="bloc-agent">${b.agent || '—'}</span>
