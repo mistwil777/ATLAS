@@ -22,6 +22,9 @@ def _mlflow():
     try:
         import mlflow  # noqa: PLC0415
 
+        # Opt out of the filestore deprecation exception — ATLAS uses local tracking
+        # intentionally and does not need the SQLite migration path.
+        os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
         mlflow.set_tracking_uri(_TRACKING_URI)
         return mlflow
     except ImportError:
