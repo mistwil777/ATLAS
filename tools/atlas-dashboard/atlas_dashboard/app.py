@@ -1369,8 +1369,8 @@ def _do_scaffold(run_id: str, agent_name: str, body: ScaffoldRequest) -> None:
     store = get_store()
     _log.getLogger("atlas_dashboard").warning("_do_scaffold START %s", agent_name)
     _bg_jobs[job_key] = {"status": "running"}
-    store.set_scaffold_status(run_id, agent_name, "running")
     try:
+        store.set_scaffold_status(run_id, agent_name, "running")
         result = _scaffold_sync(run_id, agent_name, body)
         store.set_scaffold_status(run_id, agent_name, "done")
         _bg_jobs[job_key] = {"status": "done", "result": result}

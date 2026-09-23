@@ -125,7 +125,10 @@ class RunStore:
         status: 'running' | 'done' | 'error'
         """
         run = self._read(run_id)
-        run.setdefault("scaffold_status", {})[agent_name] = status
+        current = run.get("scaffold_status")
+        if not isinstance(current, dict):
+            run["scaffold_status"] = {}
+        run["scaffold_status"][agent_name] = status
         self._write(run_id, run)
 
     def add_scaffold_attempt(
@@ -152,7 +155,9 @@ class RunStore:
             "user_answers": user_answers or [],
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        run.setdefault("scaffold_attempts", {}).setdefault(agent_name, []).append(entry)
+        if not isinstance(run.get("scaffold_attempts"), dict):
+            run["scaffold_attempts"] = {}
+        run["scaffold_attempts"].setdefault(agent_name, []).append(entry)
         self._write(run_id, run)
 
     def set_scaffold_judge(
