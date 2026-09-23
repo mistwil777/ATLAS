@@ -1844,9 +1844,19 @@ def _judge_scaffold(
             except Exception:  # noqa: BLE001
                 derived_criteria = []
 
-        from atlas_judge.evaluator import pointwise as _pointwise  # noqa: PLC0415
+        from atlas_judge.agent import AtlasJudgeAgent  # noqa: PLC0415
 
-        summary = _pointwise(agent_output, derived_criteria, cdc_full, llm_fn, llm_cfg)
+        judge = AtlasJudgeAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
+        events = list(
+            judge.run(
+                operation="pointwise",
+                output=agent_output,
+                agent_name=agent_name,
+                context=cdc_full,
+                criteria=derived_criteria or None,
+            )
+        )
+        summary = next((e for e in events if e.get("summary")), None)
         if summary is None:
             return None, [], ""
 

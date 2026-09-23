@@ -23,19 +23,47 @@ _DIM = 384  # BAAI/bge-small-en-v1.5
 _MODEL = "BAAI/bge-small-en-v1.5"
 
 
+def _check_onnx_cached() -> bool:
+    """Return True if the fastembed ONNX model is already present in one of the local caches."""
+    import os as _os  # noqa: PLC0415
+
+    # fastembed caches in $FASTEMBED_CACHE_PATH, /tmp/fastembed_cache, or ~/.cache/fastembed
+    candidates = [
+        _os.environ.get("FASTEMBED_CACHE_PATH", ""),
+        "/tmp/fastembed_cache",
+        str(Path.home() / ".cache" / "fastembed"),
+    ]
+    model_slug = _MODEL.replace("/", "--").replace("_", "-").lower()
+    for base in candidates:
+        if not base:
+            continue
+        for p in Path(base).rglob("*.onnx"):
+            if model_slug in str(p).lower() or "bge-small" in str(p).lower():
+                return True
+    return False
+
+
 def _fastembed(texts: list[str]) -> list[list[float]]:
     import logging  # noqa: PLC0415
 
     from fastembed import TextEmbedding  # noqa: PLC0415
 
+    # Fail fast if the ONNX model file is not cached locally.
+    # Avoids triggering a network download that hangs in airgap environments.
+    if not _check_onnx_cached():
+        logging.getLogger("atlas_memory").warning(
+            "fastembed ONNX model not cached locally — RAG indexing skipped. "
+            "Run: python -m fastembed download --model %s",
+            _MODEL,
+        )
+        raise RuntimeError(f"fastembed model {_MODEL} not cached locally")
+
     try:
         model = TextEmbedding(model_name=_MODEL)
     except Exception as exc:  # noqa: BLE001
         logging.getLogger("atlas_memory").warning(
-            "fastembed model unavailable (%s) — RAG search disabled. "
-            "Run: python -m fastembed download --model %s",
+            "fastembed model unavailable (%s) — RAG search disabled.",
             exc.__class__.__name__,
-            _MODEL,
         )
         raise
     return [list(v) for v in model.embed(texts)]
