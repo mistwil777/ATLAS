@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-ingest"
+version = "0.1.0"
+description = "ATLAS multiformat document ingestion agent — extracts structured text from PDF, HTML, images, and plain text files."
+requires-python = ">=3.10"
+dependencies = [
+    "pillow>=10.0",
+    "pytesseract>=0.3",
+]
+
+[project.optional-dependencies]
+pdf = ["pdfplumber>=0.11"]
+html = ["beautifulsoup4>=4.12", "lxml>=5.0"]
+dev = ["pytest>=8.0"]
+
+[project.entry-points."atlas.agents"]
+atlas-ingest = "atlas_ingest.agent:AtlasIngestAgent"
+
+[project.scripts]
+atlas-ingest = "atlas_ingest.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atlas_ingest*"]
+
+[tool.setuptools.package-data]
+"atlas_ingest.tests.smoke.fixtures" = ["*"]
