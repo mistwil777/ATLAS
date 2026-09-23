@@ -51,7 +51,7 @@
 
     /* ── Layout ── */
     .layout { display: flex; height: calc(100vh - 210px); }
-    .run-list { width: 400px; border-right: 1px solid var(--border); overflow-y: auto; }
+    .run-list { width: 260px; min-width: 200px; border-right: 1px solid var(--border); overflow-y: auto; }
     .run-item { padding: 12px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; }
     .run-item:hover { background: var(--surface); }
     .run-item.selected { background: var(--surface); border-left: 2px solid var(--blue); }
@@ -127,8 +127,8 @@
     .toggle-chevron { font-size: 9px; color: var(--ink-dim); display: inline-block; transition: transform .15s; margin-left: 4px; }
     .card-open > .card-toggle .toggle-chevron,
     .card-open.card-toggle .toggle-chevron { transform: rotate(90deg); }
-    .router-summary { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; margin-bottom: 10px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12px; }
-    .router-summary-label { color: var(--ink); font-weight: 600; flex: 1; }
+    .router-summary { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; margin-bottom: 10px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: nowrap; }
+    .router-summary-label { color: var(--ink); font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .bloc-card.card-collapsible .bloc-header { cursor: pointer; margin-bottom: 0; }
     .bloc-card.card-open .bloc-header { margin-bottom: 8px; }
     .meta-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -806,69 +806,60 @@
       const existing = built[name];
       const state = _toolState[key]?.state || (existing?.installed ? 'installed' : existing ? 'built' : 'pending');
 
-      let controls = '';
+      // Build tool row — clean 2-part layout: header line + collapsible code
+      const tKey = `tool-detail-${name}`;
+      let statusBadge = '';
+      let actionButtons = '';
+      let fnsHtml = '';
+      let codeHtml = '';
+
       if (state === 'pending') {
-        controls = `<button class="btn-build-tool" onclick="buildTool('${run.run_id}','${name}')">Build</button>`;
+        actionButtons = `<button class="btn-build-tool" onclick="buildTool('${run.run_id}','${name}')">Build</button>`;
       } else if (state === 'building') {
-        controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Building…</span>`;
-      } else if (state === 'built') {
+        statusBadge = `<span class="spinner"></span>`;
+        actionButtons = `<span style="color:var(--ink-dim);font-size:11px">Building…</span>`;
+      } else if (state === 'built' || state === 'installing' || state === 'installed') {
         const files = _toolState[key]?.files || existing?.files || {};
         _agentFiles[`tool-${name}`] = files;
         const fns = _toolState[key]?.functions || existing?.functions || [];
         const fileNames = Object.keys(files);
         const selectOpts = fileNames.map(f => `<option value="${f}">${f}</option>`).join('');
         const firstContent = fileNames.length ? escHtml(files[fileNames[0]]) : '';
-        controls = `
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <span class="badge badge-approved">built</span>
-            ${fns.length ? `<span style="font-size:11px;color:var(--ink-dim)">${fns.join(', ')}</span>` : ''}
-            <button class="btn-install" onclick="installTool('${run.run_id}','${name}')">Install</button>
-            <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
-          </div>
-          ${fileNames.length ? `<div class="card-collapsible" data-card-key="tool-code-built-${name}" style="margin-top:10px">
-            <div class="card-toggle" onclick="toggleCard('tool-code-built-${name}',event)" style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-dim);padding:4px 0">
-              Code généré <span class="toggle-chevron">▶</span>
-              <div style="margin-left:auto;display:flex;gap:4px" onclick="event.stopPropagation()">
-                <select class="file-select" style="width:auto" onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
-                <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
-              </div>
+
+        if (state === 'installing') {
+          statusBadge = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
+        } else if (state === 'built') {
+          statusBadge = `<span class="badge badge-approved">built</span>`;
+          actionButtons = `<button class="btn-install" onclick="event.stopPropagation();installTool('${run.run_id}','${name}')">Install</button>
+            <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip" onclick="event.stopPropagation()">Download</a>`;
+        } else {
+          statusBadge = `<span class="badge badge-approved">installed</span>`;
+          actionButtons = `<a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip" onclick="event.stopPropagation()">Download</a>`;
+        }
+        if (fns.length) fnsHtml = `<div style="font-size:11px;color:var(--ink-dim);margin-top:4px;padding-left:2px">${fns.join(', ')}</div>`;
+        if (fileNames.length) codeHtml = `<div class="card-body" style="width:100%">
+          <div class="scaffold-section" style="padding-top:10px">
+            <div class="file-select-row">
+              <select class="file-select" onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
+              <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
             </div>
-            <div class="card-body"><pre class="code-block" id="code-tool-${name}">${firstContent}</pre></div>
-          </div>` : ''}`;
-      } else if (state === 'installing') {
-        controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
-      } else if (state === 'installed') {
-        const files = _toolState[key]?.files || existing?.files || {};
-        _agentFiles[`tool-${name}`] = files;
-        const fns = _toolState[key]?.functions || existing?.functions || [];
-        const fileNames = Object.keys(files);
-        const selectOpts = fileNames.map(f => `<option value="${f}">${f}</option>`).join('');
-        const firstContent = fileNames.length ? escHtml(files[fileNames[0]]) : '';
-        controls = `
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <span class="badge badge-approved">installed</span>
-            ${fns.length ? `<span style="font-size:11px;color:var(--ink-dim)">${fns.join(', ')}</span>` : ''}
-            <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
+            <pre class="code-block" id="code-tool-${name}">${firstContent}</pre>
           </div>
-          ${fileNames.length ? `<div class="card-collapsible" data-card-key="tool-code-inst-${name}" style="margin-top:10px">
-            <div class="card-toggle" onclick="toggleCard('tool-code-inst-${name}',event)" style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-dim);padding:4px 0">
-              Code généré <span class="toggle-chevron">▶</span>
-              <div style="margin-left:auto;display:flex;gap:4px" onclick="event.stopPropagation()">
-                <select class="file-select" style="width:auto" onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
-                <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
-              </div>
-            </div>
-            <div class="card-body"><pre class="code-block" id="code-tool-${name}">${firstContent}</pre></div>
-          </div>` : ''}`;
+        </div>`;
       }
 
+      const isExpandable = codeHtml !== '';
       return `
-        <div class="tool-row" id="tool-row-${name}">
-          <div class="tool-row-header">
+        <div class="tool-row card-collapsible" id="tool-row-${name}" data-card-key="${tKey}">
+          <div class="tool-row-header${isExpandable ? ' card-toggle' : ''}"${isExpandable ? ` onclick="toggleCard('${tKey}',event)" style="cursor:pointer"` : ''}>
             <span class="tool-row-name">${escHtml(name)}</span>
             <span class="tool-row-type">tool → libs/</span>
-            ${controls}
+            ${statusBadge}
+            ${isExpandable ? `<span class="toggle-chevron">▶</span>` : ''}
+            <div style="display:flex;gap:6px;margin-left:auto" onclick="event.stopPropagation()">${actionButtons}</div>
           </div>
+          ${fnsHtml}
+          ${codeHtml}
         </div>`;
     }).join('');
 
@@ -1025,12 +1016,34 @@
       } else if (state === 'installing') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
       } else if (state === 'installed') {
-        controls = `
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        const iFiles = sc?.files || {};
+        _agentFiles[agent] = iFiles;
+        const iFileNames = Object.keys(iFiles).filter(f => !['manifest.py','tools.py','docker.py','install.py','__main__.py'].includes(f));
+        const iAllFiles = Object.keys(iFiles);
+        const iDefault = iFileNames[0] || iAllFiles[0] || '';
+        const iSelectOpts = iAllFiles.map(f => `<option value="${f}"${f===iDefault?' selected':''}>${f}</option>`).join('');
+        const iFirstContent = iDefault ? escHtml(iFiles[iDefault]) : '';
+        const iKey = `agent-detail-${agent}`;
+        return `<div class="agent-row card-collapsible" id="agent-row-${agent}" data-card-key="${iKey}">
+          <div class="agent-row-header card-toggle" onclick="toggleCard('${iKey}',event)" style="cursor:pointer">
+            <span class="agent-row-name">${agent}</span>
             <span class="badge badge-approved">installed</span>
-            <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--ink-dim);color:var(--ink-dim);font-size:11px">Re-scaffold</button>
-            <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
-          </div>`;
+            <span class="toggle-chevron">▶</span>
+            <div style="display:flex;gap:6px;margin-left:auto" onclick="event.stopPropagation()">
+              <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--ink-dim);color:var(--ink-dim);font-size:11px">Re-scaffold</button>
+              <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
+            </div>
+          </div>
+          ${iAllFiles.length ? `<div class="card-body" style="width:100%">
+            <div class="scaffold-section">
+              <div class="file-select-row">
+                <select class="file-select" id="sel-${agent}" onchange="switchFileData(this,'code-${agent}','${agent}')">${iSelectOpts}</select>
+                <button class="btn-expand" title="Agrandir" onclick="expandCode('${agent}',document.getElementById('sel-${agent}').value)">⛶</button>
+              </div>
+              <pre class="code-block" id="code-${agent}">${iFirstContent}</pre>
+            </div>
+          </div>` : ''}
+        </div>`;
       } else if (state === 'diagnosis') {
         const diagnosis = _scaffoldState[key]?.diagnosis || {};
         controls = `<span class="badge badge-failed">3 attempts failed</span>`;
