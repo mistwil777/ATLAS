@@ -552,7 +552,7 @@
       el.classList.toggle('selected', el.querySelector('.run-id').textContent === runId);
     });
     const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
-    const isPending = run.status === 'pending';
+    const isPending = run.status === 'pending' || run.status === 'routing';
     const isWaiting = run.status === 'waiting_for_client';
     const isResumed = run.status === 'resumed';
     const statusLabel = isWaiting ? 'Pending validation' : run.status;
