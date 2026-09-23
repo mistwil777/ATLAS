@@ -66,6 +66,8 @@
     .badge-success           { background: #0d2a1a; color: var(--aqua);   border: 1px solid var(--aqua); }
     .badge-failed            { background: #2a0d0d; color: var(--red);    border: 1px solid var(--red); }
     .badge-skipped           { background: #1a1a1a; color: var(--ink-dim); border: 1px solid var(--border); }
+    .badge-type-agent        { background: #1a1230; color: var(--violet); border: 1px solid var(--violet); }
+    .badge-type-tool         { background: #1a1800; color: var(--yellow); border: 1px solid var(--yellow); }
     .badge-waiting_for_client{ background: #1a1230; color: var(--blue);   border: 1px solid var(--blue); }
     .badge-scaffolding       { background: #1a1230; color: var(--violet); border: 1px solid var(--violet); }
     .badge-resumed           { background: #141a14; color: #6a9f6a;       border: 1px solid #6a9f6a; opacity: 0.6; }
@@ -590,24 +592,30 @@
               <span class="toggle-chevron">▶</span>
             </div>
             <div class="card-body" style="margin-top:10px;width:100%" onclick="event.stopPropagation()">
-              ${blocs.map(b => `<div class="bloc-card" style="margin-bottom:6px">
+              ${blocs.map(b => {
+                const bType = b.type === 'agent' ? 'agent' : 'tool';
+                return `<div class="bloc-card" style="margin-bottom:6px">
                 <div class="bloc-header">
                   <span class="bloc-agent">${b.agent || '—'}</span>
+                  <span class="badge badge-type-${bType}">${bType}</span>
                   <span class="badge badge-${b.status || 'skipped'}">${b.status || 'skipped'}</span>
                 </div>
                 ${b.justification ? `<div class="bloc-why"><span class="bloc-why-label">Decision</span> ${escHtml(b.justification)}</div>` : ''}
                 ${b.criteria && b.criteria.length ? `<div class="bloc-criteria"><span class="bloc-why-label">Criteria</span><ul>${b.criteria.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>` : ''}
-              </div>`).join('')}
+              </div>`;
+              }).join('')}
             </div>
           </div>`;
         }
         // Pending — each bloc collapsible (decision+criteria hidden by default)
         return blocs.map(b => {
           const bKey = `bloc-${b.agent||''}`;
+          const bType = b.type === 'agent' ? 'agent' : 'tool';
           return `<div class="bloc-card card-collapsible" data-card-key="${bKey}">
             <div class="bloc-header card-toggle" onclick="toggleCard('${bKey}',event)">
               ${b.requires_review && isPending ? `<input type="checkbox" class="bloc-select" data-agent="${escHtml(b.agent || '')}" checked style="accent-color:var(--violet);margin-right:4px" onclick="event.stopPropagation()">` : ''}
               <span class="bloc-agent">${b.agent || '—'}</span>
+              <span class="badge badge-type-${bType}">${bType}</span>
               <span class="badge badge-${b.status || 'skipped'}">${b.status || 'skipped'}</span>
               ${b.requires_review ? '<span class="badge badge-review">review</span>' : ''}
               <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
