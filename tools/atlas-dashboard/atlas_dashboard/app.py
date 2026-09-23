@@ -844,15 +844,18 @@ def _build_trend_points_per_attempt(agent: str, runs: list[dict]) -> list[dict]:
     return points
 
 
+def _has_scores(points: list[dict]) -> bool:
+    return any(p.get("avg_score") is not None for p in points)
+
+
 @app.get("/api/stats/trend")
 def api_stats_trend(agent: str):
     runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
     points = _build_trend_points_per_attempt(agent, runs)
-    if not points:
-        # fallback: use blocs or scaffold judge data from older runs
+    if not _has_scores(points):
         points = _build_trend_points(agent, runs)
-        if not points:
-            points = _build_trend_points_from_scaffold(agent, runs)
+    if not _has_scores(points):
+        points = _build_trend_points_from_scaffold(agent, runs)
     return {"agent": agent, "points": points}
 
 
