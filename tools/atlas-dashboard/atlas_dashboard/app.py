@@ -1742,8 +1742,6 @@ def _judge_scaffold(
     import logging  # noqa: PLC0415
 
     try:
-        from atlas_judge.agent import AtlasJudgeAgent  # noqa: PLC0415
-
         agent_slug = target_path.name
         module_slug = agent_slug.replace("-", "_")
 
@@ -1846,17 +1844,9 @@ def _judge_scaffold(
             except Exception:  # noqa: BLE001
                 derived_criteria = []
 
-        judge = AtlasJudgeAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
-        events = list(
-            judge.run(
-                operation="pointwise",
-                output=agent_output,
-                agent_name=agent_name,
-                context=cdc_full,
-                criteria=derived_criteria or None,
-            )
-        )
-        summary = next((e for e in events if e.get("summary")), None)
+        from atlas_judge.evaluator import pointwise as _pointwise  # noqa: PLC0415
+
+        summary = _pointwise(agent_output, derived_criteria, cdc_full, llm_fn, llm_cfg)
         if summary is None:
             return None, [], ""
 
