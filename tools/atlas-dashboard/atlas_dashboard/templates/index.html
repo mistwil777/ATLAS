@@ -675,15 +675,12 @@
     const routingDone = true;
     const scaffoldDone = agents.length === 0 || agents.every(a => !!scaffolded[a]);
     const installDone  = agents.length === 0 || agents.every(a => scaffolded[a]?.installed);
-    const hasSkipped   = (run.blocs || []).every(b => b.status === 'skipped');
-    const rerunDone    = installDone && !hasSkipped;
     const valideDone   = run.status === 'approved';
 
     const steps = [
-      { label: 'Routing',  done: routingDone },
-      { label: 'Scaffold', done: scaffoldDone },
-      { label: 'Install',  done: installDone },
-      { label: 'Re-run',   done: rerunDone },
+      { label: 'Routing',   done: routingDone },
+      { label: 'Scaffold',  done: scaffoldDone },
+      { label: 'Install',   done: installDone },
       { label: 'Validated', done: valideDone },
     ];
 
@@ -1093,11 +1090,7 @@
         </div>`;
     }).join('');
 
-    const rerunBtn = allInstalled
-      ? `<button class="btn-rerun" onclick="rerun('${run.run_id}')">Re-run Pipeline</button>`
-      : '';
-
-    return `<div class="create-panel"><h3>Agents to Create (${agents.length})</h3>${rows}${rerunBtn}</div>`;
+    return `<div class="create-panel"><h3>Agents to Create (${agents.length})</h3>${rows}</div>`;
   }
 
   // ── Diagnosis CR panel ───────────────────────────────────────────────────────
