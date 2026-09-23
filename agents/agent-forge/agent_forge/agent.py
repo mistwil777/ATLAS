@@ -237,11 +237,17 @@ class AgentForgeAgent:
             yield self._error(f"Scaffolding generation failed: {exc}")
             return None
 
-        # Validate generated code with ruff
+        # Format and auto-fix generated code with ruff
         import subprocess as _sp  # noqa: PLC0415
 
         try:
             _sp.run(["ruff", "format", str(output_path)], capture_output=True, timeout=30)
+            _sp.run(
+                ["ruff", "check", "--fix", str(output_path)],
+                capture_output=True,
+                timeout=30,
+            )
+            # Report only what ruff could not auto-fix
             check = _sp.run(
                 ["ruff", "check", str(output_path)],
                 capture_output=True,
@@ -250,7 +256,7 @@ class AgentForgeAgent:
             )
             if check.returncode != 0:
                 for line in check.stdout.strip().splitlines()[:5]:
-                    yield self._warn(f"ruff: {line}")
+                    yield self._warn(f"ruff (unfixable): {line}")
         except FileNotFoundError:
             yield self._warn("ruff not found — skipping lint validation")
         except Exception as exc:  # noqa: BLE001
