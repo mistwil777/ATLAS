@@ -120,6 +120,17 @@
     .score-3 { color: var(--yellow); }
     .score-2,.score-1 { color: var(--red); }
     .judge-feedback { font-size: 11px; color: var(--ink-dim); margin-top: 6px; font-style: italic; }
+
+    /* ── Collapsible cards ── */
+    .card-collapsible .card-body { display: none; }
+    .card-collapsible.card-open .card-body { display: block; }
+    .toggle-chevron { font-size: 9px; color: var(--ink-dim); display: inline-block; transition: transform .15s; margin-left: 4px; }
+    .card-open > .card-toggle .toggle-chevron,
+    .card-open.card-toggle .toggle-chevron { transform: rotate(90deg); }
+    .router-summary { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; margin-bottom: 10px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .router-summary-label { color: var(--ink); font-weight: 600; flex: 1; }
+    .bloc-card.card-collapsible .bloc-header { cursor: pointer; margin-bottom: 0; }
+    .bloc-card.card-open .bloc-header { margin-bottom: 8px; }
     .meta-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 
     /* ── Progress banner ── */
@@ -499,7 +510,38 @@
     }).join('');
   }
 
+  // ── Collapsible card state ────────────────────────────────────────────────────
+  const _cardOpen = new Map();    // cardKey → boolean
+  const _userToggled = new Set(); // cards the user has explicitly toggled
+
+  function _saveCardState() {
+    document.querySelectorAll('[data-card-key]').forEach(el => {
+      _cardOpen.set(el.dataset.cardKey, el.classList.contains('card-open'));
+    });
+  }
+
+  function _restoreCardState() {
+    document.querySelectorAll('[data-card-key]').forEach(el => {
+      const key = el.dataset.cardKey;
+      if (_userToggled.has(key)) {
+        el.classList.toggle('card-open', _cardOpen.get(key) === true);
+      }
+    });
+  }
+
+  function toggleCard(key, event) {
+    if (event) event.stopPropagation();
+    _userToggled.add(key);
+    const escaped = key.replace(/([!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+    const el = document.querySelector(`[data-card-key="${escaped}"]`);
+    if (!el) return;
+    const next = !el.classList.contains('card-open');
+    el.classList.toggle('card-open', next);
+    _cardOpen.set(key, next);
+  }
+
   async function showRun(runId) {
+    _saveCardState();
     selectedId = runId;
     document.querySelectorAll('.run-item').forEach(el => {
       el.classList.toggle('selected', el.querySelector('.run-id').textContent === runId);
@@ -530,24 +572,58 @@
         <button class="btn-reject"  ${isPending ? '' : 'disabled'} onclick="decide('${runId}','reject')">Reject</button>
         <button class="btn-reject" style="margin-left:auto;background:transparent;border:1px solid var(--red);color:var(--red)" onclick="deleteRun('${runId}')">Delete</button>
       </div>
-      ${(run.blocs || []).map(b => `
-        <div class="bloc-card">
-          <div class="bloc-header">
-            ${b.requires_review && isPending ? `<input type="checkbox" class="bloc-select" data-agent="${escHtml(b.agent || '')}" checked style="accent-color:var(--violet);margin-right:4px">` : ''}
-            <span class="bloc-agent">${b.agent || '—'}</span>
-            <span class="badge badge-${b.status || 'skipped'}">${b.status || 'skipped'}</span>
-            ${b.requires_review ? '<span class="badge badge-review">review</span>' : ''}
-            <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
-            ${b.requires_review && isPending ? `<button class="btn-scaffold" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="improveBloc('${runId}','${escHtml(b.agent || '')}',this)">Improve</button>` : ''}
-          </div>
-          <div class="bloc-preview">${(b.output_preview || b.bloc || '').slice(0, 400)}</div>
-          ${b.justification ? `<div class="bloc-why"><span class="bloc-why-label">Decision</span> ${escHtml(b.justification)}</div>` : ''}
-          ${b.criteria && b.criteria.length ? `<div class="bloc-criteria"><span class="bloc-why-label">Evaluation criteria</span><ul>${b.criteria.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>` : ''}
-          ${buildJudgeDetail(b)}
-        </div>`).join('')}
-      ${buildToolsPanel(run)}
+      ${(() => {
+        const blocs = run.blocs || [];
+        if (!blocs.length) return '';
+        if (!isPending) {
+          // Approved/rejected — collapsed summary, expandable on click
+          const agentCount = blocs.filter(b => b.status === 'failed').length;
+          const toolCount  = blocs.filter(b => b.status === 'skipped').length;
+          const summaryKey = `router-summary-${runId}`;
+          const parts = [`${blocs.length} component${blocs.length>1?'s':''}`];
+          if (agentCount) parts.push(`${agentCount} agent${agentCount>1?'s':''}`);
+          if (toolCount)  parts.push(`${toolCount} tool${toolCount>1?'s':''}`);
+          return `<div class="router-summary card-collapsible" data-card-key="${summaryKey}">
+            <span class="router-summary-label card-toggle" onclick="toggleCard('${summaryKey}',event)">
+              Router analysis — ${parts.join(' · ')} <span class="toggle-chevron">▶</span>
+            </span>
+            <div class="card-body" style="margin-top:10px;width:100%">
+              ${blocs.map(b => `<div class="bloc-card" style="margin-bottom:6px">
+                <div class="bloc-header">
+                  <span class="bloc-agent">${b.agent || '—'}</span>
+                  <span class="badge badge-${b.status || 'skipped'}">${b.status || 'skipped'}</span>
+                </div>
+                ${b.justification ? `<div class="bloc-why"><span class="bloc-why-label">Decision</span> ${escHtml(b.justification)}</div>` : ''}
+                ${b.criteria && b.criteria.length ? `<div class="bloc-criteria"><span class="bloc-why-label">Criteria</span><ul>${b.criteria.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>` : ''}
+              </div>`).join('')}
+            </div>
+          </div>`;
+        }
+        // Pending — each bloc collapsible (decision+criteria hidden by default)
+        return blocs.map(b => {
+          const bKey = `bloc-${b.agent||''}`;
+          return `<div class="bloc-card card-collapsible" data-card-key="${bKey}">
+            <div class="bloc-header card-toggle" onclick="toggleCard('${bKey}',event)">
+              ${b.requires_review && isPending ? `<input type="checkbox" class="bloc-select" data-agent="${escHtml(b.agent || '')}" checked style="accent-color:var(--violet);margin-right:4px" onclick="event.stopPropagation()">` : ''}
+              <span class="bloc-agent">${b.agent || '—'}</span>
+              <span class="badge badge-${b.status || 'skipped'}">${b.status || 'skipped'}</span>
+              ${b.requires_review ? '<span class="badge badge-review">review</span>' : ''}
+              <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
+              ${b.requires_review && isPending ? `<button class="btn-scaffold" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="event.stopPropagation();improveBloc('${runId}','${escHtml(b.agent || '')}',this)">Improve</button>` : '<span class="toggle-chevron" style="margin-left:auto">▶</span>'}
+            </div>
+            <div class="card-body">
+              <div class="bloc-preview">${(b.output_preview || b.bloc || '').slice(0, 400)}</div>
+              ${b.justification ? `<div class="bloc-why"><span class="bloc-why-label">Decision</span> ${escHtml(b.justification)}</div>` : ''}
+              ${b.criteria && b.criteria.length ? `<div class="bloc-criteria"><span class="bloc-why-label">Evaluation criteria</span><ul>${b.criteria.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul></div>` : ''}
+              ${buildJudgeDetail(b)}
+            </div>
+          </div>`;
+        }).join('');
+      })()}
       ${buildCreatePanel(run)}
+      ${buildToolsPanel(run)}
     `;
+    _restoreCardState();
   }
 
   // ── Judge criteria detail ────────────────────────────────────────────────────
@@ -749,12 +825,15 @@
             <button class="btn-install" onclick="installTool('${run.run_id}','${name}')">Install</button>
             <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
           </div>
-          ${fileNames.length ? `<div class="scaffold-section" style="margin-top:10px">
-            <div class="file-select-row">
-              <select class="file-select" onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
-              <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
+          ${fileNames.length ? `<div class="card-collapsible" data-card-key="tool-code-built-${name}" style="margin-top:10px">
+            <div class="card-toggle" onclick="toggleCard('tool-code-built-${name}',event)" style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-dim);padding:4px 0">
+              Code généré <span class="toggle-chevron">▶</span>
+              <div style="margin-left:auto;display:flex;gap:4px" onclick="event.stopPropagation()">
+                <select class="file-select" style="width:auto" onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
+                <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
+              </div>
             </div>
-            <pre class="code-block" id="code-tool-${name}">${firstContent}</pre>
+            <div class="card-body"><pre class="code-block" id="code-tool-${name}">${firstContent}</pre></div>
           </div>` : ''}`;
       } else if (state === 'installing') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
@@ -771,12 +850,15 @@
             ${fns.length ? `<span style="font-size:11px;color:var(--ink-dim)">${fns.join(', ')}</span>` : ''}
             <a class="btn-download" href="/api/runs/${run.run_id}/tools/${name}/download" download="${name}.zip">Download</a>
           </div>
-          ${fileNames.length ? `<div class="scaffold-section" style="margin-top:10px">
-            <div class="file-select-row">
-              <select class="file-select" onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
-              <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
+          ${fileNames.length ? `<div class="card-collapsible" data-card-key="tool-code-inst-${name}" style="margin-top:10px">
+            <div class="card-toggle" onclick="toggleCard('tool-code-inst-${name}',event)" style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-dim);padding:4px 0">
+              Code généré <span class="toggle-chevron">▶</span>
+              <div style="margin-left:auto;display:flex;gap:4px" onclick="event.stopPropagation()">
+                <select class="file-select" style="width:auto" onchange="switchFileData(this,'code-tool-${name}','tool-${name}')">${selectOpts}</select>
+                <button class="btn-expand" title="Agrandir" onclick="expandCode('tool-${name}','${escHtml(fileNames[0])}')">⛶</button>
+              </div>
             </div>
-            <pre class="code-block" id="code-tool-${name}">${firstContent}</pre>
+            <div class="card-body"><pre class="code-block" id="code-tool-${name}">${firstContent}</pre></div>
           </div>` : ''}`;
       }
 
@@ -896,32 +978,14 @@
           </tr>`;
         }).join('');
         const feedbackShort = judgeFeedback ? judgeFeedback.split('\n\nPATCH TARGET')[0].trim() : '';
-        controls = `
-          <div class="scaffold-panel">
-            <div class="scaffold-section scaffold-judge">
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-                <div>
-                  <span style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em">Judge score</span><br>
-                  <span style="font-size:22px;font-weight:700;color:${scoreColor}">${scoreLabel}</span>
-                  ${judgeScore !== null ? `<span style="font-size:12px;color:var(--ink-dim)"> / 5</span>` : ''}
-                </div>
-                ${_scaffoldState[key]?.rejudging
-                  ? `<button class="btn-rejudge" disabled>⏳ Evaluating…</button>`
-                  : `<button class="btn-rejudge" onclick="rejudge('${run.run_id}','${agent}')">Re-evaluate</button>`
-                }
-              </div>
-              ${criteriaRows ? `<table style="border-collapse:collapse;width:100%">${criteriaRows}</table>` : ''}
-              ${feedbackShort ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-dim);font-style:italic">${escHtml(feedbackShort.slice(0,250))}</div>` : ''}
-            </div>
-            <div class="scaffold-section">
-              <div style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Code généré</div>
-              <div class="file-select-row">
-                <select class="file-select" id="sel-${agent}" onchange="switchFileData(this,'code-${agent}','${agent}')">${selectOpts}</select>
-                <button class="btn-expand" title="Agrandir" onclick="expandCode('${agent}',document.getElementById('sel-${agent}').value)">⛶</button>
-              </div>
-              <pre class="code-block" id="code-${agent}">${firstContent}</pre>
-            </div>
-            <div class="scaffold-actions">
+        // Collapsible: header shows name + score + action buttons; body has detail
+        const aKey = `agent-detail-${agent}`;
+        return `<div class="agent-row card-collapsible" id="agent-row-${agent}" data-card-key="${aKey}">
+          <div class="agent-row-header card-toggle" onclick="toggleCard('${aKey}',event)" style="cursor:pointer">
+            <span class="agent-row-name">${agent}</span>
+            ${judgeScore !== null ? `<span style="font-size:13px;font-weight:700;color:${scoreColor}">${scoreLabel}<span style="font-size:11px;color:var(--ink-dim)">/5</span></span>` : ''}
+            <span class="toggle-chevron">▶</span>
+            <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
               ${judgeScore !== null && judgeScore < 5
                 ? `<button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--yellow);color:var(--yellow)">Re-scaffold</button>`
                 : ''
@@ -929,7 +993,35 @@
               <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
               <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
             </div>
-          </div>`;
+          </div>
+          <div class="card-body" style="width:100%">
+            <div class="scaffold-panel">
+              <div class="scaffold-section scaffold-judge">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+                  <div>
+                    <span style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em">Judge score</span><br>
+                    <span style="font-size:22px;font-weight:700;color:${scoreColor}">${scoreLabel}</span>
+                    ${judgeScore !== null ? `<span style="font-size:12px;color:var(--ink-dim)"> / 5</span>` : ''}
+                  </div>
+                  ${_scaffoldState[key]?.rejudging
+                    ? `<button class="btn-rejudge" disabled>⏳ Evaluating…</button>`
+                    : `<button class="btn-rejudge" onclick="rejudge('${run.run_id}','${agent}')">Re-evaluate</button>`
+                  }
+                </div>
+                ${criteriaRows ? `<table style="border-collapse:collapse;width:100%">${criteriaRows}</table>` : ''}
+                ${feedbackShort ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-dim);font-style:italic">${escHtml(feedbackShort.slice(0,250))}</div>` : ''}
+              </div>
+              <div class="scaffold-section">
+                <div style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Code généré</div>
+                <div class="file-select-row">
+                  <select class="file-select" id="sel-${agent}" onchange="switchFileData(this,'code-${agent}','${agent}')">${selectOpts}</select>
+                  <button class="btn-expand" title="Agrandir" onclick="expandCode('${agent}',document.getElementById('sel-${agent}').value)">⛶</button>
+                </div>
+                <pre class="code-block" id="code-${agent}">${firstContent}</pre>
+              </div>
+            </div>
+          </div>
+        </div>`;
       } else if (state === 'installing') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Installing…</span>`;
       } else if (state === 'installed') {
