@@ -580,10 +580,10 @@
       ${(() => {
         const blocs = run.blocs || [];
         if (!blocs.length) return '';
-        if (!isPending) {
-          // Approved/rejected — collapsed summary, expandable on click
-          const agentCount = blocs.filter(b => b.status === 'failed').length;
-          const toolCount  = blocs.filter(b => b.status === 'skipped').length;
+        if (!isPending || run.status === 'routing') {
+          // Collapsed summary — expandable on click
+          const agentCount = blocs.filter(b => b.type === 'ia' || b.type === 'agent').length;
+          const toolCount  = blocs.filter(b => b.type === 'tool').length;
           const summaryKey = `router-summary-${runId}`;
           const parts = [`${blocs.length} component${blocs.length>1?'s':''}`];
           if (agentCount) parts.push(`${agentCount} agent${agentCount>1?'s':''}`);
