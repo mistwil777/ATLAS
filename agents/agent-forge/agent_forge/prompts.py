@@ -13,6 +13,7 @@ Return ONLY a JSON object with these keys:
 - "domain": application domain (e.g. "document classification", "code generation")
 - "constraints": list of strings, each a notable constraint (e.g. "offline", "no external API calls")
 - "uses_llm": true if the agent needs an LLM to operate, false if it is purely algorithmic
+- "component_type": "agent" if the component needs an LLM or decision logic, "tool" if it is a pure stateless function (no LLM, no state, single responsibility)
 
 Specification:
 {spec_content}

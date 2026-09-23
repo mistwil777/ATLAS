@@ -24,13 +24,14 @@ def generate(params: dict, output_dir: Path) -> Path:
     out = params.get("output_type", "processed output")
     domain = params.get("domain", "general")
     uses_llm = bool(params.get("uses_llm", False))
+    component_type = params.get("component_type", "agent" if uses_llm else "tool")
 
     root = output_dir / slug
     pkg_dir = root / pkg
     test_dir = pkg_dir / "tests" / "smoke" / "fixtures"
     test_dir.mkdir(parents=True, exist_ok=True)
 
-    _write(root / "pyproject.toml", _pyproject(slug, pkg, cls, desc))
+    _write(root / "pyproject.toml", _pyproject(slug, pkg, cls, desc, component_type))
     _write(pkg_dir / "__init__.py", _init(slug, desc))
     _write(pkg_dir / "__main__.py", _main(slug, pkg, cls))
     _write(pkg_dir / "agent.py", _agent(slug, pkg, cls, inp, out, domain, uses_llm))
@@ -54,7 +55,8 @@ def _write(path: Path, content: str) -> None:
 # ── Templates ─────────────────────────────────────────────────────────────────
 
 
-def _pyproject(slug: str, pkg: str, cls: str, desc: str) -> str:
+def _pyproject(slug: str, pkg: str, cls: str, desc: str, component_type: str = "agent") -> str:
+    ep_group = "atlas.tools" if component_type == "tool" else "atlas.agents"
     return f"""\
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -73,7 +75,7 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 {slug} = "{pkg}.__main__:main"
 
-[project.entry-points."atlas.agents"]
+[project.entry-points."{ep_group}"]
 {cls} = "{pkg}.agent:{cls}Agent"
 
 [tool.setuptools.packages.find]

@@ -113,6 +113,7 @@ class AgentForgeAgent:
             "agent_name": spec_dict.get("agent_name", ""),
             "output_path": str(output_path),
             "uses_llm": spec_dict.get("uses_llm", False),
+            "component_type": spec_dict.get("component_type", "agent"),
             "contract_passed": contract_passed,
             "violations": violations,
         }
@@ -224,6 +225,9 @@ class AgentForgeAgent:
             "domain": spec_dict.get("domain", ""),
             "uses_llm": bool(spec_dict.get("uses_llm", False)),
             "main_prompt_body": spec_dict.get("main_prompt_body"),
+            "component_type": spec_dict.get(
+                "component_type", "agent" if spec_dict.get("uses_llm") else "tool"
+            ),
         }
 
         yield self._info("Generating scaffolding...")
@@ -232,6 +236,25 @@ class AgentForgeAgent:
         except Exception as exc:  # noqa: BLE001
             yield self._error(f"Scaffolding generation failed: {exc}")
             return None
+
+        # Validate generated code with ruff
+        import subprocess as _sp  # noqa: PLC0415
+
+        try:
+            _sp.run(["ruff", "format", str(output_path)], capture_output=True, timeout=30)
+            check = _sp.run(
+                ["ruff", "check", str(output_path)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if check.returncode != 0:
+                for line in check.stdout.strip().splitlines()[:5]:
+                    yield self._warn(f"ruff: {line}")
+        except FileNotFoundError:
+            yield self._warn("ruff not found — skipping lint validation")
+        except Exception as exc:  # noqa: BLE001
+            yield self._warn(f"ruff validation failed: {exc}")
 
         return output_path
 
