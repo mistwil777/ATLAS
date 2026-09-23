@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import math
+import os
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -19,54 +22,113 @@ from qdrant_client.models import (
 )
 
 _COLLECTION = "atlas_memory"
-_DIM = 384  # BAAI/bge-small-en-v1.5
-_MODEL = "BAAI/bge-small-en-v1.5"
+_FASTEMBED_MODEL = "BAAI/bge-small-en-v1.5"
+_log = logging.getLogger("atlas_memory")
+
+# Resolved once per process — name of the active embedding backend
+_BACKEND: str = ""
 
 
-def _check_onnx_cached() -> bool:
-    """Return True if the fastembed ONNX model is already present in one of the local caches."""
-    import os as _os  # noqa: PLC0415
+def _normalise(vec: list[float]) -> list[float]:
+    n = math.sqrt(sum(x * x for x in vec))
+    return [x / n for x in vec] if n else vec
 
-    # fastembed caches in $FASTEMBED_CACHE_PATH, /tmp/fastembed_cache, or ~/.cache/fastembed
-    candidates = [
-        _os.environ.get("FASTEMBED_CACHE_PATH", ""),
+
+# ── Backend implementations ────────────────────────────────────────────────────
+
+def _embed_bedrock(texts: list[str]) -> list[list[float]]:
+    import boto3  # noqa: PLC0415
+    import json as _json  # noqa: PLC0415
+    from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: PLC0415
+
+    region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+
+    def _single(idx_text: tuple[int, str]) -> tuple[int, list[float]]:
+        idx, text = idx_text
+        client = boto3.client("bedrock-runtime", region_name=region)
+        resp = client.invoke_model(
+            modelId="amazon.titan-embed-text-v2:0",
+            body=_json.dumps({"inputText": text[:8000], "dimensions": 1024, "normalize": True}),
+            contentType="application/json",
+            accept="application/json",
+        )
+        return idx, _json.loads(resp["body"].read())["embedding"]
+
+    results: list[list[float]] = [None] * len(texts)  # type: ignore[list-item]
+    with ThreadPoolExecutor(max_workers=min(20, len(texts))) as pool:
+        futures = {pool.submit(_single, (i, t)): i for i, t in enumerate(texts)}
+        for fut in as_completed(futures):
+            idx, vec = fut.result()
+            results[idx] = vec
+    return results
+
+
+def _embed_fastembed(texts: list[str]) -> list[list[float]]:
+    # Fail fast if ONNX model file is not present locally — avoids hanging downloads
+    caches = [
+        os.environ.get("FASTEMBED_CACHE_PATH", ""),
         "/tmp/fastembed_cache",
         str(Path.home() / ".cache" / "fastembed"),
     ]
-    model_slug = _MODEL.replace("/", "--").replace("_", "-").lower()
-    for base in candidates:
-        if not base:
-            continue
-        for p in Path(base).rglob("*.onnx"):
-            if model_slug in str(p).lower() or "bge-small" in str(p).lower():
-                return True
-    return False
-
-
-def _fastembed(texts: list[str]) -> list[list[float]]:
-    import logging  # noqa: PLC0415
+    cached = any(
+        list(Path(b).rglob("*.onnx"))
+        for b in caches
+        if b and Path(b).exists()
+    )
+    if not cached:
+        raise RuntimeError(f"fastembed ONNX model not cached locally ({_FASTEMBED_MODEL})")
 
     from fastembed import TextEmbedding  # noqa: PLC0415
 
-    # Fail fast if the ONNX model file is not cached locally.
-    # Avoids triggering a network download that hangs in airgap environments.
-    if not _check_onnx_cached():
-        logging.getLogger("atlas_memory").warning(
-            "fastembed ONNX model not cached locally — RAG indexing skipped. "
-            "Run: python -m fastembed download --model %s",
-            _MODEL,
-        )
-        raise RuntimeError(f"fastembed model {_MODEL} not cached locally")
-
-    try:
-        model = TextEmbedding(model_name=_MODEL)
-    except Exception as exc:  # noqa: BLE001
-        logging.getLogger("atlas_memory").warning(
-            "fastembed model unavailable (%s) — RAG search disabled.",
-            exc.__class__.__name__,
-        )
-        raise
+    model = TextEmbedding(model_name=_FASTEMBED_MODEL)
     return [list(v) for v in model.embed(texts)]
+
+
+def _embed_tfidf(texts: list[str]) -> list[list[float]]:
+    from sklearn.feature_extraction.text import TfidfVectorizer  # noqa: PLC0415
+
+    _log.warning("Using TF-IDF embeddings — semantic similarity will be approximate")
+    vec = TfidfVectorizer(max_features=512, sublinear_tf=True)
+    mat = vec.fit_transform(texts).toarray()
+    return [_normalise(row.tolist()) for row in mat]
+
+
+# ── Public embed function with fallback chain ──────────────────────────────────
+
+def _embed(texts: list[str]) -> list[list[float]]:
+    """Embed texts using best available backend. Priority: Bedrock → fastembed → TF-IDF."""
+    global _BACKEND  # noqa: PLW0603
+
+    if not texts:
+        return []
+
+    backends = [
+        ("bedrock", _embed_bedrock),
+        ("fastembed", _embed_fastembed),
+        ("tfidf", _embed_tfidf),
+    ]
+
+    start = 0
+    if _BACKEND:
+        for i, (name, _) in enumerate(backends):
+            if name == _BACKEND:
+                start = i
+                break
+
+    for name, fn in backends[start:]:
+        try:
+            vecs = fn(texts)
+            if _BACKEND != name:
+                _log.info("atlas-memory embedding backend: %s (dim=%d)", name, len(vecs[0]) if vecs else 0)
+                _BACKEND = name
+            return vecs
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("Embedding backend '%s' unavailable: %s — trying next", name, exc)
+            if _BACKEND == name:
+                _BACKEND = ""
+
+    _log.error("All embedding backends failed — returning zero vectors")
+    return [[0.0] * 512 for _ in texts]
 
 
 class RAGStore:
@@ -77,7 +139,7 @@ class RAGStore:
     Args:
         storage_path: Directory for Qdrant local persistence.
         embed_fn: Optional callable(texts: list[str]) -> list[list[float]].
-                  Defaults to fastembed BAAI/bge-small-en-v1.5.
+                  Defaults to the fallback chain (Bedrock → fastembed → TF-IDF).
                   Inject a mock in tests to avoid network calls.
     """
 
@@ -88,16 +150,37 @@ class RAGStore:
     ) -> None:
         storage_path.mkdir(parents=True, exist_ok=True)
         self._client = QdrantClient(path=str(storage_path))
-        self._embed_fn = embed_fn or _fastembed
+        self._embed_fn = embed_fn or _embed
         self._ensure_collection()
 
     def _ensure_collection(self) -> None:
+        # Probe actual embedding dimension from the active backend
+        try:
+            probe = self._embed_fn(["probe"])
+            dim = len(probe[0]) if probe else 512
+        except Exception:  # noqa: BLE001
+            dim = 512
+
         existing = [c.name for c in self._client.get_collections().collections]
-        if _COLLECTION not in existing:
-            self._client.create_collection(
-                collection_name=_COLLECTION,
-                vectors_config=VectorParams(size=_DIM, distance=Distance.COSINE),
-            )
+        if _COLLECTION in existing:
+            info = self._client.get_collection(_COLLECTION)
+            existing_dim = info.config.params.vectors.size
+            if existing_dim != dim:
+                # Dimension mismatch (backend changed) — recreate the index.
+                # The RAG is a cache; the KG is the source of truth.
+                _log.warning(
+                    "RAG collection dim mismatch (%d → %d) — recreating index",
+                    existing_dim,
+                    dim,
+                )
+                self._client.delete_collection(_COLLECTION)
+            else:
+                return
+
+        self._client.create_collection(
+            collection_name=_COLLECTION,
+            vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
+        )
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
         return self._embed_fn(texts)
