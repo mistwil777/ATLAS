@@ -947,9 +947,10 @@
       let controls = '';
       if (state === 'pending') {
         controls = `
-          <label class="btn-ingest-label" title="Attach documents (PDF, txt, md, html, images…)" style="cursor:pointer;padding:4px 8px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:5px">
-            <span id="ingest-label-${agent}">📎 Documents</span>
-            <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎 '+this.files.length+' file'+(this.files.length>1?'s':''):'📎 Documents'">
+          <input type="text" id="ingest-text-${agent}" placeholder="Contexte additionnel…" oninput="onIngestTextInput('${agent}',this)" style="flex:1;min-width:0;max-width:260px;background:#0d1117;border:1px solid #2a3040;border-radius:4px;color:var(--ink);font-size:11px;padding:4px 8px;outline:none">
+          <label title="Joindre des documents (PDF, txt, md, html, images…)" style="cursor:pointer;padding:4px 8px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px;white-space:nowrap">
+            <span id="ingest-label-${agent}">📎</span>
+            <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎 '+this.files.length:'📎'">
           </label>
           <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')">Scaffold</button>`;
       } else if (state === 'scaffolding') {
@@ -985,7 +986,8 @@
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
               ${judgeScore !== null && judgeScore < 5
-                ? `<label title="Attach documents for re-scaffold" style="cursor:pointer;padding:3px 7px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px">
+                ? `<input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:#0d1117;border:1px solid #2a3040;border-radius:4px;color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
+                  <label title="Joindre des documents" style="cursor:pointer;padding:3px 7px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px">
                     <span id="ingest-label-${agent}">📎</span>
                     <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎'+this.files.length:'📎'">
                   </label>
@@ -1041,7 +1043,8 @@
             <span class="badge badge-approved">installed</span>
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
-              <label title="Attach documents for re-scaffold" style="cursor:pointer;padding:3px 7px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px">
+              <input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:#0d1117;border:1px solid #2a3040;border-radius:4px;color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
+              <label title="Joindre des documents" style="cursor:pointer;padding:3px 7px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px">
                 <span id="ingest-label-${agent}">📎</span>
                 <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎'+this.files.length:'📎'">
               </label>
@@ -1188,8 +1191,9 @@
     document.getElementById(codeId).textContent = files[selectEl.value] || '';
   }
 
-  // Stores files selected for ingest per agent: agentName → FileList
+  // Stores files and free text for ingest per agent
   const _ingestFiles = {};
+  const _ingestText = {};
 
   function onIngestFilesSelected(agentName, input) {
     if (input.files && input.files.length > 0) {
@@ -1199,13 +1203,22 @@
     }
   }
 
+  function onIngestTextInput(agentName, input) {
+    const v = input.value.trim();
+    if (v) _ingestText[agentName] = v;
+    else delete _ingestText[agentName];
+  }
+
   async function scaffold(runId, agentName) {
     const key = _stateKey(runId, agentName);
     _scaffoldState[key] = { state: 'scaffolding' };
     await showRun(runId);
     try {
-      // If documents were attached, extract text first
-      let additionalContext = '';
+      // Collect free-text context
+      let additionalContext = _ingestText[agentName] || '';
+      delete _ingestText[agentName];
+
+      // Extract text from attached documents and append
       const files = _ingestFiles[agentName];
       if (files && files.length > 0) {
         const fd = new FormData();
@@ -1215,7 +1228,11 @@
         });
         if (ingestRes.ok) {
           const ingestData = await ingestRes.json();
-          additionalContext = ingestData.extracted_text || '';
+          if (ingestData.extracted_text) {
+            additionalContext = additionalContext
+              ? additionalContext + '\n\n' + ingestData.extracted_text
+              : ingestData.extracted_text;
+          }
         }
         delete _ingestFiles[agentName];
       }
