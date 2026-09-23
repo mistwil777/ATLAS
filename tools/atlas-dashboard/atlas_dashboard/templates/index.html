@@ -596,7 +596,7 @@
             <div class="card-body" style="margin-top:10px;width:100%" onclick="event.stopPropagation()">
               ${blocs.map(b => {
                 const bType = (b.type === 'agent' || b.type === 'ia') ? 'agent' : 'tool';
-                const bAction = bType === 'agent' ? `<span class="badge badge-review" style="font-size:10px">à créer</span>` : `<span style="font-size:10px;color:var(--ink-dim)">existant</span>`;
+                const bAction = bType === 'agent' ? `<span class="badge badge-review" style="font-size:10px">to create</span>` : `<span style="font-size:10px;color:var(--ink-dim)">reusable</span>`;
                 return `<div class="bloc-card bloc-card-${bType}" style="margin-bottom:6px">
                 <div class="bloc-header">
                   <span class="bloc-agent">${b.agent || '—'}</span>
@@ -619,7 +619,7 @@
               ${b.requires_review && isPending ? `<input type="checkbox" class="bloc-select" data-agent="${escHtml(b.agent || '')}" checked style="accent-color:var(--violet);margin-right:4px" onclick="event.stopPropagation()">` : ''}
               <span class="bloc-agent">${b.agent || '—'}</span>
               <span class="badge badge-type-${bType}">${bType}</span>
-              ${bType === 'agent' ? `<span class="badge badge-review" style="font-size:10px">à créer</span>` : `<span style="font-size:10px;color:var(--ink-dim)">existant</span>`}
+              ${bType === 'agent' ? `<span class="badge badge-review" style="font-size:10px">to create</span>` : `<span style="font-size:10px;color:var(--ink-dim)">reusable</span>`}
               <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
               ${b.requires_review && isPending ? `<button class="btn-scaffold" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="event.stopPropagation();improveBloc('${runId}','${escHtml(b.agent || '')}',this)">Improve</button>` : '<span class="toggle-chevron" style="margin-left:auto">▶</span>'}
             </div>
