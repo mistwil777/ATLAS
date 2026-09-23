@@ -596,6 +596,19 @@ def api_stats():
             if score is not None:
                 agent_stats[agent]["scores"].append(score)
 
+        # Enrich from scaffolded results (judge_score stored there, not in blocs)
+        for agent, sc in run.get("scaffolded", {}).items():
+            if agent not in agent_stats:
+                agent_stats[agent] = {"total": 0, "passed": 0, "failed": 0, "scores": []}
+            score = sc.get("judge_score")
+            if score is not None and score not in agent_stats[agent]["scores"]:
+                agent_stats[agent]["scores"].append(score)
+                quality_threshold = 4.0
+                if score >= quality_threshold:
+                    agent_stats[agent]["passed"] += 1
+                else:
+                    agent_stats[agent]["failed"] += 1
+
     by_agent = {}
     total_judged = 0
     total_passed = 0
