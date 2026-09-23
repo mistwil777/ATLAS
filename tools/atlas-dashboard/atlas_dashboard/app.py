@@ -1760,6 +1760,12 @@ def _judge_scaffold(
             import importlib  # noqa: PLC0415
             import sys as _sys  # noqa: PLC0415
 
+            # Editable installs done at runtime don't add .pth paths until next startup —
+            # ensure the agent source directory is importable right now.
+            _agent_src = str(target_path)
+            if _agent_src not in _sys.path:
+                _sys.path.insert(0, _agent_src)
+
             # Evict stale cached modules so each attempt loads fresh code from disk
             stale = [k for k in _sys.modules if k == module_slug or k.startswith(f"{module_slug}.")]
             for k in stale:
