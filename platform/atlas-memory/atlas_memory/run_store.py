@@ -114,6 +114,33 @@ class RunStore:
             run.get("scaffold_diagnosis", {}).pop(agent_name, None)
         self._write(run_id, run)
 
+    def add_scaffold_attempt(
+        self,
+        run_id: str,
+        agent_name: str,
+        attempt: int,
+        judge_score: float | None,
+        judge_criteria: list[dict[str, Any]],
+        judge_feedback: str,
+        model_id: str = "",
+        patches_applied: list[str] | None = None,
+        user_answers: list[str] | None = None,
+    ) -> None:
+        """Append one scaffold attempt (judge result) to run['scaffold_attempts'][agent_name]."""
+        run = self._read(run_id)
+        entry = {
+            "attempt": attempt,
+            "judge_score": judge_score,
+            "judge_criteria": judge_criteria,
+            "judge_feedback": judge_feedback or "",
+            "model_id": model_id,
+            "patches_applied": patches_applied or [],
+            "user_answers": user_answers or [],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        run.setdefault("scaffold_attempts", {}).setdefault(agent_name, []).append(entry)
+        self._write(run_id, run)
+
     def set_scaffold_judge(
         self,
         run_id: str,

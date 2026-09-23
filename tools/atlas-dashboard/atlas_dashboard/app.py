@@ -766,10 +766,80 @@ def _build_prev_files_section(agent_name: str, store) -> str:
     )
 
 
+def _build_trend_points_per_attempt(agent: str, runs: list[dict]) -> list[dict]:
+    """Build one trend point per scaffold attempt from run['scaffold_attempts'][agent]."""
+    points: list[dict] = []
+    prev_criteria: dict[str, int] = {}
+
+    for run in runs:
+        attempts = run.get("scaffold_attempts", {}).get(agent)
+        if not attempts:
+            continue
+        for entry in attempts:
+            score = entry.get("judge_score")
+            criteria = entry.get("judge_criteria") or []
+            feedback = entry.get("judge_feedback") or ""
+            model_id = entry.get("model_id", "")
+            patches = entry.get("patches_applied") or []
+            answers = entry.get("user_answers") or []
+            attempt_num = entry.get("attempt", 1)
+
+            avg = round(score, 2) if score is not None else None
+            if patches or answers:
+                cause = "cr_retry"
+            elif attempt_num == 1:
+                cause = "initial_scaffold"
+            else:
+                cause = "retry"
+
+            delta = None
+            if points and avg is not None and points[-1].get("avg_score") is not None:
+                delta = round(avg - points[-1]["avg_score"], 2)
+
+            crit_map = {c.get("criterion", ""): c.get("score") for c in criteria}
+            crit_delta = [
+                {
+                    "criterion": c.get("criterion", ""),
+                    "score": c.get("score"),
+                    "prev_score": prev_criteria.get(c.get("criterion", "")),
+                    "delta": round(c["score"] - prev_criteria[c["criterion"]], 1)
+                    if c.get("score") is not None and c.get("criterion") in prev_criteria
+                    else None,
+                    "comment": c.get("comment", ""),
+                }
+                for c in criteria
+            ]
+
+            pt: dict = {
+                "run_id": run["run_id"],
+                "created_at": entry.get("timestamp") or run.get("created_at", ""),
+                "avg_score": avg,
+                "cause": cause,
+                "criteria": crit_delta,
+                "feedback": feedback,
+                "patches_applied": patches,
+                "user_answers": answers,
+                "model_id": model_id,
+                "attempt": attempt_num,
+            }
+            if delta is not None:
+                pt["delta"] = delta
+            points.append(pt)
+            prev_criteria = crit_map
+
+    return points
+
+
 @app.get("/api/stats/trend")
 def api_stats_trend(agent: str):
     runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
-    return {"agent": agent, "points": _build_trend_points(agent, runs)}
+    points = _build_trend_points_per_attempt(agent, runs)
+    if not points:
+        # fallback: use blocs or scaffold judge data from older runs
+        points = _build_trend_points(agent, runs)
+        if not points:
+            points = _build_trend_points_from_scaffold(agent, runs)
+    return {"agent": agent, "points": points}
 
 
 @app.post("/api/improve/{agent_name}")
@@ -1101,8 +1171,11 @@ def _run_scaffold_cycle(
 
         summary = next((e for e in events if e.get("summary")), None)
         import logging as _log  # noqa: PLC0415
+
         _log.getLogger("atlas_dashboard").warning(
-            "Forge events for %s: %s", agent_slug, [(e.get("level","?"), e.get("msg","")[:120]) for e in events]
+            "Forge events for %s: %s",
+            agent_slug,
+            [(e.get("level", "?"), e.get("msg", "")[:120]) for e in events],
         )
         if summary is None:
             errors = [e.get("msg", "") for e in events if e.get("level") == "error"]
@@ -1149,6 +1222,18 @@ def _run_scaffold_cycle(
             user_answers=body.user_answers,
             run_id=run_id,
             atlas_run_id=run_id,
+        )
+
+        store.add_scaffold_attempt(
+            run_id=run_id,
+            agent_name=agent_name,
+            attempt=attempt,
+            judge_score=judge_score,
+            judge_criteria=judge_criteria or [],
+            judge_feedback=judge_feedback or "",
+            model_id=llm_cfg.get("model_id", ""),
+            patches_applied=body.selected_patches or [],
+            user_answers=body.user_answers or [],
         )
 
         _scaffold_output = "\n".join(last_files.values()) if last_files else ""
@@ -1262,13 +1347,16 @@ def _run_improvement_advisor(agent_name: str, store) -> list[dict]:
 def _do_scaffold(run_id: str, agent_name: str, body: ScaffoldRequest) -> None:
     """Background worker — runs scaffold cycle and updates run store when done."""
     import logging as _log  # noqa: PLC0415
+
     job_key = f"{run_id}:{agent_name}"
     _log.getLogger("atlas_dashboard").warning("_do_scaffold START %s", agent_name)
     _bg_jobs[job_key] = {"status": "running"}
     try:
         result = _scaffold_sync(run_id, agent_name, body)
         _bg_jobs[job_key] = {"status": "done", "result": result}
-        _log.getLogger("atlas_dashboard").warning("_do_scaffold DONE %s result=%s", agent_name, str(result)[:200])
+        _log.getLogger("atlas_dashboard").warning(
+            "_do_scaffold DONE %s result=%s", agent_name, str(result)[:200]
+        )
     except Exception as exc:  # noqa: BLE001
         _bg_jobs[job_key] = {"status": "error", "error": str(exc)}
         _log.getLogger("atlas_dashboard").warning("_do_scaffold ERROR %s: %s", agent_name, exc)
@@ -1807,6 +1895,7 @@ def _judge_scaffold(
                 agent_output = " ".join(parts)
                 # Strip markdown code fences so the judge sees raw JSON
                 import re as _re  # noqa: PLC0415
+
                 _fence = _re.search(r"```(?:json)?\s*(\{.*?\})\s*```", agent_output, _re.DOTALL)
                 if _fence:
                     agent_output = _fence.group(1)
