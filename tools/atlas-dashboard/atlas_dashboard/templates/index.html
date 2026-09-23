@@ -946,7 +946,12 @@
 
       let controls = '';
       if (state === 'pending') {
-        controls = `<button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')">Scaffold</button>`;
+        controls = `
+          <label class="btn-ingest-label" title="Attach documents (PDF, txt, md, html, images…)" style="cursor:pointer;padding:4px 8px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:5px">
+            <span id="ingest-label-${agent}">📎 Documents</span>
+            <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎 '+this.files.length+' file'+(this.files.length>1?'s':''):'📎 Documents'">
+          </label>
+          <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')">Scaffold</button>`;
       } else if (state === 'scaffolding') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Scaffolding…</span>`;
       } else if (state === 'scaffolded') {
@@ -980,7 +985,11 @@
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
               ${judgeScore !== null && judgeScore < 5
-                ? `<button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--yellow);color:var(--yellow)">Re-scaffold</button>`
+                ? `<label title="Attach documents for re-scaffold" style="cursor:pointer;padding:3px 7px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px">
+                    <span id="ingest-label-${agent}">📎</span>
+                    <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎'+this.files.length:'📎'">
+                  </label>
+                  <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--yellow);color:var(--yellow)">Re-scaffold</button>`
                 : ''
               }
               <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
@@ -1031,7 +1040,11 @@
             <span class="agent-row-name">${agent}</span>
             <span class="badge badge-approved">installed</span>
             <span class="toggle-chevron">▶</span>
-            <div style="display:flex;gap:6px;margin-left:auto" onclick="event.stopPropagation()">
+            <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
+              <label title="Attach documents for re-scaffold" style="cursor:pointer;padding:3px 7px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px">
+                <span id="ingest-label-${agent}">📎</span>
+                <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎'+this.files.length:'📎'">
+              </label>
               <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--ink-dim);color:var(--ink-dim);font-size:11px">Re-scaffold</button>
               <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
             </div>
@@ -1175,12 +1188,44 @@
     document.getElementById(codeId).textContent = files[selectEl.value] || '';
   }
 
+  // Stores files selected for ingest per agent: agentName → FileList
+  const _ingestFiles = {};
+
+  function onIngestFilesSelected(agentName, input) {
+    if (input.files && input.files.length > 0) {
+      _ingestFiles[agentName] = input.files;
+    } else {
+      delete _ingestFiles[agentName];
+    }
+  }
+
   async function scaffold(runId, agentName) {
     const key = _stateKey(runId, agentName);
     _scaffoldState[key] = { state: 'scaffolding' };
     await showRun(runId);
     try {
-      const res = await fetch(`/api/runs/${runId}/scaffold/${agentName}`, { method: 'POST' });
+      // If documents were attached, extract text first
+      let additionalContext = '';
+      const files = _ingestFiles[agentName];
+      if (files && files.length > 0) {
+        const fd = new FormData();
+        for (const f of files) fd.append('files', f);
+        const ingestRes = await fetch(`/api/runs/${runId}/scaffold/${agentName}/ingest`, {
+          method: 'POST', body: fd,
+        });
+        if (ingestRes.ok) {
+          const ingestData = await ingestRes.json();
+          additionalContext = ingestData.extracted_text || '';
+        }
+        delete _ingestFiles[agentName];
+      }
+
+      const body = additionalContext ? JSON.stringify({ additional_context: additionalContext }) : null;
+      const res = await fetch(`/api/runs/${runId}/scaffold/${agentName}`, {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body,
+      });
       if (!res.ok) {
         const err = await res.json();
         alert('Scaffold failed: ' + (err.detail || JSON.stringify(err)));

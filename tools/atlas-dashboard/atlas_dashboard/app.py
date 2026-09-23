@@ -26,6 +26,7 @@ class ScaffoldRequest(BaseModel):
     user_answers: list[str] = []
     selected_patches: list[str] = []
     judge_feedback_context: str = ""
+    additional_context: str = ""  # extracted text from uploaded documents
 
 
 class ApproveRequest(BaseModel):
@@ -1408,6 +1409,42 @@ def api_scaffold(
     return {"status": "scaffolding", "run_id": run_id, "agent_name": agent_name}
 
 
+@app.post("/api/runs/{run_id}/scaffold/{agent_name}/ingest")
+async def api_scaffold_ingest(
+    run_id: str,
+    agent_name: str,
+    files: list[UploadFile],
+):
+    """Upload documents and extract their text via AtlasIngestAgent.
+
+    Returns extracted text to be passed as additional_context in ScaffoldRequest.
+    """
+    from atlas_ingest.agent import AtlasIngestAgent  # noqa: PLC0415
+
+    store = get_store()
+    if store.get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    tmp_paths: list[_Path] = []
+    try:
+        for upload in files:
+            suffix = _Path(upload.filename or "file").suffix or ".bin"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            tmp.write(await upload.read())
+            tmp.close()
+            tmp_paths.append(_Path(tmp.name))
+
+        agent = AtlasIngestAgent()
+        events = list(agent.run(files=tmp_paths))
+        summary_event = next((e for e in events if e.get("summary")), None)
+        extracted = summary_event["output"] if summary_event else ""
+    finally:
+        for p in tmp_paths:
+            p.unlink(missing_ok=True)
+
+    return {"extracted_text": extracted, "file_count": len(files)}
+
+
 def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
     """Synchronous scaffold logic — runs in a background thread."""
     import re as _re  # noqa: PLC0415
@@ -1436,6 +1473,8 @@ def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
     base_output_dir.mkdir(parents=True, exist_ok=True)
 
     cr_context = ""
+    if body.additional_context:
+        cr_context += "\n\n# Context from attached documents:\n" + body.additional_context
     if body.user_answers:
         cr_context += "\n\n# User answers to diagnostic questions:\n" + "\n".join(
             f"- {a}" for a in body.user_answers if a.strip()
