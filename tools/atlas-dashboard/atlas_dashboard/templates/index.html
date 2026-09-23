@@ -1198,47 +1198,30 @@
   }
 
   async function _pollScaffold(runId, agentName, key) {
-    const jobKey = encodeURIComponent(`${runId}:${agentName}`);
-    // Phase 1: wait for the bg-job to transition running → done/error.
-    // This avoids reading stale run-store data from a previous scaffold cycle.
-    let jobDone = false;
+    // Poll run store (persisted on disk) — survives dashboard restarts.
+    // Wait for run.scaffold_status[agentName] to reach 'done' or 'error'
+    // before reading the final scaffold result, to avoid showing stale data
+    // from a previous cycle.
     for (let i = 0; i < 120; i++) {  // max 6 min
       await new Promise(r => setTimeout(r, 3000));
       try {
-        const jr = await fetch(`/api/bg-job/${jobKey}`);
-        if (!jr.ok) continue;
-        const job = await jr.json();
-        if (job.status === 'done' || job.status === 'error') { jobDone = true; break; }
-        if (job.status === 'running') continue;
-      } catch(_) {}
-      // Fallback: if bg-job unknown, check waiting_for_client
-      try {
-        const rr = await fetch(`/api/runs/${runId}`);
-        if (!rr.ok) continue;
-        const run = await rr.json();
+        const r = await fetch(`/api/runs/${runId}`);
+        if (!r.ok) continue;
+        const run = await r.json();
+
         if (run.status === 'waiting_for_client' && run.pending_agent === agentName) {
           _scaffoldState[key] = { state: 'pending' };
           await showRun(runId);
           return;
         }
-      } catch(_) {}
-    }
-    if (!jobDone) {
-      _scaffoldState[key] = { state: 'pending' };
-      alert('Scaffold timeout — server did not respond within 6 minutes');
-      await showRun(runId);
-      return;
-    }
-    // Phase 2: job finished — read definitive state from run store.
-    try {
-      const r = await fetch(`/api/runs/${runId}`);
-      if (r.ok) {
-        const run = await r.json();
+
+        const jobStatus = (run.scaffold_status || {})[agentName];
+        if (jobStatus !== 'done' && jobStatus !== 'error') continue;
+
+        // Job finished — read definitive state.
         const scaffolded = run.scaffolded || {};
         const diag = (run.scaffold_diagnosis || {})[agentName];
-        if (run.status === 'waiting_for_client' && run.pending_agent === agentName) {
-          _scaffoldState[key] = { state: 'pending' };
-        } else if (scaffolded[agentName]) {
+        if (scaffolded[agentName]) {
           const s = scaffolded[agentName];
           _agentFiles[agentName] = s.files || {};
           _scaffoldState[key] = {
@@ -1251,8 +1234,12 @@
             judgeFeedback: s.judge_feedback || '',
           };
         }
-      }
-    } catch(_) {}
+        await showRun(runId);
+        return;
+      } catch(_) {}
+    }
+    _scaffoldState[key] = { state: 'pending' };
+    alert('Scaffold timeout — server did not respond within 6 minutes');
     await showRun(runId);
   }
 

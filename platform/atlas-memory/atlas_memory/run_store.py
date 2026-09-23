@@ -114,6 +114,20 @@ class RunStore:
             run.get("scaffold_diagnosis", {}).pop(agent_name, None)
         self._write(run_id, run)
 
+    def set_scaffold_status(
+        self,
+        run_id: str,
+        agent_name: str,
+        status: str,
+    ) -> None:
+        """Persist scaffold job status so the UI can poll without relying on in-memory state.
+
+        status: 'running' | 'done' | 'error'
+        """
+        run = self._read(run_id)
+        run.setdefault("scaffold_status", {})[agent_name] = status
+        self._write(run_id, run)
+
     def add_scaffold_attempt(
         self,
         run_id: str,

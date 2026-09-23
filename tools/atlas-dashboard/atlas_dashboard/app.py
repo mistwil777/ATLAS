@@ -1349,15 +1349,19 @@ def _do_scaffold(run_id: str, agent_name: str, body: ScaffoldRequest) -> None:
     import logging as _log  # noqa: PLC0415
 
     job_key = f"{run_id}:{agent_name}"
+    store = get_store()
     _log.getLogger("atlas_dashboard").warning("_do_scaffold START %s", agent_name)
     _bg_jobs[job_key] = {"status": "running"}
+    store.set_scaffold_status(run_id, agent_name, "running")
     try:
         result = _scaffold_sync(run_id, agent_name, body)
+        store.set_scaffold_status(run_id, agent_name, "done")
         _bg_jobs[job_key] = {"status": "done", "result": result}
         _log.getLogger("atlas_dashboard").warning(
             "_do_scaffold DONE %s result=%s", agent_name, str(result)[:200]
         )
     except Exception as exc:  # noqa: BLE001
+        store.set_scaffold_status(run_id, agent_name, "error")
         _bg_jobs[job_key] = {"status": "error", "error": str(exc)}
         _log.getLogger("atlas_dashboard").warning("_do_scaffold ERROR %s: %s", agent_name, exc)
 
