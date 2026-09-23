@@ -255,14 +255,56 @@ class AgentForgeAgent:
                 timeout=30,
             )
             if check.returncode != 0:
-                for line in check.stdout.strip().splitlines()[:5]:
-                    yield self._warn(f"ruff (unfixable): {line}")
+                yield self._info("ruff: unfixable errors found — asking LLM to fix...")
+                yield from self._llm_fix_ruff_errors(output_path, check.stdout)
+                _sp.run(["ruff", "format", str(output_path)], capture_output=True, timeout=30)
         except FileNotFoundError:
             yield self._warn("ruff not found — skipping lint validation")
         except Exception as exc:  # noqa: BLE001
             yield self._warn(f"ruff validation failed: {exc}")
 
         return output_path
+
+    # ── LLM lint repair ───────────────────────────────────────────────────────
+
+    def _llm_fix_ruff_errors(
+        self, output_path: Path, ruff_output: str
+    ) -> Generator[dict, None, None]:
+        """Ask the LLM to fix ruff errors that --fix could not auto-correct."""
+        import re as _re  # noqa: PLC0415
+
+        # Group errors by file
+        file_errors: dict[str, list[str]] = {}
+        for line in ruff_output.strip().splitlines():
+            m = _re.match(r"(.+?\.py):\d+:\d+:", line)
+            if m:
+                fpath = m.group(1)
+                file_errors.setdefault(fpath, []).append(line)
+
+        for fpath, errors in file_errors.items():
+            try:
+                p = Path(fpath)
+                if not p.exists():
+                    continue
+                original = p.read_text(encoding="utf-8")
+                error_list = "\n".join(errors[:10])
+                fix_prompt = (
+                    f"The following Python file has ruff lint errors that could not be auto-fixed.\n"
+                    f"Fix ONLY the reported errors. Return the complete corrected file, nothing else.\n\n"
+                    f"Errors:\n{error_list}\n\n"
+                    f"File ({p.name}):\n```python\n{original}\n```"
+                )
+                fixed = self._llm(fix_prompt, self.llm_cfg, 4096)
+                if fixed:
+                    # Extract code block if wrapped in markdown
+                    code_m = _re.search(r"```python\s*(.*?)```", fixed, _re.DOTALL)
+                    fixed_code = code_m.group(1) if code_m else fixed
+                    p.write_text(fixed_code, encoding="utf-8")
+                    yield self._info(f"ruff: LLM fixed {p.name}")
+                else:
+                    yield self._warn(f"ruff: LLM returned no fix for {p.name}")
+            except Exception as exc:  # noqa: BLE001
+                yield self._warn(f"ruff: LLM fix failed for {fpath}: {exc}")
 
     # ── Contract validation ────────────────────────────────────────────────────
 
