@@ -39,7 +39,7 @@ def generate(params: dict, output_dir: Path) -> Path:
     _write(pkg_dir / "docker.py", _docker(slug, pkg))
     _write(pkg_dir / "install.py", _install(slug, pkg))
     _write(pkg_dir / "prompts.py", _prompts(slug, domain, out, params.get("main_prompt_body")))
-    _write(pkg_dir / "manifest.py", _tools(slug, pkg))
+    _write(pkg_dir / "tools.py", _tools(slug, pkg))
     _write(pkg_dir / "tests" / "__init__.py", "")
     _write(pkg_dir / "tests" / "smoke" / "__init__.py", "")
     _write(pkg_dir / "tests" / "smoke" / "test_smoke.py", _test_smoke(slug, pkg, cls))
