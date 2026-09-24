@@ -342,6 +342,7 @@
   <button onclick="refresh()">Refresh</button>
   <button id="btn-kg" onclick="showTabKG()">Knowledge Graph</button>
   <button id="btn-trend" onclick="showTabTrend()">Trends</button>
+  <button id="btn-tests" onclick="showTabTests()">Tests</button>
   <button onclick="openNewCdcModal()" style="margin-left:auto;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">+ New CDC</button>
   <button onclick="bulkDeleteSkipped()" style="border-color:var(--red);color:var(--red)" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
 </div>
@@ -431,6 +432,40 @@
     </div>
     <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Validate and launch scaffold</button>
   </div>
+</div>
+
+<div id="tests-panel" style="display:none;padding:24px;max-width:900px;margin:0 auto">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+    <h2 style="margin:0">Tests — run pipeline on real tickets</h2>
+    <button class="btn-refresh-kg" onclick="_loadTestHistory()">Refresh history</button>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+    <div style="flex:1;min-width:220px">
+      <label style="display:block;font-size:12px;color:var(--ink-dim);margin-bottom:6px">PROJECT</label>
+      <select id="test-project-select" style="width:100%;background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:8px 12px;color:#fff;font-size:13px" onchange="_onTestProjectChange()">
+        <option value="">— select a project —</option>
+      </select>
+    </div>
+    <div style="flex:2;min-width:300px">
+      <label style="display:block;font-size:12px;color:var(--ink-dim);margin-bottom:6px">PIPELINE</label>
+      <div id="test-pipeline-info" style="font-size:12px;color:var(--ink-dim);padding:8px 0">Select a project to see the pipeline.</div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:16px">
+    <label style="display:block;font-size:12px;color:var(--ink-dim);margin-bottom:6px">TICKET TEXT</label>
+    <textarea id="test-ticket-input" rows="5" style="width:100%;box-sizing:border-box;background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:10px 12px;color:#fff;font-size:13px;resize:vertical" placeholder="Paste a support ticket here…"></textarea>
+  </div>
+
+  <button id="test-run-btn" onclick="runTest()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;margin-bottom:24px" disabled>Run pipeline</button>
+
+  <div id="test-results-area"></div>
+
+  <hr style="border-color:#222;margin:32px 0">
+
+  <h3 style="margin:0 0 16px;color:var(--ink-dim);font-size:14px">History</h3>
+  <div id="test-history-area"><div style="color:var(--ink-dim);font-size:13px">No test runs yet.</div></div>
 </div>
 
 <script>
@@ -1489,32 +1524,32 @@
   // ── KG tab ──────────────────────────────────────────────
   let _kgData = { nodes: [], edges: [] };
 
-  function showTabRuns() {
-    document.querySelector('.layout').style.display = '';
+  function _hideAllPanels() {
+    document.querySelector('.layout').style.display = 'none';
     document.getElementById('kg-panel').style.display = 'none';
     document.getElementById('trend-panel').style.display = 'none';
-    document.getElementById('btn-kg').classList.remove('active');
-    document.getElementById('btn-trend').classList.remove('active');
+    document.getElementById('tests-panel').style.display = 'none';
+    ['btn-all', 'btn-review', 'btn-kg', 'btn-trend', 'btn-tests'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('active');
+    });
+  }
+
+  function showTabRuns() {
+    _hideAllPanels();
+    document.querySelector('.layout').style.display = '';
   }
 
   function showTabKG() {
-    document.querySelector('.layout').style.display = 'none';
+    _hideAllPanels();
     document.getElementById('kg-panel').style.display = 'block';
-    document.getElementById('trend-panel').style.display = 'none';
-    document.getElementById('btn-all').classList.remove('active');
-    document.getElementById('btn-review').classList.remove('active');
-    document.getElementById('btn-trend').classList.remove('active');
     document.getElementById('btn-kg').classList.add('active');
     loadKG();
   }
 
   function showTabTrend() {
-    document.querySelector('.layout').style.display = 'none';
-    document.getElementById('kg-panel').style.display = 'none';
+    _hideAllPanels();
     document.getElementById('trend-panel').style.display = 'block';
-    document.getElementById('btn-all').classList.remove('active');
-    document.getElementById('btn-review').classList.remove('active');
-    document.getElementById('btn-kg').classList.remove('active');
     document.getElementById('btn-trend').classList.add('active');
     _populateTrendAgents();
   }
@@ -1974,6 +2009,166 @@
       btn.textContent = 'Validate and launch scaffold';
       btn.disabled = false;
     }
+  }
+
+  // ── Tests tab ─────────────────────────────────────────────────────────────────
+
+  function showTabTests() {
+    document.querySelector('.layout').style.display = 'none';
+    document.getElementById('kg-panel').style.display = 'none';
+    document.getElementById('trend-panel').style.display = 'none';
+    document.getElementById('tests-panel').style.display = 'block';
+    ['btn-all', 'btn-review', 'btn-kg', 'btn-trend'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('active');
+    });
+    document.getElementById('btn-tests').classList.add('active');
+    _loadTestProjects();
+    _loadTestHistory();
+  }
+
+  async function _loadTestProjects() {
+    const projects = await fetch('/api/projects').then(r => r.json()).catch(() => []);
+    const sel = document.getElementById('test-project-select');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— select a project —</option>' +
+      projects.map(p => `<option value="${escHtml(p)}"${p === current ? ' selected' : ''}>${escHtml(p)}</option>`).join('');
+    if (current && projects.includes(current)) _onTestProjectChange();
+  }
+
+  async function _onTestProjectChange() {
+    const project = document.getElementById('test-project-select').value;
+    const btn = document.getElementById('test-run-btn');
+    if (!project) {
+      document.getElementById('test-pipeline-info').textContent = 'Select a project to see the pipeline.';
+      btn.disabled = true;
+      return;
+    }
+    const kgData = await fetch('/api/kg').then(r => r.json()).catch(() => ({ nodes: [] }));
+    const agents = kgData.nodes.filter(n => n.node_type === 'agent' && n.project === project).map(n => n.id);
+    if (agents.length) {
+      document.getElementById('test-pipeline-info').innerHTML =
+        agents.map(a => `<span style="display:inline-block;background:#1e1540;border:1px solid var(--violet);border-radius:4px;padding:2px 8px;margin:2px 4px 2px 0;font-size:11px;color:var(--violet)">${escHtml(a)}</span>`).join('→');
+      btn.disabled = false;
+    } else {
+      document.getElementById('test-pipeline-info').textContent = 'No agents found for this project.';
+      btn.disabled = true;
+    }
+  }
+
+  async function runTest() {
+    const project = document.getElementById('test-project-select').value;
+    const ticket = document.getElementById('test-ticket-input').value.trim();
+    if (!project || !ticket) return;
+    const btn = document.getElementById('test-run-btn');
+    btn.disabled = true;
+    btn.textContent = 'Running…';
+    document.getElementById('test-results-area').innerHTML = '<div style="color:var(--ink-dim);font-size:13px">Pipeline running…</div>';
+    try {
+      const data = await fetch('/api/test/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project, ticket }),
+      }).then(r => r.json());
+      if (data.detail) {
+        document.getElementById('test-results-area').innerHTML = `<div style="color:var(--red)">${escHtml(data.detail)}</div>`;
+      } else {
+        _renderTestResults(data);
+        _loadTestHistory();
+      }
+    } catch (e) {
+      document.getElementById('test-results-area').innerHTML = `<div style="color:var(--red)">Error: ${escHtml(String(e))}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Run pipeline';
+    }
+  }
+
+  function _renderTestResults(testRun) {
+    const validations = testRun.validations || {};
+    const html = (testRun.results || []).map(r => {
+      const v = validations[r.agent];
+      const vHtml = v
+        ? `<span style="color:${v.valid ? 'var(--aqua)' : 'var(--red)'}">${v.valid ? '✓ Valid' : '✗ Invalid'}</span>${v.comment ? ` — <span style="color:var(--ink-dim)">${escHtml(v.comment)}</span>` : ''}`
+        : `<button onclick="validateTestResult('${escHtml(testRun.test_id)}','${escHtml(r.agent)}',true)" style="background:var(--aqua);color:#000;border-color:var(--aqua);font-size:11px;padding:3px 8px;margin-right:6px">✓ Valid</button>
+           <button onclick="validateTestResult('${escHtml(testRun.test_id)}','${escHtml(r.agent)}',false)" style="background:var(--red);color:#fff;border-color:var(--red);font-size:11px;padding:3px 8px">✗ Invalid</button>`;
+      let outputHtml = '';
+      if (r.error) {
+        outputHtml = `<div style="color:var(--red);font-size:12px">${escHtml(r.error)}</div>`;
+      } else if (r.output) {
+        let parsed = null;
+        try { parsed = JSON.parse(r.output); } catch (_) {}
+        if (parsed && typeof parsed === 'object') {
+          const badges = ['priority','category','confidence','language'].filter(k => parsed[k] != null)
+            .map(k => `<span style="display:inline-block;background:#1e1540;border:1px solid #444;border-radius:4px;padding:2px 8px;margin:2px 4px 2px 0;font-size:11px"><span style="color:var(--ink-dim)">${k}</span> <span style="color:#fff">${escHtml(String(parsed[k]))}</span></span>`).join('');
+          outputHtml = badges + `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:var(--ink-dim)">${escHtml(r.output)}</pre>`;
+        } else {
+          outputHtml = `<pre style="font-size:11px;white-space:pre-wrap;color:var(--ink-dim)">${escHtml(r.output)}</pre>`;
+        }
+      }
+      return `<div style="background:#12121f;border:1px solid #252535;border-radius:8px;padding:16px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="font-weight:600;color:var(--violet)">${escHtml(r.agent)}</span>
+          <div>${vHtml}</div>
+        </div>
+        ${outputHtml}
+      </div>`;
+    }).join('');
+    document.getElementById('test-results-area').innerHTML = html || '<div style="color:var(--ink-dim)">No results.</div>';
+  }
+
+  async function validateTestResult(testId, agentName, valid) {
+    await fetch(`/api/test/runs/${encodeURIComponent(testId)}/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_name: agentName, valid }),
+    });
+    _loadTestHistory();
+    // refresh results area
+    const runs = await fetch('/api/test/runs').then(r => r.json()).catch(() => []);
+    const run = runs.find(r => r.test_id === testId);
+    if (run) _renderTestResults(run);
+  }
+
+  async function _loadTestHistory() {
+    const runs = await fetch('/api/test/runs').then(r => r.json()).catch(() => []);
+    if (!runs.length) {
+      document.getElementById('test-history-area').innerHTML = '<div style="color:var(--ink-dim);font-size:13px">No test runs yet.</div>';
+      return;
+    }
+    const rows = runs.map(r => {
+      const total = (r.results || []).length;
+      const validated = Object.keys(r.validations || {}).length;
+      const pctV = total ? Math.round(validated / total * 100) : 0;
+      return `<tr style="cursor:pointer" onclick="_expandTestRun(this,'${escHtml(r.test_id)}')">
+        <td style="color:var(--ink-dim);font-size:11px">${fmtDate(r.created_at)}</td>
+        <td style="color:var(--blue)">${escHtml(r.project)}</td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-dim);font-size:12px">${escHtml((r.ticket||'').substring(0,80))}</td>
+        <td style="text-align:center">${total}</td>
+        <td style="text-align:center;color:${pctV===100?'var(--aqua)':pctV>0?'var(--yellow)':'var(--ink-dim)'}">${pctV}%</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('test-history-area').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="color:var(--ink-dim);font-size:11px;border-bottom:1px solid #222">
+        <th style="text-align:left;padding:6px 8px">Date</th>
+        <th style="text-align:left;padding:6px 8px">Project</th>
+        <th style="text-align:left;padding:6px 8px">Ticket</th>
+        <th style="text-align:center;padding:6px 8px">Agents</th>
+        <th style="text-align:center;padding:6px 8px">Validated</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  async function _expandTestRun(row, testId) {
+    const runs = await fetch('/api/test/runs').then(r => r.json()).catch(() => []);
+    const run = runs.find(r => r.test_id === testId);
+    if (!run) return;
+    document.getElementById('test-project-select').value = run.project;
+    _onTestProjectChange();
+    document.getElementById('test-ticket-input').value = run.ticket || '';
+    _renderTestResults(run);
+    document.getElementById('test-results-area').scrollIntoView({ behavior: 'smooth' });
   }
 
   // ── Nouveau CDC modal ─────────────────────────────────────────────────────────

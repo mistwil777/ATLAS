@@ -23,6 +23,17 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 
+class TestRunRequest(BaseModel):
+    project: str
+    ticket: str
+
+
+class TestValidation(BaseModel):
+    agent_name: str
+    valid: bool
+    comment: str = ""
+
+
 class ScaffoldRequest(BaseModel):
     user_answers: list[str] = []
     selected_patches: list[str] = []
@@ -2630,6 +2641,130 @@ def api_get_kg():
             if lnk.get("source") in visible_ids and lnk.get("target") in visible_ids
         ],
     }
+
+
+_TEST_RUNS_DIR = _Path.home() / ".atlas" / "test_runs"
+
+
+def _kg_nodes() -> list[dict]:
+    kg_path = _Path.home() / ".atlas" / "memory" / "graph.json"
+    if not kg_path.exists():
+        return []
+    import json as _json  # noqa: PLC0415
+
+    data = _json.loads(kg_path.read_text(encoding="utf-8"))
+    return data.get("nodes", [])
+
+
+def _get_atlas_entry_points() -> dict[str, str]:
+    """Return {agent_name: 'module:Class'} from atlas.agents entry points."""
+    import importlib.metadata as _m  # noqa: PLC0415
+
+    return {ep.name: ep.value for ep in _m.entry_points(group="atlas.agents")}
+
+
+def _load_agent_class(entry_value: str):
+    """Import and return the agent class from 'module:Class' entry point value."""
+    import importlib  # noqa: PLC0415
+
+    module_path, class_name = entry_value.rsplit(":", 1)
+    mod = importlib.import_module(module_path)
+    return getattr(mod, class_name)
+
+
+@app.get("/api/projects")
+def api_get_projects():
+    nodes = _kg_nodes()
+    projects = sorted(
+        {n.get("project", "") for n in nodes if n.get("node_type") == "agent" and n.get("project")}
+    )
+    return projects
+
+
+@app.post("/api/test/run")
+def api_test_run(req: TestRunRequest):
+    import datetime as _dt  # noqa: PLC0415
+    import json as _json  # noqa: PLC0415
+    import logging  # noqa: PLC0415
+
+    nodes = _kg_nodes()
+    agents_for_project = [
+        n["id"] for n in nodes if n.get("node_type") == "agent" and n.get("project") == req.project
+    ]
+    if not agents_for_project:
+        raise HTTPException(status_code=404, detail=f"No agents found for project '{req.project}'")
+
+    entry_points = _get_atlas_entry_points()
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+
+    test_id = str(uuid.uuid4())
+    results: list[dict] = []
+
+    for agent_name in agents_for_project:
+        ep_value = entry_points.get(agent_name)
+        if not ep_value:
+            results.append({"agent": agent_name, "error": "entry point not found", "output": None})
+            continue
+        try:
+            AgentClass = _load_agent_class(ep_value)
+            agent_instance = AgentClass(llm_fn=llm_fn, llm_cfg=llm_cfg)
+            output = None
+            for event in agent_instance.run(req.ticket, req.ticket):
+                if event.get("summary"):
+                    output = event.get("output")
+            results.append({"agent": agent_name, "output": output, "error": None})
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger("atlas_dashboard").warning(
+                "Test run failed for %s: %s", agent_name, exc
+            )
+            results.append({"agent": agent_name, "output": None, "error": str(exc)})
+
+    run_data = {
+        "test_id": test_id,
+        "project": req.project,
+        "ticket": req.ticket,
+        "created_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        "results": results,
+        "validations": {},
+    }
+    _TEST_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    (_TEST_RUNS_DIR / f"{test_id}.json").write_text(
+        _json.dumps(run_data, indent=2), encoding="utf-8"
+    )
+    return run_data
+
+
+@app.get("/api/test/runs")
+def api_test_runs():
+    import json as _json  # noqa: PLC0415
+
+    if not _TEST_RUNS_DIR.exists():
+        return []
+    runs = []
+    for f in sorted(_TEST_RUNS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[
+        :50
+    ]:
+        try:
+            runs.append(_json.loads(f.read_text(encoding="utf-8")))
+        except Exception:  # noqa: BLE001
+            pass
+    return runs
+
+
+@app.post("/api/test/runs/{test_id}/validate")
+def api_test_validate(test_id: str, body: TestValidation):
+    import json as _json  # noqa: PLC0415
+
+    path = _TEST_RUNS_DIR / f"{test_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Test run not found")
+    run_data = _json.loads(path.read_text(encoding="utf-8"))
+    run_data.setdefault("validations", {})[body.agent_name] = {
+        "valid": body.valid,
+        "comment": body.comment,
+    }
+    path.write_text(_json.dumps(run_data, indent=2), encoding="utf-8")
+    return {"ok": True}
 
 
 @app.get("/", response_class=HTMLResponse)
