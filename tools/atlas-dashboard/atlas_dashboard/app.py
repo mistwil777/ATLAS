@@ -2729,6 +2729,7 @@ def api_test_run(req: TestRunRequest):
                     r"^```(?:json)?\s*|\s*```$", "", output_raw.strip(), flags=_re.DOTALL
                 )
                 import contextlib as _contextlib  # noqa: PLC0415
+
                 with _contextlib.suppress(Exception):
                     output_json = _json.loads(clean)
             results.append(
@@ -2774,6 +2775,7 @@ def api_test_runs():
         :50
     ]:
         import contextlib as _cl  # noqa: PLC0415
+
         with _cl.suppress(Exception):
             runs.append(_json.loads(f.read_text(encoding="utf-8")))
     return runs

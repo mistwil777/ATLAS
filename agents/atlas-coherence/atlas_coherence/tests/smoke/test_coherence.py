@@ -60,9 +60,7 @@ def _make_llm(response: dict):
 def test_clean_blocs_returns_clean():
     from atlas_coherence.agent import AtlasCoherenceAgent
 
-    agent = AtlasCoherenceAgent(
-        llm_fn=_make_llm({"clean": True, "conflicts": []})
-    )
+    agent = AtlasCoherenceAgent(llm_fn=_make_llm({"clean": True, "conflicts": []}))
     events = list(agent.run(blocs=BLOCS_CLEAN))
     summary = next(e for e in events if e.get("summary"))
     assert summary["clean"] is True
@@ -79,9 +77,7 @@ def test_full_overlap_detected():
         "issue": "Both agents classify ticket priority.",
         "fix": "Remove TicketPrioritizer — PriorityClassifier owns this responsibility.",
     }
-    agent = AtlasCoherenceAgent(
-        llm_fn=_make_llm({"clean": False, "conflicts": [conflict]})
-    )
+    agent = AtlasCoherenceAgent(llm_fn=_make_llm({"clean": False, "conflicts": [conflict]}))
     events = list(agent.run(blocs=BLOCS_FULL_OVERLAP))
     summary = next(e for e in events if e.get("summary"))
     assert summary["clean"] is False
@@ -99,9 +95,7 @@ def test_partial_overlap_detected():
         "issue": "PriorityClassifier outputs 'category', which is CategoryClassifier's sole responsibility.",
         "fix": "Remove 'category' from PriorityClassifier's output.",
     }
-    agent = AtlasCoherenceAgent(
-        llm_fn=_make_llm({"clean": False, "conflicts": [conflict]})
-    )
+    agent = AtlasCoherenceAgent(llm_fn=_make_llm({"clean": False, "conflicts": [conflict]}))
     events = list(agent.run(blocs=BLOCS_PARTIAL_OVERLAP))
     summary = next(e for e in events if e.get("summary"))
     assert summary["clean"] is False
