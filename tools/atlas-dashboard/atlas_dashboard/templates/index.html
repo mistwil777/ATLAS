@@ -1534,7 +1534,7 @@
 
   function renderKG() {
     const filter = document.querySelector('input[name="kg-filter"]:checked')?.value || 'all';
-    const nAgents = _kgData.nodes.filter(n => n.node_type !== 'tool').length;
+    const nAgents = _kgData.nodes.filter(n => n.node_type === 'agent').length;
     const nTools  = _kgData.nodes.filter(n => n.node_type === 'tool').length;
     document.getElementById('kg-count-agents').textContent = `agents ${nAgents}`;
     document.getElementById('kg-count-tools').textContent  = `tools ${nTools}`;
@@ -1556,22 +1556,41 @@
     const container = document.getElementById('kg-graph');
     container.innerHTML = '';
 
-    const visNodes = filteredNodes.map(n => ({
-      id: n.id,
-      label: n.id,
-      group: n.node_type,
-      title: _kgTooltipHtml(n),
-      font: { color: n.node_type === 'tool' ? '#e8a600' : '#9085e9', size: 13, face: 'monospace' },
-      color: {
-        background: n.node_type === 'tool' ? '#1a1800' : '#1a1230',
-        border:     n.node_type === 'tool' ? '#e8a600' : '#9085e9',
-        highlight:  { background: n.node_type === 'tool' ? '#2a2800' : '#2a1a50', border: n.node_type === 'tool' ? '#e8a600' : '#c8b0ff' },
-        hover:      { background: n.node_type === 'tool' ? '#252000' : '#221040', border: n.node_type === 'tool' ? '#e8a600' : '#9085e9' },
-      },
-      shape: n.node_type === 'tool' ? 'diamond' : 'ellipse',
-      size: n.node_type === 'tool' ? 16 : 20,
-      borderWidth: 2,
-    }));
+    // Compute degree (nb of edges) per node to scale node size
+    const degreeMap = {};
+    for (const n of filteredNodes) degreeMap[n.id] = 0;
+    for (const e of (_kgData.edges || [])) {
+      if (filteredIds.has(e.from)) degreeMap[e.from] = (degreeMap[e.from] || 0) + 1;
+      if (filteredIds.has(e.to))   degreeMap[e.to]   = (degreeMap[e.to]   || 0) + 1;
+    }
+
+    const visNodes = filteredNodes.map(n => {
+      const isTool   = n.node_type === 'tool';
+      const degree   = degreeMap[n.id] || 0;
+      const baseSize = isTool ? 14 : 20;
+      const size     = baseSize + degree * 3;
+      // Confidence-based border width: high confidence = thick border
+      const conf     = n.confidence ?? 1.0;
+      const borderW  = 1 + Math.round(conf * 3);
+      // Score badge in label: show score if available
+      const score    = n.judge_score != null ? `\n▸ ${n.judge_score.toFixed(1)}/5` : '';
+      return {
+        id:    n.id,
+        label: n.id + score,
+        level: isTool ? 1 : 0,   // hierarchical: agents top (0), tools bottom (1)
+        title: _kgTooltipHtml(n),
+        font: { color: isTool ? '#e8a600' : '#9085e9', size: 13, face: 'monospace', multi: false },
+        color: {
+          background: isTool ? '#1a1800' : '#1a1230',
+          border:     isTool ? '#e8a600' : '#9085e9',
+          highlight:  { background: isTool ? '#2a2800' : '#2a1a50', border: isTool ? '#e8a600' : '#c8b0ff' },
+          hover:      { background: isTool ? '#252000' : '#221040', border: isTool ? '#e8a600' : '#9085e9' },
+        },
+        shape: isTool ? 'diamond' : 'ellipse',
+        size,
+        borderWidth: borderW,
+      };
+    });
 
     const visEdges = (_kgData.edges || [])
       .filter(e => filteredIds.has(e.from) && filteredIds.has(e.to))
@@ -1587,39 +1606,52 @@
 
     const data = { nodes: new vis.DataSet(visNodes), edges: new vis.DataSet(visEdges) };
     const options = {
-      physics: {
-        enabled: true,
-        solver: 'forceAtlas2Based',
-        forceAtlas2Based: { gravitationalConstant: -40, centralGravity: 0.005, springLength: 120, springConstant: 0.08, damping: 0.4 },
-        stabilization: { iterations: 150, updateInterval: 25 },
+      physics: { enabled: false },
+      layout: {
+        hierarchical: {
+          enabled: true,
+          direction: 'UD',        // Up→Down: agents on top, tools below
+          sortMethod: 'directed',
+          levelSeparation: 180,
+          nodeSpacing: 140,
+          treeSpacing: 200,
+        },
       },
-      interaction: { hover: true, tooltipDelay: 200, zoomView: true, dragView: true },
-      layout: { improvedLayout: true },
+      interaction: { hover: true, tooltipDelay: 200, zoomView: true, dragView: true, dragNodes: true },
       edges: { selectionWidth: 2 },
     };
 
     if (_visNetwork) { _visNetwork.destroy(); }
     _visNetwork = new vis.Network(container, data, options);
-
-    _visNetwork.on('stabilizationIterationsDone', () => { _visNetwork.setOptions({ physics: { enabled: false } }); });
   }
 
   function _kgTooltipHtml(n) {
-    // vis-network requires a DOM element for HTML tooltips — strings are rendered as plain text
-    const caps = (n.capabilities || []).join(', ') || '—';
-    const tags = (n.tags || []).join(', ') || '—';
+    const isTool = n.node_type === 'tool';
+    const caps   = (n.capabilities || []).join(', ') || '—';
+    const tags   = (n.tags || []).join(', ') || '—';
+    const score  = n.judge_score != null ? n.judge_score.toFixed(2) + ' / 5' : '—';
+    const conf   = n.confidence  != null ? (n.confidence * 100).toFixed(0)  + '%' : '—';
+    const share  = n.shareable ? 'yes' : 'no';
+    const history = (n.score_history || []);
+    const trend  = history.length > 1
+      ? history.slice(-3).map(h => h.score.toFixed(1)).join(' → ')
+      : '—';
+
     const el = document.createElement('div');
-    el.style.cssText = 'background:#1a1a2e;border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;font-size:11px;color:#c8c0d8;max-width:260px';
-    const title = document.createElement('div');
-    title.style.cssText = 'font-weight:bold;font-size:12px;margin-bottom:6px';
-    title.textContent = n.id;
-    const capsEl = document.createElement('div');
-    capsEl.style.cssText = 'color:#7a7a9a;margin-bottom:4px';
-    capsEl.textContent = 'capabilities: ' + caps;
-    const tagsEl = document.createElement('div');
-    tagsEl.style.cssText = 'font-size:10px;color:#5a5a7a';
-    tagsEl.textContent = 'tags: ' + tags;
-    el.append(title, capsEl, tagsEl);
+    el.style.cssText = 'background:#13131f;border:1px solid #2a2a4a;border-radius:6px;padding:12px 16px;font-size:11px;color:#c8c0d8;max-width:280px;line-height:1.7';
+
+    const typeColor = isTool ? '#e8a600' : '#9085e9';
+    el.innerHTML = `
+      <div style="font-weight:bold;font-size:13px;color:${typeColor};margin-bottom:8px">${n.id}</div>
+      <div style="display:grid;grid-template-columns:90px 1fr;gap:2px 8px;color:#a0a0c0">
+        <span style="color:#5a5a7a">type</span><span>${n.node_type}</span>
+        <span style="color:#5a5a7a">judge score</span><span style="color:${n.judge_score >= 4 ? '#1baf7a' : n.judge_score >= 2.5 ? '#e8a600' : '#e66767'}">${score}</span>
+        <span style="color:#5a5a7a">confidence</span><span>${conf}</span>
+        <span style="color:#5a5a7a">shareable</span><span>${share}</span>
+        <span style="color:#5a5a7a">score trend</span><span>${trend}</span>
+        <span style="color:#5a5a7a">capabilities</span><span style="word-break:break-word">${caps}</span>
+        <span style="color:#5a5a7a">tags</span><span>${tags}</span>
+      </div>`;
     return el;
   }
 

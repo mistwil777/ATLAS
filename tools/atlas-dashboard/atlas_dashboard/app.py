@@ -1809,8 +1809,10 @@ def api_install_tool(run_id: str, tool_name: str):
         ),
         None,
     )
+    # called_by may be a CSV of multiple agents — create one edge per agent
     if called_by:
-        _add_kg_edge(called_by, tool_name, "USES_TOOL")
+        for caller in [c.strip() for c in called_by.split(",") if c.strip()]:
+            _add_kg_edge(caller, tool_name, "USES_TOOL")
     store.set_tool_installed(run_id, tool_name)
     return {
         "status": "installed",
@@ -2289,7 +2291,11 @@ def _index_resolution_in_rag(
 
 
 def _add_resolved_by_edges(agent_name: str, criterion: str, resolution_key: str) -> None:
-    """Add KG edges: criterion --RESOLVED_BY--> resolution_key."""
+    """Record scaffold resolution in coaching_history of the agent node (no KG sub-nodes).
+
+    Criterion and resolution data belong in the agent payload, not as separate graph nodes.
+    RAG indexing (Qdrant) is handled separately by _index_resolution_in_rag.
+    """
     import logging  # noqa: PLC0415
 
     try:
@@ -2301,24 +2307,16 @@ def _add_resolved_by_edges(agent_name: str, criterion: str, resolution_key: str)
 
         _kg_path = _Path.home() / ".atlas" / "memory" / "graph.json"
         kg = KGStore(_kg_path)
-        # Ensure both nodes exist with node_type="resolution" so _fmt_agents()
-        # never picks them up as agents or tools in cdc-router pass 2.
-        for node_name in (criterion, resolution_key):
-            if node_name not in kg._g.nodes:
-                kg.register_agent(
-                    name=node_name,
-                    capabilities=[],
-                    inputs=[],
-                    outputs=[],
-                    tags=["resolution"],
-                    node_type="resolution",
-                    shareable=True,
-                )
-        kg.add_edge(criterion, resolution_key, "RESOLVED_BY")
-        kg.add_edge(agent_name, criterion, "RESOLVED")
+        if agent_name in kg._g.nodes:
+            kg.update_node_coaching(
+                name=agent_name,
+                patch_description=resolution_key,
+                criterion=criterion,
+                delta=0.0,
+            )
     except Exception as exc:  # noqa: BLE001
         logging.getLogger("atlas_dashboard").warning(
-            "KG RESOLVED_BY edge for %s/%s (non-blocking): %s", criterion, resolution_key, exc
+            "KG coaching update for %s/%s (non-blocking): %s", agent_name, criterion, exc
         )
 
 
@@ -2517,6 +2515,13 @@ def api_get_kg():
 
     raw_nodes = kg.get("nodes", [])
     raw_links = kg.get("links", [])
+
+    # Only expose agent/tool nodes — criterion/resolution nodes stay in the graph
+    # for RAG memory but must not pollute the visualization.
+    entity_types = {"agent", "tool"}
+    visible_nodes = [n for n in raw_nodes if n.get("node_type", "agent") in entity_types]
+    visible_ids = {n.get("id", "") for n in visible_nodes}
+
     return {
         "nodes": [
             {
@@ -2524,16 +2529,21 @@ def api_get_kg():
                 "node_type": n.get("node_type", "agent"),
                 "capabilities": n.get("capabilities", []),
                 "tags": n.get("tags", []),
+                "judge_score": n.get("judge_score"),
+                "confidence": n.get("confidence", 1.0),
+                "shareable": n.get("shareable", True),
+                "score_history": n.get("score_history", []),
             }
-            for n in raw_nodes
+            for n in visible_nodes
         ],
         "edges": [
             {
-                "source": lnk.get("source", ""),
-                "target": lnk.get("target", ""),
+                "from": lnk.get("source", ""),
+                "to": lnk.get("target", ""),
                 "relation": lnk.get("relation", ""),
             }
             for lnk in raw_links
+            if lnk.get("source") in visible_ids and lnk.get("target") in visible_ids
         ],
     }
 
