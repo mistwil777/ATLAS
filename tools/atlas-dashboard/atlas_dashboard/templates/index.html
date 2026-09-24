@@ -1659,20 +1659,20 @@
 
     const truncate = (s, max) => s.length > max ? s.slice(0, max) + '…' : s;
     const el = document.createElement('div');
-    el.style.cssText = 'background:#13131f;border:1px solid #2a2a4a;border-radius:6px;padding:12px 16px;font-size:11px;color:#c8c0d8;width:260px;line-height:1.7;box-sizing:border-box';
+    el.style.cssText = 'background:#13131f;border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;font-size:11px;color:#c8c0d8;width:240px;max-width:240px;overflow:hidden;line-height:1.7;box-sizing:border-box';
 
     const typeColor = isTool ? '#e8a600' : '#9085e9';
     const scoreColor = n.judge_score >= 4 ? '#1baf7a' : n.judge_score >= 2.5 ? '#e8a600' : '#e66767';
     el.innerHTML = `
       <div style="font-weight:bold;font-size:13px;color:${typeColor};margin-bottom:8px;word-break:break-word">${n.id}</div>
-      <div style="display:grid;grid-template-columns:90px minmax(0,1fr);gap:2px 8px;color:#a0a0c0">
-        <span style="color:#5a5a7a">type</span><span>${n.node_type}</span>
+      <div style="display:grid;grid-template-columns:80px 130px;gap:2px 8px;color:#a0a0c0">
+        <span style="color:#5a5a7a">type</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.node_type}</span>
         <span style="color:#5a5a7a">judge score</span><span style="color:${scoreColor}">${score}</span>
         <span style="color:#5a5a7a">confidence</span><span>${conf}</span>
         <span style="color:#5a5a7a">shareable</span><span>${share}</span>
-        <span style="color:#5a5a7a">score trend</span><span>${trend}</span>
-        <span style="color:#5a5a7a">capabilities</span><span style="word-break:break-word;overflow-wrap:anywhere">${truncate(caps, 60)}</span>
-        <span style="color:#5a5a7a">tags</span><span style="word-break:break-word;overflow-wrap:anywhere">${truncate(tags, 60)}</span>
+        <span style="color:#5a5a7a">score trend</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${trend}</span>
+        <span style="color:#5a5a7a">capabilities</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${caps}">${truncate(caps, 38)}</span>
+        <span style="color:#5a5a7a">tags</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${truncate(tags, 38)}</span>
       </div>`;
     return el;
   }
