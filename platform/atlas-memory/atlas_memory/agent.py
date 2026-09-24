@@ -157,6 +157,9 @@ class AtlasMemoryAgent:
         tags: list | None = None,
         judge_score: float | None = None,
         confidence: float = 1.0,
+        project: str = "",
+        cdc_summary: str = "",
+        context_tags: list | None = None,
         **_: object,
     ) -> dict:
         self._get_kg().register_agent(
@@ -169,6 +172,9 @@ class AtlasMemoryAgent:
             shareable=_is_shareable(),
             judge_score=judge_score,
             confidence=confidence,
+            project=project,
+            cdc_summary=cdc_summary,
+            context_tags=context_tags or [],
         )
         return {"registered": name}
 
@@ -177,6 +183,9 @@ class AtlasMemoryAgent:
         name: str,
         capabilities: list | None = None,
         tags: list | None = None,
+        project: str = "",
+        cdc_summary: str = "",
+        context_tags: list | None = None,
         **_: object,
     ) -> dict:
         self._get_kg().register_agent(
@@ -187,6 +196,9 @@ class AtlasMemoryAgent:
             tags=tags or [],
             node_type="tool",
             shareable=_is_shareable(),
+            project=project,
+            cdc_summary=cdc_summary,
+            context_tags=context_tags or [],
         )
         return {"registered": name, "node_type": "tool"}
 

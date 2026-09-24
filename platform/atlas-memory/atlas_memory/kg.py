@@ -32,6 +32,9 @@ class KGStore:
         shareable: bool = True,
         judge_score: float | None = None,
         confidence: float = 1.0,
+        project: str = "",
+        cdc_summary: str = "",
+        context_tags: list[str] | None = None,
     ) -> None:
         existing = dict(self._g.nodes.get(name, {}))
         attrs: dict = {
@@ -42,6 +45,11 @@ class KGStore:
             "tags": tags,
             "shareable": shareable,
             "confidence": max(0.0, min(1.0, confidence)),
+            "project": project or existing.get("project", ""),
+            "cdc_summary": cdc_summary or existing.get("cdc_summary", ""),
+            "context_tags": context_tags
+            if context_tags is not None
+            else existing.get("context_tags", []),
             # preserve existing history lists
             "score_history": existing.get("score_history", []),
             "coaching_history": existing.get("coaching_history", []),

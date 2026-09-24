@@ -1800,7 +1800,10 @@ def api_install_tool(run_id: str, tool_name: str):
     )
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=f"pip install failed: {result.stderr[:500]}")
-    kg_ok, kg_err = _register_tool_in_kg(tool_name, output_path)
+    project, cdc_summary, context_tags = _extract_run_context(run)
+    kg_ok, kg_err = _register_tool_in_kg(
+        tool_name, output_path, project=project, cdc_summary=cdc_summary, context_tags=context_tags
+    )
     # create KG edge caller_agent --USES_TOOL--> tool if called_by is set on the bloc
     blocs = run.get("blocs", [])
     called_by = next(
@@ -1851,10 +1854,30 @@ def api_install(run_id: str, agent_name: str):
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=f"pip install failed: {result.stderr[:500]}")
 
-    # Register the new agent in the KG with judge score + confidence
+    # Register the new agent in the KG with judge score + confidence + context
     sc_entry = (store.get_run(run_id) or {}).get("scaffolded", {}).get(agent_name, {})
     judge_score = sc_entry.get("judge_score")
-    _register_agent_in_kg(agent_name, output_path, judge_score=judge_score, run_id=run_id)
+    project, cdc_summary, context_tags = _extract_run_context(run)
+    _register_agent_in_kg(
+        agent_name,
+        output_path,
+        judge_score=judge_score,
+        run_id=run_id,
+        project=project,
+        cdc_summary=cdc_summary,
+        context_tags=context_tags,
+    )
+
+    # Create PIPELINE_MEMBER edges between all installed agents in this run
+    installed_agents = [
+        name
+        for name, sc in run.get("scaffolded", {}).items()
+        if sc.get("installed") or name == agent_name
+    ]
+    for peer in installed_agents:
+        if peer != agent_name:
+            _add_kg_edge(agent_name, peer, "PIPELINE_MEMBER")
+            _add_kg_edge(peer, agent_name, "PIPELINE_MEMBER")
 
     store.set_agent_installed(run_id, agent_name)
     return {"status": "installed", "agent_name": agent_name}
@@ -2101,7 +2124,52 @@ def _run_diagnose(
     }
 
 
-def _register_tool_in_kg(tool_name: str, output_path: str) -> tuple[bool, str]:
+def _extract_run_context(run: dict) -> tuple[str, str, list[str]]:
+    """Extract project name, cdc_summary, and context_tags from a run dict."""
+    meta = run.get("metadata", {})
+    project_dir = meta.get("project_dir", "")
+    project = _Path(project_dir).name if project_dir else ""
+
+    cdc_full = meta.get("cdc_full", meta.get("cdc_preview", ""))
+    # First non-empty line starting with # is the CDC title → use as summary
+    cdc_summary = ""
+    for line in cdc_full.splitlines():
+        line = line.strip().lstrip("#").strip()
+        if line:
+            cdc_summary = line[:120]
+            break
+
+    # Extract context_tags from CDC keywords (basic heuristic)
+    context_tags: list[str] = []
+    cdc_lower = cdc_full.lower()
+    keyword_map = {
+        "ticket": "tickets",
+        "support": "support",
+        "classif": "classification",
+        "priorit": "priority",
+        "catégor": "category",
+        "français": "fr",
+        "french": "fr",
+        "english": "en",
+        "saas": "saas",
+        "it ": "it",
+        "factur": "billing",
+        "onboarding": "onboarding",
+    }
+    for kw, tag in keyword_map.items():
+        if kw in cdc_lower and tag not in context_tags:
+            context_tags.append(tag)
+
+    return project, cdc_summary, context_tags
+
+
+def _register_tool_in_kg(
+    tool_name: str,
+    output_path: str,
+    project: str = "",
+    cdc_summary: str = "",
+    context_tags: list[str] | None = None,
+) -> tuple[bool, str]:
     import logging  # noqa: PLC0415
 
     try:
@@ -2114,6 +2182,9 @@ def _register_tool_in_kg(tool_name: str, output_path: str) -> tuple[bool, str]:
                 name=tool_name,
                 capabilities=[f"Reusable Python tool: {tool_name}"],
                 tags=["tool", "generated"],
+                project=project,
+                cdc_summary=cdc_summary,
+                context_tags=context_tags or [],
             )
         )
         err = next((e for e in events if e.get("level") == "error"), None)
@@ -2380,8 +2451,11 @@ def _register_agent_in_kg(
     output_path: str,
     judge_score: float | None = None,
     run_id: str | None = None,
+    project: str = "",
+    cdc_summary: str = "",
+    context_tags: list[str] | None = None,
 ) -> None:
-    """Add the freshly installed agent to atlas-memory KG with confidence."""
+    """Add the freshly installed agent to atlas-memory KG with confidence and context."""
     import logging  # noqa: PLC0415
 
     try:
@@ -2397,6 +2471,9 @@ def _register_agent_in_kg(
                 tags=["scaffolded"],
                 judge_score=judge_score,
                 confidence=confidence,
+                project=project,
+                cdc_summary=cdc_summary,
+                context_tags=context_tags or [],
             )
         )
         err = next((e for e in events if e.get("level") == "error"), None)
@@ -2537,6 +2614,9 @@ def api_get_kg():
                 "confidence": n.get("confidence", 1.0),
                 "shareable": n.get("shareable", True),
                 "score_history": n.get("score_history", []),
+                "project": n.get("project", ""),
+                "cdc_summary": n.get("cdc_summary", ""),
+                "context_tags": n.get("context_tags", []),
             }
             for n in visible_nodes
         ],
