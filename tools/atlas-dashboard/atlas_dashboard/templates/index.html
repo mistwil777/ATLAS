@@ -1599,15 +1599,22 @@
 
     const visEdges = (_kgData.edges || [])
       .filter(e => filteredIds.has(e.from) && filteredIds.has(e.to))
-      .map(e => ({
-        from: e.from, to: e.to,
-        arrows: { to: { enabled: true, scaleFactor: 0.7 } },
-        color: { color: '#2d4a7a', highlight: '#3987e5', hover: '#3987e5', opacity: 0.8 },
-        width: 1.5,
-        smooth: { type: 'curvedCW', roundness: 0.15 },
-        hoverWidth: 3,
-        selectionWidth: 3,
-      }));
+      .map(e => {
+        const el = document.createElement('div');
+        el.style.cssText = 'background:#13131f;border:1px solid #2a2a4a;border-radius:5px;padding:6px 10px;font-size:11px;color:#c8c0d8;font-family:monospace';
+        el.textContent = `${e.from}  →  ${e.to}\n${e.relation || ''}`;
+        el.style.whiteSpace = 'pre';
+        return {
+          from: e.from, to: e.to,
+          title: el,
+          arrows: { to: { enabled: true, scaleFactor: 0.7 } },
+          color: { color: '#2d4a7a', highlight: '#3987e5', hover: '#3987e5', opacity: 0.8 },
+          width: 1.5,
+          smooth: { type: 'curvedCW', roundness: 0.15 },
+          hoverWidth: 3,
+          selectionWidth: 3,
+        };
+      });
 
     const data = { nodes: new vis.DataSet(visNodes), edges: new vis.DataSet(visEdges) };
     const options = {
@@ -1654,16 +1661,17 @@
     el.style.cssText = 'background:#13131f;border:1px solid #2a2a4a;border-radius:6px;padding:12px 16px;font-size:11px;color:#c8c0d8;max-width:280px;line-height:1.7';
 
     const typeColor = isTool ? '#e8a600' : '#9085e9';
+    const scoreColor = n.judge_score >= 4 ? '#1baf7a' : n.judge_score >= 2.5 ? '#e8a600' : '#e66767';
     el.innerHTML = `
-      <div style="font-weight:bold;font-size:13px;color:${typeColor};margin-bottom:8px">${n.id}</div>
-      <div style="display:grid;grid-template-columns:90px 1fr;gap:2px 8px;color:#a0a0c0">
+      <div style="font-weight:bold;font-size:13px;color:${typeColor};margin-bottom:8px;word-break:break-word">${n.id}</div>
+      <div style="display:grid;grid-template-columns:90px minmax(0,1fr);gap:2px 8px;color:#a0a0c0">
         <span style="color:#5a5a7a">type</span><span>${n.node_type}</span>
-        <span style="color:#5a5a7a">judge score</span><span style="color:${n.judge_score >= 4 ? '#1baf7a' : n.judge_score >= 2.5 ? '#e8a600' : '#e66767'}">${score}</span>
+        <span style="color:#5a5a7a">judge score</span><span style="color:${scoreColor}">${score}</span>
         <span style="color:#5a5a7a">confidence</span><span>${conf}</span>
         <span style="color:#5a5a7a">shareable</span><span>${share}</span>
         <span style="color:#5a5a7a">score trend</span><span>${trend}</span>
-        <span style="color:#5a5a7a">capabilities</span><span style="word-break:break-word">${caps}</span>
-        <span style="color:#5a5a7a">tags</span><span>${tags}</span>
+        <span style="color:#5a5a7a">capabilities</span><span style="word-break:break-word;overflow-wrap:break-word">${caps}</span>
+        <span style="color:#5a5a7a">tags</span><span style="word-break:break-word">${tags}</span>
       </div>`;
     return el;
   }
