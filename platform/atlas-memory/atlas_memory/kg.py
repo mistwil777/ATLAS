@@ -35,6 +35,7 @@ class KGStore:
         project: str = "",
         cdc_summary: str = "",
         context_tags: list[str] | None = None,
+        output_type: str = "json",
     ) -> None:
         existing = dict(self._g.nodes.get(name, {}))
         attrs: dict = {
@@ -50,6 +51,7 @@ class KGStore:
             "context_tags": context_tags
             if context_tags is not None
             else existing.get("context_tags", []),
+            "output_type": output_type or existing.get("output_type", "json"),
             # preserve existing history lists
             "score_history": existing.get("score_history", []),
             "coaching_history": existing.get("coaching_history", []),

@@ -26,12 +26,19 @@ from pydantic import BaseModel
 class TestRunRequest(BaseModel):
     project: str
     ticket: str
+    batch_id: str = ""
 
 
 class TestValidation(BaseModel):
     agent_name: str
-    valid: bool
+    valid: bool = False
     comment: str = ""
+    skipped: bool = False
+
+
+class BatchGenerateRequest(BaseModel):
+    project: str
+    n: int = 7
 
 
 class ScaffoldRequest(BaseModel):
@@ -2485,6 +2492,7 @@ def _register_agent_in_kg(
                 project=project,
                 cdc_summary=cdc_summary,
                 context_tags=context_tags or [],
+                output_type="json",
             )
         )
         err = next((e for e in events if e.get("level") == "error"), None)
@@ -2628,6 +2636,7 @@ def api_get_kg():
                 "project": n.get("project", ""),
                 "cdc_summary": n.get("cdc_summary", ""),
                 "context_tags": n.get("context_tags", []),
+                "output_type": n.get("output_type", "json"),
             }
             for n in visible_nodes
         ],
@@ -2708,21 +2717,43 @@ def api_test_run(req: TestRunRequest):
         try:
             AgentClass = _load_agent_class(ep_value)
             agent_instance = AgentClass(llm_fn=llm_fn, llm_cfg=llm_cfg)
-            output = None
-            for event in agent_instance.run(req.ticket, req.ticket):
+            output_raw = None
+            for event in agent_instance.run(cdc_bloc=req.ticket, context=""):
                 if event.get("summary"):
-                    output = event.get("output")
-            results.append({"agent": agent_name, "output": output, "error": None})
+                    output_raw = event.get("output", "")
+            # Try to parse JSON from output (strip markdown fences if present)
+            output_json = None
+            if output_raw:
+                import re as _re  # noqa: PLC0415
+
+                clean = _re.sub(
+                    r"^```(?:json)?\s*|\s*```$", "", output_raw.strip(), flags=_re.DOTALL
+                )
+                try:
+                    output_json = _json.loads(clean)
+                except Exception:  # noqa: BLE001
+                    pass
+            results.append(
+                {
+                    "agent": agent_name,
+                    "output": output_raw or "",
+                    "output_json": output_json,
+                    "error": None,
+                }
+            )
         except Exception as exc:  # noqa: BLE001
             logging.getLogger("atlas_dashboard").warning(
                 "Test run failed for %s: %s", agent_name, exc
             )
-            results.append({"agent": agent_name, "output": None, "error": str(exc)})
+            results.append(
+                {"agent": agent_name, "output": "", "output_json": None, "error": str(exc)}
+            )
 
     run_data = {
         "test_id": test_id,
         "project": req.project,
         "ticket": req.ticket,
+        "batch_id": req.batch_id or "",
         "created_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "results": results,
         "validations": {},
@@ -2759,11 +2790,249 @@ def api_test_validate(test_id: str, body: TestValidation):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Test run not found")
     run_data = _json.loads(path.read_text(encoding="utf-8"))
-    run_data.setdefault("validations", {})[body.agent_name] = {
-        "valid": body.valid,
-        "comment": body.comment,
-    }
+    if body.skipped:
+        run_data.setdefault("validations", {})[body.agent_name] = {"skipped": True}
+    else:
+        run_data.setdefault("validations", {})[body.agent_name] = {
+            "valid": body.valid,
+            "comment": body.comment,
+        }
     path.write_text(_json.dumps(run_data, indent=2), encoding="utf-8")
+
+    # Update aggregated judge_score in KG (skipped entries excluded)
+    if not body.skipped:
+        try:
+            from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+            kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+            if body.agent_name in kg._g:
+                all_runs = [
+                    _json.loads(f.read_text(encoding="utf-8"))
+                    for f in _TEST_RUNS_DIR.glob("*.json")
+                ]
+                project = run_data.get("project", "")
+                valid_count = 0
+                invalid_count = 0
+                for run in all_runs:
+                    if run.get("project") != project:
+                        continue
+                    v = run.get("validations", {}).get(body.agent_name, {})
+                    if v.get("skipped"):
+                        continue
+                    if "valid" in v:
+                        if v["valid"]:
+                            valid_count += 1
+                        else:
+                            invalid_count += 1
+                total = valid_count + invalid_count
+                if total > 0:
+                    aggregated_score = round((valid_count / total) * 5.0, 2)
+                    kg.update_agent_score(
+                        body.agent_name,
+                        aggregated_score,
+                        run_id=f"aggregate_{project}",
+                    )
+        except Exception:  # noqa: BLE001
+            pass
+
+    return {"ok": True}
+
+
+@app.delete("/api/test/runs/{test_id}")
+def api_test_delete(test_id: str):
+    path = _TEST_RUNS_DIR / f"{test_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Not found")
+    path.unlink()
+    return {"ok": True}
+
+
+@app.post("/api/test/extract-file")
+async def api_test_extract_file(file: UploadFile):
+    """Extract text from an uploaded .pdf or .txt file."""
+    name = (file.filename or "").lower()
+    raw = await file.read()
+    if name.endswith(".pdf"):
+        try:
+            import io  # noqa: PLC0415
+            from pdfminer.high_level import extract_text_to_fp  # noqa: PLC0415
+            from pdfminer.layout import LAParams  # noqa: PLC0415
+
+            out = io.StringIO()
+            extract_text_to_fp(io.BytesIO(raw), out, laparams=LAParams())
+            text = out.getvalue().strip()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=422, detail=f"PDF extraction failed: {exc}") from exc
+    else:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+    return {"text": text}
+
+
+@app.get("/api/test/generate-ticket")
+def api_test_generate_ticket(project: str = "", user_prompt: str = ""):
+    """Generate a synthetic support ticket for the given project using the LLM."""
+    import json as _json  # noqa: PLC0415
+
+    from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+    kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+    # gather context from KG for the selected project
+    cdc_summary = ""
+    context_tags: list[str] = []
+    for node, data in kg._g.nodes(data=True):
+        if data.get("node_type") == "agent" and (not project or data.get("project") == project):
+            cdc_summary = cdc_summary or data.get("cdc_summary", "")
+            context_tags += [t for t in data.get("context_tags", []) if t not in context_tags]
+
+    context_line = f"Projet : {project}." if project else ""
+    summary_line = f"Contexte du système : {cdc_summary}." if cdc_summary else ""
+    tags_line = f"Tags : {', '.join(context_tags)}." if context_tags else ""
+
+    user_instruction = (
+        f"Instructions: {user_prompt}"
+        if user_prompt
+        else ("Generate a realistic and varied example appropriate to the context.")
+    )
+    prompt = (
+        f"{context_line} {summary_line} {tags_line}\n\n"
+        f"{user_instruction}\n\n"
+        "Write the example in 3-6 lines, as if written by an end user. "
+        "No title, no markdown, plain text only."
+    ).strip()
+
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+    try:
+        ticket_text = llm_fn(prompt, llm_cfg, 256)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {"ticket": ticket_text.strip()}
+
+
+@app.post("/api/test/generate-batch")
+def api_test_generate_batch(req: BatchGenerateRequest):
+    """Generate N diverse test cases for the given project using the LLM."""
+    import json as _json  # noqa: PLC0415
+    import re as _re  # noqa: PLC0415
+
+    from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+    kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+    cdc_summary = ""
+    context_tags: list[str] = []
+    for node, data in kg._g.nodes(data=True):
+        if data.get("node_type") == "agent" and (
+            not req.project or data.get("project") == req.project
+        ):
+            cdc_summary = cdc_summary or data.get("cdc_summary", "")
+            context_tags += [t for t in data.get("context_tags", []) if t not in context_tags]
+
+    prompt = (
+        f"You are building a test suite for an AI pipeline.\n"
+        f"Project: {req.project}\n"
+        f"System: {cdc_summary}\n"
+        f"Tags: {', '.join(context_tags)}\n\n"
+        f"Generate exactly {req.n} distinct test cases covering:\n"
+        f"- 2-3 nominal cases (typical input the system handles well)\n"
+        f"- 2 edge cases (unusual but valid input)\n"
+        f"- 1-2 ambiguous cases (input where the right answer is debatable)\n"
+        f"- 1 out-of-scope case (input the system should flag or handle gracefully)\n\n"
+        f"Return ONLY a JSON array, no markdown, no explanation:\n"
+        f'[\n  {{"id": 1, "type": "nominal", "description": "brief label", "input": "the actual test text"}},\n  ...\n]'
+    )
+
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+    try:
+        raw = llm_fn(prompt, llm_cfg, 1024)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    clean = _re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=_re.DOTALL)
+    try:
+        cases = _json.loads(clean)
+        if not isinstance(cases, list):
+            raise ValueError("not a list")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=422, detail=f"LLM returned invalid JSON: {exc}\n\nRaw: {raw[:300]}"
+        ) from exc
+
+    return {"cases": cases}
+
+
+class AgentPromptPatch(BaseModel):
+    prompt: str
+
+
+def _find_prompts_py(agent_name: str, project: str = "") -> _Path | None:
+    """Locate the prompts.py for a given agent name across all projects."""
+    import re as _re  # noqa: PLC0415
+
+    slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
+    base = _Path.home() / ".atlas" / "projects"
+    if project:
+        candidate = base / project / "agents" / slug / slug.replace("-", "_") / "prompts.py"
+        if candidate.exists():
+            return candidate
+    # search all projects
+    for p in sorted(base.iterdir()) if base.exists() else []:
+        candidate = p / "agents" / slug / slug.replace("-", "_") / "prompts.py"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+@app.get("/api/agents/{agent_name}/prompt")
+def api_agent_get_prompt(agent_name: str, project: str = ""):
+    path = _find_prompts_py(agent_name, project)
+    if not path:
+        raise HTTPException(status_code=404, detail=f"prompts.py not found for {agent_name}")
+    content = path.read_text(encoding="utf-8")
+    # Extract MAIN_PROMPT value
+    import re as _re  # noqa: PLC0415
+
+    m = _re.search(r'MAIN_PROMPT\s*=\s*"""(.*?)"""', content, _re.DOTALL)
+    if not m:
+        raise HTTPException(status_code=422, detail="MAIN_PROMPT not found in prompts.py")
+    return {"prompt": m.group(1), "path": str(path)}
+
+
+@app.patch("/api/agents/{agent_name}/prompt")
+def api_agent_patch_prompt(agent_name: str, body: AgentPromptPatch, project: str = ""):
+    path = _find_prompts_py(agent_name, project)
+    if not path:
+        raise HTTPException(status_code=404, detail=f"prompts.py not found for {agent_name}")
+    content = path.read_text(encoding="utf-8")
+    import re as _re  # noqa: PLC0415
+
+    new_content = _re.sub(
+        r'(MAIN_PROMPT\s*=\s*""").*?(""")',
+        lambda m: m.group(1) + body.prompt + m.group(2),
+        content,
+        flags=_re.DOTALL,
+    )
+    if new_content == content:
+        raise HTTPException(status_code=422, detail="Could not replace MAIN_PROMPT")
+    # Backup original
+    backup = path.with_suffix(".py.bak")
+    backup.write_text(content, encoding="utf-8")
+    path.write_text(new_content, encoding="utf-8")
+    return {"ok": True, "backup": str(backup)}
+
+
+@app.post("/api/agents/{agent_name}/prompt/restore")
+def api_agent_restore_prompt(agent_name: str, project: str = ""):
+    path = _find_prompts_py(agent_name, project)
+    if not path:
+        raise HTTPException(status_code=404, detail=f"prompts.py not found for {agent_name}")
+    backup = path.with_suffix(".py.bak")
+    if not backup.exists():
+        raise HTTPException(status_code=404, detail="No backup found")
+    path.write_text(backup.read_text(encoding="utf-8"), encoding="utf-8")
+    backup.unlink()
     return {"ok": True}
 
 

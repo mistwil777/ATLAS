@@ -160,6 +160,7 @@ class AtlasMemoryAgent:
         project: str = "",
         cdc_summary: str = "",
         context_tags: list | None = None,
+        output_type: str = "json",
         **_: object,
     ) -> dict:
         self._get_kg().register_agent(
@@ -175,6 +176,7 @@ class AtlasMemoryAgent:
             project=project,
             cdc_summary=cdc_summary,
             context_tags=context_tags or [],
+            output_type=output_type,
         )
         return {"registered": name}
 
@@ -186,6 +188,7 @@ class AtlasMemoryAgent:
         project: str = "",
         cdc_summary: str = "",
         context_tags: list | None = None,
+        output_type: str = "json",
         **_: object,
     ) -> dict:
         self._get_kg().register_agent(
@@ -199,6 +202,7 @@ class AtlasMemoryAgent:
             project=project,
             cdc_summary=cdc_summary,
             context_tags=context_tags or [],
+            output_type=output_type,
         )
         return {"registered": name, "node_type": "tool"}
 

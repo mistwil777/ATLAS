@@ -36,6 +36,7 @@ def _normalise(vec: list[float]) -> list[float]:
 
 # ── Backend implementations ────────────────────────────────────────────────────
 
+
 def _embed_bedrock(texts: list[str]) -> list[list[float]]:
     import boto3  # noqa: PLC0415
     import json as _json  # noqa: PLC0415
@@ -70,11 +71,7 @@ def _embed_fastembed(texts: list[str]) -> list[list[float]]:
         "/tmp/fastembed_cache",
         str(Path.home() / ".cache" / "fastembed"),
     ]
-    cached = any(
-        list(Path(b).rglob("*.onnx"))
-        for b in caches
-        if b and Path(b).exists()
-    )
+    cached = any(list(Path(b).rglob("*.onnx")) for b in caches if b and Path(b).exists())
     if not cached:
         raise RuntimeError(f"fastembed ONNX model not cached locally ({_FASTEMBED_MODEL})")
 
@@ -94,6 +91,7 @@ def _embed_tfidf(texts: list[str]) -> list[list[float]]:
 
 
 # ── Public embed function with fallback chain ──────────────────────────────────
+
 
 def _embed(texts: list[str]) -> list[list[float]]:
     """Embed texts using best available backend. Priority: Bedrock → fastembed → TF-IDF."""
@@ -119,7 +117,9 @@ def _embed(texts: list[str]) -> list[list[float]]:
         try:
             vecs = fn(texts)
             if _BACKEND != name:
-                _log.info("atlas-memory embedding backend: %s (dim=%d)", name, len(vecs[0]) if vecs else 0)
+                _log.info(
+                    "atlas-memory embedding backend: %s (dim=%d)", name, len(vecs[0]) if vecs else 0
+                )
                 _BACKEND = name
             return vecs
         except Exception as exc:  # noqa: BLE001

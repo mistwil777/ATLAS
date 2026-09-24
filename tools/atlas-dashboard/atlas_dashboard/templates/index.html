@@ -454,11 +454,38 @@
   </div>
 
   <div style="margin-bottom:16px">
-    <label style="display:block;font-size:12px;color:var(--ink-dim);margin-bottom:6px">TICKET TEXT</label>
-    <textarea id="test-ticket-input" rows="5" style="width:100%;box-sizing:border-box;background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:10px 12px;color:#fff;font-size:13px;resize:vertical" placeholder="Paste a support ticket here…"></textarea>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <label id="test-input-label" style="font-size:12px;color:var(--ink-dim)">INPUT</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label id="test-file-label" style="cursor:pointer;font-size:12px;padding:4px 10px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111;white-space:nowrap" title="Accepted: .txt, .md, .pdf">
+          Attach file
+          <input id="test-file-input" type="file" accept=".txt,.md,.pdf" style="display:none" onchange="handleTicketFile(this)">
+        </label>
+        <input id="test-generate-prompt" type="text" placeholder="Describe the case to generate…" style="font-size:12px;padding:4px 10px;border:1px solid #444;border-radius:4px;color:#fff;background:#111;width:220px" onkeydown="if(event.key==='Enter')generateTicket()">
+        <button id="test-generate-btn" onclick="generateTicket()" style="font-size:12px;padding:4px 10px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111;white-space:nowrap;cursor:pointer">Generate</button>
+      </div>
+    </div>
+    <textarea id="test-ticket-input" rows="5" style="width:100%;box-sizing:border-box;background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:10px 12px;color:#fff;font-size:13px;resize:vertical" placeholder="Paste an example here, attach a file, or generate one…"></textarea>
+    <div id="test-file-status" style="font-size:11px;color:var(--ink-dim);margin-top:4px;min-height:14px"></div>
   </div>
 
-  <button id="test-run-btn" onclick="runTest()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;margin-bottom:24px" disabled>Run pipeline</button>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
+    <button id="test-run-btn" onclick="runTest()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600" disabled>Run pipeline</button>
+    <button id="test-batch-btn" onclick="showBatchPanel()" style="border:1px solid var(--violet);color:var(--violet);background:#111;font-weight:600;padding:6px 14px;border-radius:4px;cursor:pointer" disabled>Generate batch</button>
+  </div>
+
+  <!-- Batch panel: step 1 review, step 2 results -->
+  <div id="test-batch-panel" style="display:none;background:#12121f;border:1px solid #252535;border-radius:8px;padding:20px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <span id="batch-panel-title" style="font-size:13px;font-weight:600;color:#fff">Generating test cases…</span>
+      <button onclick="document.getElementById('test-batch-panel').style.display='none'" style="background:transparent;border:none;color:var(--ink-dim);cursor:pointer;font-size:16px">✕</button>
+    </div>
+    <div id="batch-cases-list"></div>
+    <div id="batch-run-bar" style="display:none;margin-top:12px">
+      <button id="run-batch-btn" onclick="runBatch()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;padding:7px 18px;border-radius:4px;cursor:pointer">Run batch</button>
+      <span id="batch-progress" style="margin-left:12px;font-size:12px;color:var(--ink-dim)"></span>
+    </div>
+  </div>
 
   <div id="test-results-area"></div>
 
@@ -1489,12 +1516,13 @@
     }
   }
 
-  async function deleteRun(runId) {
-    if (!confirm('Delete this run?')) return;
-    await fetch(`/api/runs/${runId}`, { method: 'DELETE' });
-    selectedId = null;
-    document.getElementById('detail').innerHTML = '<div style="padding:20px;color:var(--ink-dim)">Select a run.</div>';
-    await refresh();
+  function deleteRun(runId) {
+    _confirmDialog('Delete run', 'This run and all its scaffolded files will be permanently removed.', 'Delete', 'var(--red)', async () => {
+      await fetch(`/api/runs/${runId}`, { method: 'DELETE' });
+      selectedId = null;
+      document.getElementById('detail').innerHTML = '<div style="padding:20px;color:var(--ink-dim)">Select a run.</div>';
+      await refresh();
+    });
   }
 
   async function bulkDeleteSkipped() {
@@ -1507,13 +1535,14 @@
       return allSkipped || noBlocs;
     });
     if (!toDelete.length) { alert('No debug runs to delete.'); return; }
-    if (!confirm(`Delete ${toDelete.length} debug run(s)?`)) return;
-    await Promise.all(toDelete.map(r => fetch(`/api/runs/${r.run_id}`, { method: 'DELETE' })));
-    if (toDelete.some(r => r.run_id === selectedId)) {
-      selectedId = null;
-      document.getElementById('detail').innerHTML = '<div class="detail-empty">Select a run to inspect it.</div>';
-    }
-    await refresh();
+    _confirmDialog(`Delete ${toDelete.length} debug run(s)`, 'All selected runs will be permanently removed. This cannot be undone.', 'Delete all', 'var(--red)', async () => {
+      await Promise.all(toDelete.map(r => fetch(`/api/runs/${r.run_id}`, { method: 'DELETE' })));
+      if (toDelete.some(r => r.run_id === selectedId)) {
+        selectedId = null;
+        document.getElementById('detail').innerHTML = '<div class="detail-empty">Select a run to inspect it.</div>';
+      }
+      await refresh();
+    });
   }
 
   async function refresh() {
@@ -1535,9 +1564,12 @@
     });
   }
 
+  function _saveTab(name) { try { localStorage.setItem('atlas_tab', name); } catch(_) {} }
+
   function showTabRuns() {
     _hideAllPanels();
     document.querySelector('.layout').style.display = '';
+    _saveTab('runs');
   }
 
   function showTabKG() {
@@ -1545,6 +1577,7 @@
     document.getElementById('kg-panel').style.display = 'block';
     document.getElementById('btn-kg').classList.add('active');
     loadKG();
+    _saveTab('kg');
   }
 
   function showTabTrend() {
@@ -1552,6 +1585,7 @@
     document.getElementById('trend-panel').style.display = 'block';
     document.getElementById('btn-trend').classList.add('active');
     _populateTrendAgents();
+    _saveTab('trend');
   }
 
   let _visNetwork = null;
@@ -2025,12 +2059,14 @@
     document.getElementById('btn-tests').classList.add('active');
     _loadTestProjects();
     _loadTestHistory();
+    _saveTab('tests');
   }
 
   async function _loadTestProjects() {
     const projects = await fetch('/api/projects').then(r => r.json()).catch(() => []);
     const sel = document.getElementById('test-project-select');
-    const current = sel.value;
+    const saved = (function(){ try { return localStorage.getItem('atlas_test_project'); } catch(_){ return null; } })();
+    const current = sel.value || saved || '';
     sel.innerHTML = '<option value="">— select a project —</option>' +
       projects.map(p => `<option value="${escHtml(p)}"${p === current ? ' selected' : ''}>${escHtml(p)}</option>`).join('');
     if (current && projects.includes(current)) _onTestProjectChange();
@@ -2038,6 +2074,7 @@
 
   async function _onTestProjectChange() {
     const project = document.getElementById('test-project-select').value;
+    try { localStorage.setItem('atlas_test_project', project); } catch(_) {}
     const btn = document.getElementById('test-run-btn');
     if (!project) {
       document.getElementById('test-pipeline-info').textContent = 'Select a project to see the pipeline.';
@@ -2046,13 +2083,33 @@
     }
     const kgData = await fetch('/api/kg').then(r => r.json()).catch(() => ({ nodes: [] }));
     const agents = kgData.nodes.filter(n => n.node_type === 'agent' && n.project === project).map(n => n.id);
+    const genBtn = document.getElementById('test-generate-btn');
+    const genInput = document.getElementById('test-generate-prompt');
+    const projectNodes = kgData.nodes.filter(n => n.node_type === 'agent' && n.project === project);
+    // dynamic placeholder from cdc_summary
+    const cdcSummary = (projectNodes.find(n => n.cdc_summary) || {}).cdc_summary || '';
+    const inputLabel = document.getElementById('test-input-label');
+    if (cdcSummary) {
+      const subject = cdcSummary.replace(/^CDC\s*[—\-–:]\s*/i, '').replace(/agent\s+de\s+/i, '').trim();
+      const short = subject.length > 40 ? subject.slice(0, 40) + '…' : subject;
+      inputLabel.textContent = short.toUpperCase();
+      genInput.placeholder = `Describe the case to generate (e.g. ${subject.charAt(0).toLowerCase() + subject.slice(1)})…`;
+    } else {
+      inputLabel.textContent = 'INPUT';
+      genInput.placeholder = 'Describe the case to generate…';
+    }
+    const batchBtn = document.getElementById('test-batch-btn');
     if (agents.length) {
       document.getElementById('test-pipeline-info').innerHTML =
         agents.map(a => `<span style="display:inline-block;background:#1e1540;border:1px solid var(--violet);border-radius:4px;padding:2px 8px;margin:2px 4px 2px 0;font-size:11px;color:var(--violet)">${escHtml(a)}</span>`).join('→');
       btn.disabled = false;
+      genBtn.disabled = false;
+      batchBtn.disabled = false;
     } else {
       document.getElementById('test-pipeline-info').textContent = 'No agents found for this project.';
       btn.disabled = true;
+      genBtn.disabled = true;
+      batchBtn.disabled = true;
     }
   }
 
@@ -2084,26 +2141,151 @@
     }
   }
 
-  function _renderTestResults(testRun) {
+  const _SUGGEST_FIX_PATCHES = {
+    format_anomaly: `\nIMPORTANT: Return ONLY the raw JSON object. No markdown fences (\`\`\`), no explanation text, no preamble, no text after the closing brace. Your entire response must be valid JSON parseable by json.loads(). Any text outside the JSON object will cause a pipeline failure.\n`,
+    low_confidence: `\nIMPORTANT: Be decisive. Do not hedge your classification. Pick the single most likely value for each field based on the available evidence. A confident wrong answer is better than an uncertain correct one — the validator will catch errors.\n`,
+  };
+
+  function _alertHtml(alert) {
+    const colors = { warning: 'var(--yellow)', info: 'var(--blue)', error: 'var(--red)' };
+    const bgs    = { warning: '#1a1400',        info: '#001020',    error: '#1a0000' };
+    const icons  = { warning: '⚠',             info: 'ℹ',          error: '⛔' };
+    const c = colors[alert.level] || colors.warning;
+    const bg = bgs[alert.level] || bgs.warning;
+    const icon = icons[alert.level] || '⚠';
+    const fixKey = alert.fixKey; // e.g. 'format_anomaly'
+    const fixBtn = fixKey && _SUGGEST_FIX_PATCHES[fixKey]
+      ? `<button onclick="_openSuggestFix(this,'${escHtml(alert.agentName||'')}','${fixKey}')" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid ${c};border-radius:4px;color:${c};background:transparent;cursor:pointer">Suggest Fix</button>`
+      : '';
+    return `<div style="background:${bg};border:1px solid ${c};border-radius:6px;padding:10px 12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="color:${c};font-size:12px">${icon}</span>
+          <span style="color:${c};font-size:12px;font-weight:600">${escHtml(alert.title)}</span>
+        </div>
+        ${fixBtn}
+      </div>
+      <div style="font-size:12px;color:#ccc;margin:4px 0">${escHtml(alert.detail)}</div>
+      <div style="font-size:11px;color:var(--ink-dim)">→ ${escHtml(alert.recommendation)}</div>
+    </div>`;
+  }
+
+  function _detectAnomalies(r, allResults, kgNodes) {
+    const alerts = [];
+    const raw = r.output || r.output_raw || '';
+    const clean = raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'').trim();
+    let parsed = null;
+    try { parsed = JSON.parse(clean); } catch (_) {}
+
+    // output_type from KG node
+    const kgNode = kgNodes.find(n => n.id === r.agent);
+    const outputType = kgNode ? (kgNode.output_type || 'json') : 'json';
+
+    // A. Format anomaly — only for json output_type
+    if (outputType === 'json' && !parsed && clean) {
+      if (/###|^\*\*|^- /m.test(clean)) {
+        alerts.push({
+          level: 'warning',
+          title: 'Format anomaly',
+          detail: 'Output contains markdown outside JSON structure. This agent violated its output contract.',
+          recommendation: 'Mark Invalid — consider re-scaffolding with stricter output format instructions.',
+          fixKey: 'format_anomaly',
+          agentName: r.agent,
+        });
+      }
+    }
+
+    // B. Low confidence
+    if (parsed && parsed.confidence != null && parsed.confidence < 0.7) {
+      alerts.push({
+        level: 'info',
+        title: 'Low confidence',
+        detail: `Agent expressed low confidence (${parsed.confidence}). Output may be unreliable on this input.`,
+        recommendation: 'Review output carefully before validating.',
+        fixKey: 'low_confidence',
+        agentName: r.agent,
+      });
+    }
+
+    // C. Pipeline inconsistency — compare priority across all agents of this run
+    const allParsed = allResults.map(res => {
+      const rw = res.output || res.output_raw || '';
+      const cl = rw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'').trim();
+      try { return JSON.parse(cl); } catch(_) { return null; }
+    });
+    const priorities = allParsed.map(p => p?.priority).filter(Boolean);
+    const uniquePrio = [...new Set(priorities)];
+    if (uniquePrio.length > 1) {
+      alerts.push({
+        level: 'error',
+        title: 'Pipeline inconsistency',
+        detail: `Agents disagree on priority: ${uniquePrio.join(' vs ')}. Pipeline outputs are misaligned.`,
+        recommendation: 'Investigate which agent is correct. The pipeline may need re-alignment.'
+      });
+    }
+
+    return alerts;
+  }
+
+  function _renderTestResults(testRun, kgNodes) {
+    const _kg = kgNodes || (_kgData ? _kgData.nodes : []);
     const validations = testRun.validations || {};
-    const html = (testRun.results || []).map(r => {
+    const tid = escHtml(testRun.test_id);
+    const allResults = testRun.results || [];
+
+    // Check if all agents have a verdict
+    const allJudged = allResults.length > 0 && allResults.every(r => validations[r.agent] !== undefined);
+    if (allJudged) {
+      _renderTestResultsSummary(testRun, _kg);
+      return;
+    }
+
+    const header = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <span style="font-size:11px;color:var(--ink-dim)">Test ID: ${tid} — edit ticket above and re-run</span>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('test-ticket-input').scrollIntoView({behavior:'smooth'});document.getElementById('test-ticket-input').focus()" style="font-size:11px;padding:3px 8px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111">Edit ↑</button>
+        <button onclick="runTest()" style="font-size:11px;padding:3px 8px;border:1px solid var(--blue);border-radius:4px;color:var(--blue);background:#111">Re-run ▶</button>
+        <button onclick="_deleteTestRun('${tid}')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);border-radius:4px;color:var(--red);background:#111">Delete run</button>
+      </div>
+    </div>`;
+    const cards = allResults.map(r => {
       const v = validations[r.agent];
-      const vHtml = v
-        ? `<span style="color:${v.valid ? 'var(--aqua)' : 'var(--red)'}">${v.valid ? '✓ Valid' : '✗ Invalid'}</span>${v.comment ? ` — <span style="color:var(--ink-dim)">${escHtml(v.comment)}</span>` : ''}`
-        : `<button onclick="validateTestResult('${escHtml(testRun.test_id)}','${escHtml(r.agent)}',true)" style="background:var(--aqua);color:#000;border-color:var(--aqua);font-size:11px;padding:3px 8px;margin-right:6px">✓ Valid</button>
-           <button onclick="validateTestResult('${escHtml(testRun.test_id)}','${escHtml(r.agent)}',false)" style="background:var(--red);color:#fff;border-color:var(--red);font-size:11px;padding:3px 8px">✗ Invalid</button>`;
+      let vHtml;
+      const _vBtns = (active) => {
+        const styles = {
+          valid: active==='valid' ? 'background:var(--aqua);color:#000;border-color:var(--aqua)' : 'background:#111;color:var(--aqua);border-color:var(--aqua);opacity:.5',
+          invalid: active==='invalid' ? 'background:var(--red);color:#fff;border-color:var(--red)' : 'background:#111;color:var(--red);border-color:var(--red);opacity:.5',
+          skip: active==='skip' ? 'background:#333;color:#fff;border-color:#555' : 'background:#111;color:var(--ink-dim);border-color:#444;opacity:.5',
+        };
+        return `<button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',true)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${styles.valid}">✓ Valid</button>
+                <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',false)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${styles.invalid}">✗ Invalid</button>
+                <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',null,true)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid;${styles.skip}">– Skip</button>`;
+      };
+      if (v) {
+        const active = v.skipped ? 'skip' : (v.valid ? 'valid' : 'invalid');
+        vHtml = _vBtns(active);
+      } else {
+        vHtml = _vBtns(null);
+      }
+
+      // Anomaly detection
+      const anomalies = _detectAnomalies(r, allResults, _kg);
+      const anomalyHtml = anomalies.map(_alertHtml).join('');
+
       let outputHtml = '';
       if (r.error) {
         outputHtml = `<div style="color:var(--red);font-size:12px">${escHtml(r.error)}</div>`;
-      } else if (r.output) {
+      } else if (r.output || r.output_raw) {
+        const raw = r.output || r.output_raw || '';
+        const clean = raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'').trim();
         let parsed = null;
-        try { parsed = JSON.parse(r.output); } catch (_) {}
+        try { parsed = JSON.parse(clean); } catch (_) {}
         if (parsed && typeof parsed === 'object') {
-          const badges = ['priority','category','confidence','language'].filter(k => parsed[k] != null)
-            .map(k => `<span style="display:inline-block;background:#1e1540;border:1px solid #444;border-radius:4px;padding:2px 8px;margin:2px 4px 2px 0;font-size:11px"><span style="color:var(--ink-dim)">${k}</span> <span style="color:#fff">${escHtml(String(parsed[k]))}</span></span>`).join('');
-          outputHtml = badges + `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:var(--ink-dim)">${escHtml(r.output)}</pre>`;
+          const badges = ['priority','category','confidence','language','justification'].filter(k => parsed[k] != null)
+            .map(k => `<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid #1a1a2e"><span style="font-size:11px;color:var(--ink-dim);min-width:90px">${k}</span><span style="font-size:12px;color:#fff">${escHtml(String(parsed[k]))}</span></div>`).join('');
+          outputHtml = `<div style="margin-top:8px">${badges}</div>`;
         } else {
-          outputHtml = `<pre style="font-size:11px;white-space:pre-wrap;color:var(--ink-dim)">${escHtml(r.output)}</pre>`;
+          outputHtml = `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#ccc;background:#0d0d1a;padding:10px;border-radius:4px">${escHtml(clean)}</pre>`;
         }
       }
       return `<div style="background:#12121f;border:1px solid #252535;border-radius:8px;padding:16px;margin-bottom:12px">
@@ -2111,23 +2293,522 @@
           <span style="font-weight:600;color:var(--violet)">${escHtml(r.agent)}</span>
           <div>${vHtml}</div>
         </div>
+        ${anomalyHtml}
         ${outputHtml}
       </div>`;
     }).join('');
-    document.getElementById('test-results-area').innerHTML = html || '<div style="color:var(--ink-dim)">No results.</div>';
+    document.getElementById('test-results-area').innerHTML = header + (cards || '<div style="color:var(--ink-dim)">No results.</div>');
   }
 
-  async function validateTestResult(testId, agentName, valid) {
-    await fetch(`/api/test/runs/${encodeURIComponent(testId)}/validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_name: agentName, valid }),
-    });
-    _loadTestHistory();
-    // refresh results area
+  function _renderTestResultsSummary(testRun, _kg) {
+    const validations = testRun.validations || {};
+    const tid = escHtml(testRun.test_id);
+    const allResults = testRun.results || [];
+    const validCount = Object.values(validations).filter(v => !v.skipped && v.valid).length;
+    const invalidCount = Object.values(validations).filter(v => !v.skipped && !v.valid).length;
+    const skippedCount = Object.values(validations).filter(v => v.skipped).length;
+    const judged = validCount + invalidCount;
+    const pct = judged ? Math.round(validCount / judged * 100) : 0;
+    const scoreColor = pct === 100 ? 'var(--aqua)' : pct >= 67 ? 'var(--yellow)' : 'var(--red)';
+
+    const rows = allResults.map(r => {
+      const v = validations[r.agent];
+      const verdict = v?.skipped ? 'skip' : (v?.valid ? 'valid' : 'invalid');
+      const verdictLabel = verdict === 'valid' ? '✓ Valid' : verdict === 'invalid' ? '✗ Invalid' : '– Skip';
+      const verdictColor = verdict === 'valid' ? 'var(--aqua)' : verdict === 'invalid' ? 'var(--red)' : 'var(--ink-dim)';
+      const raw = r.output || r.output_raw || '';
+      const clean = raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'').trim();
+      let parsed = null; try { parsed = JSON.parse(clean); } catch(_) {}
+      const meta = parsed ? `${parsed.priority || '—'} / ${parsed.category || '—'}  conf ${parsed.confidence ?? '—'}` : '—';
+      return `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:4px;border:1px solid #1a1a2e;margin-bottom:4px;background:#0d0d14">
+        <span style="font-weight:600;color:var(--violet);font-size:12px;min-width:180px">${escHtml(r.agent)}</span>
+        <span style="flex:1;font-size:11px;color:var(--ink-dim)">${escHtml(meta)}</span>
+        <span style="font-size:11px;color:${verdictColor};font-weight:600;min-width:70px;text-align:right">${verdictLabel}</span>
+        <button onclick="_expandAgentCard('${tid}','${escHtml(r.agent)}')" style="font-size:10px;padding:2px 7px;border:1px solid #333;border-radius:3px;color:var(--ink-dim);background:transparent;cursor:pointer">Details</button>
+      </div>`;
+    }).join('');
+
+    document.getElementById('test-results-area').innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:16px">
+          <span style="font-size:22px;font-weight:700;color:${scoreColor}">${pct}%</span>
+          <span style="font-size:12px;color:var(--ink-dim)">${judged}/${allResults.length} agents validated${skippedCount ? ` · ${skippedCount} skipped` : ''}</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="document.getElementById('test-ticket-input').scrollIntoView({behavior:'smooth'});document.getElementById('test-ticket-input').focus()" style="font-size:11px;padding:3px 8px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111">Edit ↑</button>
+          <button onclick="runTest()" style="font-size:11px;padding:3px 8px;border:1px solid var(--blue);border-radius:4px;color:var(--blue);background:#111">Re-run ▶</button>
+          <button onclick="_deleteTestRun('${tid}')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);border-radius:4px;color:var(--red);background:#111">Delete run</button>
+        </div>
+      </div>
+      ${rows}`;
+  }
+
+  async function _expandAgentCard(testId, agentName) {
+    const runs = await fetch('/api/test/runs').then(r => r.json()).catch(() => []);
+    const run = runs.find(r => r.test_id === testId);
+    if (!run) return;
+    _renderTestResultsDetail(run);
+  }
+
+  async function _loadAndRenderSummary(testId) {
     const runs = await fetch('/api/test/runs').then(r => r.json()).catch(() => []);
     const run = runs.find(r => r.test_id === testId);
     if (run) _renderTestResults(run);
+  }
+
+  function _renderTestResultsDetail(testRun) {
+    const validations = testRun.validations || {};
+    const tid = escHtml(testRun.test_id);
+    const allResults = testRun.results || [];
+    const _kg = _kgData ? _kgData.nodes : [];
+    const backBtn = `<button onclick="_loadAndRenderSummary('${testRun.test_id}')" style="font-size:11px;padding:3px 8px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111;margin-bottom:12px">← Back to summary</button>`;
+    const cards = allResults.map(r => {
+      const v = validations[r.agent];
+      const active = v ? (v.skipped ? 'skip' : (v.valid ? 'valid' : 'invalid')) : null;
+      const anomalies = _detectAnomalies(r, allResults, _kg);
+      const anomalyHtml = anomalies.map(_alertHtml).join('');
+      const raw = r.output || r.output_raw || '';
+      const clean = raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'').trim();
+      let parsed = null; try { parsed = JSON.parse(clean); } catch(_) {}
+      let outputHtml = '';
+      if (r.error) {
+        outputHtml = `<div style="color:var(--red);font-size:12px">${escHtml(r.error)}</div>`;
+      } else if (clean) {
+        if (parsed && typeof parsed === 'object') {
+          outputHtml = `<div style="margin-top:8px">${['priority','category','confidence','justification'].filter(k=>parsed[k]!=null).map(k=>`<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid #1a1a2e"><span style="font-size:11px;color:var(--ink-dim);min-width:90px">${k}</span><span style="font-size:12px;color:#fff">${escHtml(String(parsed[k]))}</span></div>`).join('')}</div>`;
+        } else {
+          outputHtml = `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#ccc;background:#0d0d1a;padding:10px;border-radius:4px">${escHtml(clean)}</pre>`;
+        }
+      }
+      return `<div data-run-id="${tid}" data-agent="${escHtml(r.agent)}" style="background:#12121f;border:1px solid #252535;border-radius:8px;padding:16px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="font-weight:600;color:var(--violet)">${escHtml(r.agent)}</span>
+          <div class="vbtn-area">${_vBtnsHtml(tid, r.agent, active)}</div>
+        </div>${anomalyHtml}${outputHtml}</div>`;
+    }).join('');
+    document.getElementById('test-results-area').innerHTML = backBtn + cards;
+  }
+
+  async function handleTicketFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const status = document.getElementById('test-file-status');
+    const textarea = document.getElementById('test-ticket-input');
+    status.textContent = `Loading ${file.name}…`;
+    if (file.name.endsWith('.pdf')) {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch('/api/test/extract-file', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.detail) { status.style.color = 'var(--red)'; status.textContent = data.detail; return; }
+        textarea.value = data.text;
+        status.style.color = 'var(--aqua)';
+        status.textContent = `${file.name} imported (${data.text.length} chars)`;
+        textarea.dispatchEvent(new Event('input'));
+      } catch (e) {
+        status.style.color = 'var(--red)'; status.textContent = String(e);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = e => {
+        textarea.value = e.target.result;
+        status.style.color = 'var(--aqua)';
+        status.textContent = `${file.name} imported (${e.target.result.length} chars)`;
+        textarea.dispatchEvent(new Event('input'));
+      };
+      reader.readAsText(file);
+    }
+    input.value = '';
+  }
+
+  async function generateTicket() {
+    const project = document.getElementById('test-project-select').value;
+    console.log('[generateTicket] project=', project);
+    if (!project) { document.getElementById('test-file-status').textContent = 'Select a project first.'; return; }
+    const btn = document.getElementById('test-generate-btn');
+    const status = document.getElementById('test-file-status');
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    status.style.color = 'var(--ink-dim)';
+    status.textContent = 'Generating example…';
+    try {
+      const userPrompt = document.getElementById('test-generate-prompt').value.trim();
+      const res = await fetch(`/api/test/generate-ticket?project=${encodeURIComponent(project)}&user_prompt=${encodeURIComponent(userPrompt)}`);
+      const data = await res.json();
+      if (data.detail) { status.style.color = 'var(--red)'; status.textContent = data.detail; return; }
+      document.getElementById('test-ticket-input').value = data.ticket;
+      status.style.color = 'var(--aqua)';
+      status.textContent = 'Example generated.';
+      document.getElementById('test-ticket-input').dispatchEvent(new Event('input'));
+    } catch (e) {
+      status.style.color = 'var(--red)'; status.textContent = String(e);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Generate';
+    }
+  }
+
+  // ── Batch test flow ──────────────────────────────────────────────────────────
+
+  const _BADGE_COLORS = {
+    nominal: 'var(--blue)', edge: 'var(--yellow)', ambiguous: 'var(--violet)', 'out-of-scope': 'var(--red)'
+  };
+
+  async function showBatchPanel() {
+    const project = document.getElementById('test-project-select').value;
+    if (!project) return;
+    const panel = document.getElementById('test-batch-panel');
+    const title = document.getElementById('batch-panel-title');
+    const list = document.getElementById('batch-cases-list');
+    const runBar = document.getElementById('batch-run-bar');
+    panel.style.display = 'block';
+    title.textContent = 'Generating test cases…';
+    list.innerHTML = '<div style="color:var(--ink-dim);font-size:13px;padding:12px 0">Calling LLM…</div>';
+    runBar.style.display = 'none';
+    panel.scrollIntoView({ behavior: 'smooth' });
+
+    try {
+      const res = await fetch('/api/test/generate-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project, n: 7 }),
+      });
+      const data = await res.json();
+      if (data.detail) { list.innerHTML = `<div style="color:var(--red)">${escHtml(data.detail)}</div>`; return; }
+      _renderBatchCases(data.cases);
+    } catch (e) {
+      list.innerHTML = `<div style="color:var(--red)">${escHtml(String(e))}</div>`;
+    }
+  }
+
+  function _renderBatchCases(cases) {
+    const title = document.getElementById('batch-panel-title');
+    const list = document.getElementById('batch-cases-list');
+    const runBar = document.getElementById('batch-run-bar');
+    const runBtn = document.getElementById('run-batch-btn');
+    title.textContent = `${cases.length} test cases — review and edit before running`;
+    runBar.style.display = 'block';
+    runBtn.textContent = `Run batch (${cases.length} cases)`;
+    runBtn.disabled = false;
+
+    list.innerHTML = cases.map(c => {
+      const color = _BADGE_COLORS[c.type] || 'var(--ink-dim)';
+      return `<div class="batch-case" data-id="${c.id}" style="background:#0d0d1a;border:1px solid #1a1a2e;border-radius:6px;padding:12px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid ${color};color:${color};text-transform:uppercase;letter-spacing:.06em">${escHtml(c.type)}</span>
+          <span style="font-size:12px;color:var(--ink-dim)">${escHtml(c.description)}</span>
+          <button onclick="this.closest('.batch-case').remove();_updateBatchCount()" style="margin-left:auto;background:transparent;border:none;color:var(--ink-dim);cursor:pointer;font-size:16px;line-height:1" title="Remove">✕</button>
+        </div>
+        <textarea class="batch-case-input" style="width:100%;box-sizing:border-box;background:#111;border:1px solid #333;border-radius:4px;padding:8px;color:#fff;font-size:12px;resize:vertical" rows="3">${escHtml(c.input)}</textarea>
+      </div>`;
+    }).join('');
+  }
+
+  function _updateBatchCount() {
+    const remaining = document.querySelectorAll('.batch-case').length;
+    const runBtn = document.getElementById('run-batch-btn');
+    const title = document.getElementById('batch-panel-title');
+    if (remaining === 0) { runBtn.disabled = true; }
+    runBtn.textContent = `Run batch (${remaining} case${remaining !== 1 ? 's' : ''})`;
+    title.textContent = `${remaining} test case${remaining !== 1 ? 's' : ''} — review and edit before running`;
+  }
+
+  let _lastBatchResults = null; // {batchId, results: [{ticket, run}]}
+
+  async function runBatch() {
+    const project = document.getElementById('test-project-select').value;
+    const cases = [...document.querySelectorAll('.batch-case')];
+    if (!cases.length) return;
+    const runBtn = document.getElementById('run-batch-btn');
+    const progress = document.getElementById('batch-progress');
+    runBtn.disabled = true;
+    runBtn.style.position = 'relative';
+    runBtn.style.overflow = 'hidden';
+    // animated fill bar
+    const bar = document.createElement('span');
+    bar.style.cssText = 'position:absolute;left:0;top:0;height:100%;background:rgba(255,255,255,.15);width:0%;transition:width .3s ease;pointer-events:none';
+    runBtn.appendChild(bar);
+    const batchResults = [];
+    const total = cases.filter(c => c.querySelector('.batch-case-input').value.trim()).length;
+
+    const batchId = 'batch_' + Date.now();
+    for (let i = 0; i < cases.length; i++) {
+      const ticket = cases[i].querySelector('.batch-case-input').value.trim();
+      if (!ticket) continue;
+      const done = batchResults.length;
+      bar.style.width = `${Math.round((done / total) * 100)}%`;
+      progress.textContent = `Running case ${done + 1}/${total}…`;
+      try {
+        const res = await fetch('/api/test/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project, ticket, batch_id: batchId }),
+        });
+        const data = await res.json();
+        batchResults.push({ ticket, run: data });
+      } catch (e) {
+        batchResults.push({ ticket, run: null, error: String(e) });
+      }
+    }
+
+    bar.style.width = '100%';
+    bar.style.background = 'rgba(27,175,122,.25)';
+    setTimeout(() => { bar.remove(); runBtn.style.overflow = ''; }, 800);
+    progress.textContent = `Done — ${batchResults.length} runs completed`;
+    runBtn.disabled = false;
+    runBtn.textContent = 'Re-run batch';
+    _lastBatchResults = { batchId, project, results: batchResults };
+    _renderBatchResults(batchResults, batchId);
+    _loadTestHistory();
+  }
+
+  function _renderBatchResults(batchResults) {
+    const resultsArea = document.getElementById('test-results-area');
+    const html = batchResults.map((br, idx) => {
+      if (br.error || !br.run) {
+        return `<div style="background:#12121f;border:1px solid #252535;border-radius:8px;padding:16px;margin-bottom:16px">
+          <div style="font-size:11px;color:var(--ink-dim);margin-bottom:8px">Case ${idx + 1} — ${escHtml(br.ticket.substring(0, 80))}</div>
+          <div style="color:var(--red)">${escHtml(br.error || 'No result')}</div>
+        </div>`;
+      }
+      // Build inner cards using same logic as _renderTestResults but inline
+      const run = br.run;
+      const validations = run.validations || {};
+      const tid = escHtml(run.test_id);
+      const cards = (run.results || []).map(r => {
+        const v = validations[r.agent];
+        const active = v ? (v.skipped ? 'skip' : (v.valid ? 'valid' : 'invalid')) : null;
+        const _vB = (a) => {
+          const s = {
+            valid: a==='valid' ? 'background:var(--aqua);color:#000;border-color:var(--aqua)' : 'background:#111;color:var(--aqua);border-color:var(--aqua);opacity:.5',
+            invalid: a==='invalid' ? 'background:var(--red);color:#fff;border-color:var(--red)' : 'background:#111;color:var(--red);border-color:var(--red);opacity:.5',
+            skip: a==='skip' ? 'background:#333;color:#fff;border-color:#555' : 'background:#111;color:var(--ink-dim);border-color:#444;opacity:.5',
+          };
+          return `<button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',true)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${s.valid}">✓ Valid</button>
+                  <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',false)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${s.invalid}">✗ Invalid</button>
+                  <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',null,true)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid;${s.skip}">– Skip</button>`;
+        };
+        const raw = r.output || r.output_raw || '';
+        const clean = raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'').trim();
+        let parsed = null; try { parsed = JSON.parse(clean); } catch(_) {}
+        const anomalies = (typeof _detectAnomalies === 'function') ? _detectAnomalies(r, run.results || [], _kgData ? _kgData.nodes : []) : [];
+        const anomalyHtml = anomalies.map(_alertHtml).join('');
+        let outputHtml = '';
+        if (r.error) {
+          outputHtml = `<div style="color:var(--red);font-size:12px">${escHtml(r.error)}</div>`;
+        } else if (clean) {
+          if (parsed && typeof parsed === 'object') {
+            outputHtml = `<div style="margin-top:8px">${['priority','category','confidence','justification'].filter(k=>parsed[k]!=null).map(k=>`<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid #1a1a2e"><span style="font-size:11px;color:var(--ink-dim);min-width:90px">${k}</span><span style="font-size:12px;color:#fff">${escHtml(String(parsed[k]))}</span></div>`).join('')}</div>`;
+          } else {
+            outputHtml = `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#ccc;background:#0d0d1a;padding:10px;border-radius:4px">${escHtml(clean)}</pre>`;
+          }
+        }
+        return `<div data-run-id="${tid}" data-agent="${escHtml(r.agent)}" style="background:#12121f;border:1px solid #252535;border-radius:6px;padding:12px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-weight:600;color:var(--violet);font-size:13px">${escHtml(r.agent)}</span>
+            <div class="vbtn-area">${_vB(active)}</div>
+          </div>${anomalyHtml}${outputHtml}</div>`;
+      }).join('');
+      return `<div style="background:#0d0d14;border:1px solid #1a1a2e;border-radius:8px;padding:16px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--ink-dim);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #1a1a2e">
+          <span style="color:#fff">Case ${idx + 1}</span> — ${escHtml(br.ticket.substring(0, 120))}${br.ticket.length > 120 ? '…' : ''}
+        </div>
+        ${cards}
+      </div>`;
+    }).join('');
+    resultsArea.innerHTML = html;
+    resultsArea.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // ── End batch test flow ───────────────────────────────────────────────────────
+
+  async function validateTestResult(testId, agentName, valid, skipped=false) {
+    await fetch(`/api/test/runs/${encodeURIComponent(testId)}/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_name: agentName, valid: valid ?? false, skipped }),
+    });
+    _loadTestHistory();
+    // Re-render only the validation buttons of this specific agent card
+    // to avoid overwriting batch results display
+    const runs = await fetch('/api/test/runs').then(r => r.json()).catch(() => []);
+    const run = runs.find(r => r.test_id === testId);
+    if (!run) return;
+    // Find the card by data-run-id + data-agent attributes (batch mode)
+    const batchCard = document.querySelector(`[data-run-id="${testId}"][data-agent="${CSS.escape(agentName)}"]`);
+    if (batchCard) {
+      // In batch mode — just update the buttons area inside this card
+      const v = (run.validations || {})[agentName];
+      const active = v ? (v.skipped ? 'skip' : (v.valid ? 'valid' : 'invalid')) : null;
+      const tid = testId.replace(/"/g, '');
+      const btnArea = batchCard.querySelector('.vbtn-area');
+      if (btnArea) btnArea.innerHTML = _vBtnsHtml(tid, agentName, active);
+    } else {
+      // In single-run mode — re-render the full results area
+      _renderTestResults(run);
+    }
+  }
+
+  async function _openSuggestFix(btn, agentName, fixKey) {
+    // Find the card containing this button
+    const card = btn.closest('[data-run-id]') || btn.closest('[data-agent]') || btn.closest('div[style*="background:#12121f"]');
+    if (!card) return;
+    // Avoid duplicate panels
+    if (card.querySelector('.suggest-fix-panel')) return;
+
+    // Fetch current prompt
+    const project = document.getElementById('test-project-select')?.value || '';
+    const res = await fetch(`/api/agents/${encodeURIComponent(agentName)}/prompt?project=${encodeURIComponent(project)}`).catch(() => null);
+    if (!res || !res.ok) { alert('Could not load agent prompt.'); return; }
+    const { prompt: currentPrompt } = await res.json();
+    const patch = _SUGGEST_FIX_PATCHES[fixKey] || '';
+    const proposed = currentPrompt.trimEnd() + patch;
+
+    const runId = card.dataset.runId || '';
+    const panel = document.createElement('div');
+    panel.className = 'suggest-fix-panel';
+    panel.style.cssText = 'margin-top:12px;border-top:1px solid #1a1a2e;padding-top:12px';
+    panel.innerHTML = `
+      <div style="font-size:11px;font-weight:600;color:var(--yellow);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+        <span>PROPOSED FIX — edit before applying</span>
+        <button onclick="this.closest('.suggest-fix-panel').remove()" style="background:transparent;border:none;color:var(--ink-dim);cursor:pointer;font-size:14px">✕</button>
+      </div>
+      <textarea class="fix-textarea" style="width:100%;height:160px;background:#0d0d1a;color:#ccc;border:1px solid #333;border-radius:4px;padding:8px;font-size:11px;font-family:monospace;resize:vertical;box-sizing:border-box">${escHtml(proposed)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button onclick="_applyFix(this,'${escHtml(agentName)}','${escHtml(runId)}')" style="font-size:11px;padding:4px 14px;background:var(--blue);color:#fff;border:none;border-radius:4px;cursor:pointer">Apply & Re-run ▶</button>
+        <span class="fix-status" style="font-size:11px;color:var(--ink-dim);align-self:center"></span>
+      </div>
+      <div class="fix-comparison" style="display:none;margin-top:12px;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div style="font-size:10px;color:var(--ink-dim);margin-bottom:4px;text-transform:uppercase">Before</div>
+          <div class="fix-before" style="background:#0d0d1a;border:1px solid #252535;border-radius:4px;padding:8px;font-size:11px;font-family:monospace;white-space:pre-wrap;color:#999;max-height:200px;overflow:auto"></div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--ink-dim);margin-bottom:4px;text-transform:uppercase">After</div>
+          <div class="fix-after" style="background:#0d0d1a;border:1px solid #252535;border-radius:4px;padding:8px;font-size:11px;font-family:monospace;white-space:pre-wrap;color:#ccc;max-height:200px;overflow:auto">…</div>
+        </div>
+      </div>
+      <div class="fix-verdict" style="display:none;margin-top:8px;gap:8px">
+        <button onclick="_keepFix('${escHtml(agentName)}')" style="font-size:11px;padding:4px 14px;background:var(--aqua);color:#000;border:none;border-radius:4px;cursor:pointer">✓ Keep fix</button>
+        <button onclick="_discardFix('${escHtml(agentName)}')" style="font-size:11px;padding:4px 14px;background:#111;color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer">✗ Discard</button>
+      </div>`;
+    card.appendChild(panel);
+  }
+
+  async function _applyFix(btn, agentName, runId) {
+    const panel = btn.closest('.suggest-fix-panel');
+    const newPrompt = panel.querySelector('.fix-textarea').value;
+    const status = panel.querySelector('.fix-status');
+    const project = document.getElementById('test-project-select')?.value || '';
+
+    // Save "before" output from current card
+    const card = panel.parentElement;
+    const beforeEl = panel.querySelector('.fix-before');
+    const preEl = card.querySelector('pre');
+    const tableEl = card.querySelector('div[style*="min-width:90px"]')?.closest('div[style*="margin-top:8px"]');
+    beforeEl.textContent = preEl ? preEl.textContent : (tableEl ? tableEl.innerText : '(no previous output)');
+
+    status.textContent = 'Applying patch…';
+    btn.disabled = true;
+
+    // Patch the prompt
+    const patchRes = await fetch(`/api/agents/${encodeURIComponent(agentName)}/prompt?project=${encodeURIComponent(project)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: newPrompt }),
+    }).catch(() => null);
+    if (!patchRes || !patchRes.ok) { status.textContent = 'Patch failed.'; btn.disabled = false; return; }
+
+    status.textContent = 'Re-running…';
+    // Re-run with the same ticket
+    const ticket = document.getElementById('test-ticket-input')?.value || '';
+    const runRes = await fetch('/api/test/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project, ticket }),
+    }).catch(() => null);
+    if (!runRes || !runRes.ok) { status.textContent = 'Re-run failed.'; btn.disabled = false; return; }
+
+    const run = await runRes.json();
+    const agentResult = (run.results || []).find(r => r.agent === agentName);
+    const afterEl = panel.querySelector('.fix-after');
+    if (agentResult) {
+      const raw = agentResult.output || '';
+      const clean = raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'').trim();
+      let parsed = null; try { parsed = JSON.parse(clean); } catch(_) {}
+      afterEl.textContent = parsed ? JSON.stringify(parsed, null, 2) : clean;
+    } else {
+      afterEl.textContent = '(no output)';
+    }
+
+    const cmp = panel.querySelector('.fix-comparison');
+    cmp.style.display = 'grid';
+    const vrd = panel.querySelector('.fix-verdict');
+    vrd.style.display = 'flex';
+    status.textContent = 'Done — review below';
+    btn.disabled = false;
+    panel.dataset.backupAgent = agentName;
+    panel.dataset.newRunId = run.test_id || '';
+  }
+
+  async function _keepFix(agentName) {
+    const panel = document.querySelector('.suggest-fix-panel');
+    const newRunId = panel?.dataset.newRunId || '';
+    document.querySelectorAll('.suggest-fix-panel').forEach(p => p.remove());
+    _loadTestHistory();
+    if (newRunId) {
+      // Navigate to the new (fixed) run
+      const runs = await fetch('/api/test/runs').then(r => r.json()).catch(() => []);
+      const run = runs.find(r => r.test_id === newRunId);
+      if (run) {
+        document.getElementById('test-ticket-input').value = run.ticket || '';
+        _renderTestResults(run);
+        document.getElementById('test-results-area').scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  }
+
+  async function _discardFix(agentName) {
+    const project = document.getElementById('test-project-select')?.value || '';
+    await fetch(`/api/agents/${encodeURIComponent(agentName)}/prompt/restore?project=${encodeURIComponent(project)}`, { method: 'POST' }).catch(() => null);
+    document.querySelectorAll('.suggest-fix-panel').forEach(p => p.remove());
+  }
+
+  function _vBtnsHtml(tid, agentName, active) {
+    const esc = s => s.replace(/'/g,"&#39;");
+    const styles = {
+      valid: active==='valid' ? 'background:var(--aqua);color:#000;border-color:var(--aqua)' : 'background:#111;color:var(--aqua);border-color:var(--aqua);opacity:.5',
+      invalid: active==='invalid' ? 'background:var(--red);color:#fff;border-color:var(--red)' : 'background:#111;color:var(--red);border-color:var(--red);opacity:.5',
+      skip: active==='skip' ? 'background:#333;color:#fff;border-color:#555' : 'background:#111;color:var(--ink-dim);border-color:#444;opacity:.5',
+    };
+    return `<button onclick="validateTestResult('${tid}','${esc(agentName)}',true)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${styles.valid}">✓ Valid</button>
+            <button onclick="validateTestResult('${tid}','${esc(agentName)}',false)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${styles.invalid}">✗ Invalid</button>
+            <button onclick="validateTestResult('${tid}','${esc(agentName)}',null,true)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid;${styles.skip}">– Skip</button>`;
+  }
+
+  function _confirmDialog(title, body, okLabel, okStyle, onConfirm) {
+    const overlay = document.getElementById('confirm-overlay');
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-body').textContent = body;
+    const okBtn = document.getElementById('confirm-ok');
+    okBtn.textContent = okLabel;
+    okBtn.style.background = okStyle;
+    okBtn.style.borderColor = okStyle;
+    overlay.style.display = 'flex';
+    const close = () => { overlay.style.display = 'none'; okBtn.onclick = null; cancelBtn.onclick = null; };
+    const cancelBtn = document.getElementById('confirm-cancel');
+    okBtn.onclick = () => { close(); onConfirm(); };
+    cancelBtn.onclick = close;
+    overlay.onclick = e => { if (e.target === overlay) close(); };
+  }
+
+  async function _deleteTestRun(testId) {
+    _confirmDialog('Delete test run', 'This cannot be undone. The run will be permanently removed from history.', 'Delete', 'var(--red)', async () => {
+      await fetch(`/api/test/runs/${encodeURIComponent(testId)}`, { method: 'DELETE' });
+      document.getElementById('test-results-area').innerHTML = '';
+      _loadTestHistory();
+    });
   }
 
   async function _loadTestHistory() {
@@ -2136,28 +2817,112 @@
       document.getElementById('test-history-area').innerHTML = '<div style="color:var(--ink-dim);font-size:13px">No test runs yet.</div>';
       return;
     }
-    const rows = runs.map(r => {
-      const total = (r.results || []).length;
-      const validated = Object.keys(r.validations || {}).length;
-      const pctV = total ? Math.round(validated / total * 100) : 0;
-      return `<tr style="cursor:pointer" onclick="_expandTestRun(this,'${escHtml(r.test_id)}')">
-        <td style="color:var(--ink-dim);font-size:11px">${fmtDate(r.created_at)}</td>
-        <td style="color:var(--blue)">${escHtml(r.project)}</td>
-        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-dim);font-size:12px">${escHtml((r.ticket||'').substring(0,80))}</td>
-        <td style="text-align:center">${total}</td>
-        <td style="text-align:center;color:${pctV===100?'var(--aqua)':pctV>0?'var(--yellow)':'var(--ink-dim)'}">${pctV}%</td>
+    // Group runs by batch_id when present, or by project+minute heuristic for legacy runs
+    const groupMap = {}; // key -> [run, ...]
+    for (const r of runs) {
+      const key = r.batch_id || `${r.project}__${(r.created_at||'').substring(0,16)}`;
+      if (!groupMap[key]) groupMap[key] = [];
+      groupMap[key].push(r);
+    }
+    const grouped = Object.entries(groupMap).map(([key, gRuns]) => ({
+      type: gRuns.length > 1 ? 'batch' : 'single',
+      runs: gRuns,
+      batchId: key,
+      project: gRuns[0].project,
+      created_at: gRuns[0].created_at,
+    }));
+    grouped.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    const rows = grouped.map(g => {
+      if (g.type === 'batch') {
+        const totalAgents = g.runs.reduce((s, r) => s + (r.results||[]).length, 0);
+        const allVals = g.runs.flatMap(r => Object.values(r.validations||{}));
+        const validCount = allVals.filter(v => !v.skipped && v.valid).length;
+        const invalidCount = allVals.filter(v => !v.skipped && v.valid === false).length;
+        const judged = validCount + invalidCount;
+        const pctV = judged ? Math.round(validCount/judged*100) : 0;
+        const pctLabel = judged ? `${pctV}% (${judged}/${totalAgents})` : '—';
+        return `<tr style="cursor:pointer;background:#0d0d1a" onclick="_restoreBatchResults('${escHtml(g.batchId)}')">
+          <td style="color:var(--ink-dim);font-size:11px;padding:6px 8px">${fmtDate(g.created_at)}</td>
+          <td style="color:var(--blue);padding:6px 8px">${escHtml(g.project)}</td>
+          <td style="color:var(--violet);font-size:12px;padding:6px 8px">Batch — ${g.runs.length} cases</td>
+          <td style="text-align:center;padding:6px 8px">${totalAgents}</td>
+          <td style="text-align:center;padding:6px 8px;color:${pctV===100&&judged?'var(--aqua)':judged>0?'var(--yellow)':'var(--ink-dim)'}">${pctLabel}</td>
+          <td></td>
+        </tr>`;
+      }
+      const r = g.runs[0];
+      const total = (r.results||[]).length;
+      const vals = r.validations||{};
+      const validCount = Object.values(vals).filter(v => !v.skipped && v.valid===true).length;
+      const judged = Object.values(vals).filter(v => !v.skipped).length;
+      const pctV = judged ? Math.round(validCount/judged*100) : 0;
+      const pctLabel = judged ? `${pctV}% (${judged}/${total})` : '—';
+      const tid = escHtml(r.test_id);
+      return `<tr style="cursor:pointer" onclick="_expandTestRun(this,'${tid}')">
+        <td style="color:var(--ink-dim);font-size:11px;padding:6px 8px">${fmtDate(r.created_at)}</td>
+        <td style="color:var(--blue);padding:6px 8px">${escHtml(r.project)}</td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-dim);font-size:12px;padding:6px 8px">${escHtml((r.ticket||'').substring(0,80))}</td>
+        <td style="text-align:center;padding:6px 8px">${total}</td>
+        <td style="text-align:center;padding:6px 8px;color:${pctV===100&&judged?'var(--aqua)':judged>0?'var(--yellow)':'var(--ink-dim)'}">${pctLabel}</td>
+        <td style="text-align:center;padding:6px 8px"><button onclick="event.stopPropagation();_deleteTestRun('${tid}')" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0" title="Delete">🗑</button></td>
       </tr>`;
     }).join('');
     document.getElementById('test-history-area').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="color:var(--ink-dim);font-size:11px;border-bottom:1px solid #222">
         <th style="text-align:left;padding:6px 8px">Date</th>
         <th style="text-align:left;padding:6px 8px">Project</th>
-        <th style="text-align:left;padding:6px 8px">Ticket</th>
+        <th style="text-align:left;padding:6px 8px">Input</th>
         <th style="text-align:center;padding:6px 8px">Agents</th>
-        <th style="text-align:center;padding:6px 8px">Validated</th>
+        <th style="text-align:center;padding:6px 8px">Valid</th>
+        <th style="text-align:center;padding:6px 8px"></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
+  }
+
+  async function _restoreBatchResults(batchId) {
+    const allRuns = await fetch('/api/test/runs').then(r => r.json()).catch(() => []);
+    const id = batchId || _lastBatchResults?.batchId;
+    if (!id) return;
+    const batchRuns = allRuns.filter(r => {
+      const key = r.batch_id || `${r.project}__${(r.created_at||'').substring(0,16)}`;
+      return key === id;
+    });
+    if (!batchRuns.length) return;
+    _renderBatchCaseList(batchRuns, id);
+    document.getElementById('test-results-area').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function _renderBatchCaseList(batchRuns, batchId) {
+    const resultsArea = document.getElementById('test-results-area');
+    const rows = batchRuns.map((r, idx) => {
+      const vals = r.validations || {};
+      const total = (r.results || []).length;
+      const validCount = Object.values(vals).filter(v => !v.skipped && v.valid).length;
+      const judged = Object.values(vals).filter(v => !v.skipped).length;
+      const pctV = judged ? Math.round(validCount / judged * 100) : 0;
+      const statusColor = pctV === 100 && judged ? 'var(--aqua)' : judged > 0 ? 'var(--yellow)' : 'var(--ink-dim)';
+      const statusLabel = judged ? `${pctV}% (${judged}/${total})` : '—';
+      const tid = escHtml(r.test_id);
+      return `<div onclick="_expandBatchCase('${tid}')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:6px;border:1px solid #1a1a2e;margin-bottom:6px;cursor:pointer;background:#12121f" onmouseover="this.style.borderColor='#333'" onmouseout="this.style.borderColor='#1a1a2e'">
+        <span style="font-size:11px;color:var(--ink-dim);min-width:52px">Case ${idx + 1}</span>
+        <span style="flex:1;font-size:12px;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml((r.ticket||'').substring(0,100))}</span>
+        <span style="font-size:11px;color:${statusColor};min-width:80px;text-align:right">${statusLabel}</span>
+      </div>`;
+    }).join('');
+    resultsArea.innerHTML = `<div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">
+      <span style="color:var(--violet);font-weight:600;font-size:13px">Batch — ${batchRuns.length} cases</span>
+      <span style="font-size:11px;color:var(--ink-dim)">${fmtDate(batchRuns[0]?.created_at)}</span>
+    </div>${rows}`;
+  }
+
+  function _expandBatchCase(testId) {
+    fetch('/api/test/runs').then(r => r.json()).then(runs => {
+      const run = runs.find(r => r.test_id === testId);
+      if (!run) return;
+      document.getElementById('test-ticket-input').value = run.ticket || '';
+      _renderTestResults(run);
+    });
   }
 
   async function _expandTestRun(row, testId) {
@@ -2334,7 +3099,28 @@
   document.getElementById('cdc-modal-overlay').addEventListener('click', function(e) {
     if (e.target === this) closeNewCdcModal();
   });
+
+  // Restore last active tab on page load
+  (function() {
+    const tab = (function() { try { return localStorage.getItem('atlas_tab'); } catch(_) { return null; } })();
+    if (tab === 'kg') { showTabKG(); }
+    else if (tab === 'trend') { showTabTrend(); }
+    else if (tab === 'tests') { showTabTests(); }
+    else { loadRuns(false); }
+  })();
 </script>
+
+<!-- Confirm modal -->
+<div id="confirm-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#16161f;border:1px solid #333;border-radius:12px;padding:28px 32px;min-width:320px;max-width:440px;box-shadow:0 8px 32px rgba(0,0,0,.6)">
+    <div id="confirm-title" style="font-size:15px;font-weight:600;color:#fff;margin-bottom:10px"></div>
+    <div id="confirm-body" style="font-size:13px;color:var(--ink-dim);margin-bottom:24px;line-height:1.5"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button id="confirm-cancel" style="padding:7px 18px;border:1px solid #444;border-radius:6px;background:#111;color:var(--ink-dim);font-size:13px;cursor:pointer">Cancel</button>
+      <button id="confirm-ok" style="padding:7px 18px;border:1px solid var(--red);border-radius:6px;background:var(--red);color:#fff;font-size:13px;font-weight:600;cursor:pointer">Delete</button>
+    </div>
+  </div>
+</div>
 
 <!-- Code expand modal -->
 <div id="code-modal-overlay">
