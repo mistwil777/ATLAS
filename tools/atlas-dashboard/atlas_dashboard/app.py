@@ -534,7 +534,7 @@ def api_delete_run(run_id: str):
 
     # 1. Supprimer les fichiers scaffoldés sur disque
     deleted_paths: list[str] = []
-    for agent_name, sc in (run.get("scaffolded") or {}).items():
+    for _agent_name, sc in (run.get("scaffolded") or {}).items():
         output_path = sc.get("output_path", "")
         if output_path:
             p = _Path(output_path)
@@ -1467,9 +1467,8 @@ async def api_scaffold_ingest(
     try:
         for upload in files:
             suffix = _Path(upload.filename or "file").suffix or ".bin"
-            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-            tmp.write(await upload.read())
-            tmp.close()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(await upload.read())
             tmp_paths.append(_Path(tmp.name))
 
         agent = AtlasIngestAgent()
@@ -2729,10 +2728,9 @@ def api_test_run(req: TestRunRequest):
                 clean = _re.sub(
                     r"^```(?:json)?\s*|\s*```$", "", output_raw.strip(), flags=_re.DOTALL
                 )
-                try:
+                import contextlib as _contextlib  # noqa: PLC0415
+                with _contextlib.suppress(Exception):
                     output_json = _json.loads(clean)
-                except Exception:  # noqa: BLE001
-                    pass
             results.append(
                 {
                     "agent": agent_name,
@@ -2775,10 +2773,9 @@ def api_test_runs():
     for f in sorted(_TEST_RUNS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[
         :50
     ]:
-        try:
+        import contextlib as _cl  # noqa: PLC0415
+        with _cl.suppress(Exception):
             runs.append(_json.loads(f.read_text(encoding="utf-8")))
-        except Exception:  # noqa: BLE001
-            pass
     return runs
 
 
@@ -2855,6 +2852,7 @@ async def api_test_extract_file(file: UploadFile):
     if name.endswith(".pdf"):
         try:
             import io  # noqa: PLC0415
+
             from pdfminer.high_level import extract_text_to_fp  # noqa: PLC0415
             from pdfminer.layout import LAParams  # noqa: PLC0415
 
@@ -2874,7 +2872,6 @@ async def api_test_extract_file(file: UploadFile):
 @app.get("/api/test/generate-ticket")
 def api_test_generate_ticket(project: str = "", user_prompt: str = ""):
     """Generate a synthetic support ticket for the given project using the LLM."""
-    import json as _json  # noqa: PLC0415
 
     from atlas_memory.kg import KGStore  # noqa: PLC0415
 
@@ -2882,7 +2879,7 @@ def api_test_generate_ticket(project: str = "", user_prompt: str = ""):
     # gather context from KG for the selected project
     cdc_summary = ""
     context_tags: list[str] = []
-    for node, data in kg._g.nodes(data=True):
+    for _node, data in kg._g.nodes(data=True):
         if data.get("node_type") == "agent" and (not project or data.get("project") == project):
             cdc_summary = cdc_summary or data.get("cdc_summary", "")
             context_tags += [t for t in data.get("context_tags", []) if t not in context_tags]
@@ -2923,7 +2920,7 @@ def api_test_generate_batch(req: BatchGenerateRequest):
     kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
     cdc_summary = ""
     context_tags: list[str] = []
-    for node, data in kg._g.nodes(data=True):
+    for _node, data in kg._g.nodes(data=True):
         if data.get("node_type") == "agent" and (
             not req.project or data.get("project") == req.project
         ):

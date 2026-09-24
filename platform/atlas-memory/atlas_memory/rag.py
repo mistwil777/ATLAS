@@ -38,9 +38,10 @@ def _normalise(vec: list[float]) -> list[float]:
 
 
 def _embed_bedrock(texts: list[str]) -> list[list[float]]:
-    import boto3  # noqa: PLC0415
     import json as _json  # noqa: PLC0415
     from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: PLC0415
+
+    import boto3  # noqa: PLC0415
 
     region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 
@@ -116,7 +117,7 @@ def _embed(texts: list[str]) -> list[list[float]]:
     for name, fn in backends[start:]:
         try:
             vecs = fn(texts)
-            if _BACKEND != name:
+            if name != _BACKEND:
                 _log.info(
                     "atlas-memory embedding backend: %s (dim=%d)", name, len(vecs[0]) if vecs else 0
                 )
@@ -124,7 +125,7 @@ def _embed(texts: list[str]) -> list[list[float]]:
             return vecs
         except Exception as exc:  # noqa: BLE001
             _log.warning("Embedding backend '%s' unavailable: %s — trying next", name, exc)
-            if _BACKEND == name:
+            if name == _BACKEND:
                 _BACKEND = ""
 
     _log.error("All embedding backends failed — returning zero vectors")

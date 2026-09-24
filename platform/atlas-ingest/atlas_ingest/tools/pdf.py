@@ -40,8 +40,9 @@ def _ocr_page(page, lang: str) -> str:
 
         img = page.to_image(resolution=200).original
         if not isinstance(img, Image.Image):
-            from PIL import Image as _PIL  # noqa: PLC0415
             import io  # noqa: PLC0415
+
+            from PIL import Image as _PIL  # noqa: PLC0415
 
             img = _PIL.open(io.BytesIO(img))
         return pytesseract.image_to_string(img, lang=lang).strip()
