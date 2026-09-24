@@ -1565,14 +1565,14 @@
     }
 
     const visNodes = filteredNodes.map(n => {
-      const isTool  = n.node_type === 'tool';
-      const degree  = degreeMap[n.id] || 0;
-      // Size scales with connectivity — hubs are larger
-      const size    = (isTool ? 22 : 30) + degree * 4;
-      const conf    = n.confidence ?? 1.0;
-      const borderW = 2 + Math.round(conf * 2);
+      const isTool     = n.node_type === 'tool';
+      const degree     = degreeMap[n.id] || 0;
+      const size       = (isTool ? 22 : 30) + degree * 4;
+      const conf       = n.confidence ?? 1.0;
+      const borderWidth = 2 + Math.round(conf * 2);
       const scoreLabel = n.judge_score != null ? `\n${n.judge_score.toFixed(1)}/5` : '';
-      const bgColor  = isTool ? '#1c1600' : '#130d24';
+      // Use solid visible colors — node fill must contrast the #0d0d14 canvas
+      const bgColor  = isTool ? '#2a1f00' : '#1e1540';
       const bdColor  = isTool ? '#e8a600' : '#9085e9';
       return {
         id:    n.id,
@@ -1581,17 +1581,17 @@
         shape: 'dot',
         size,
         font: {
-          color: isTool ? '#e8a600' : '#b8a8f8',
+          color: isTool ? '#e8a600' : '#c0b0ff',
           size: 13,
           face: 'monospace',
           strokeWidth: 3,
-          strokeColor: '#0a0a14',
+          strokeColor: '#06060f',
         },
         color: {
           background: bgColor,
           border:     bdColor,
-          highlight:  { background: isTool ? '#2a2000' : '#1e1040', border: isTool ? '#ffc800' : '#c8b0ff' },
-          hover:      { background: isTool ? '#201800' : '#180c30', border: bdColor },
+          highlight:  { background: isTool ? '#3a2c00' : '#2a1a60', border: isTool ? '#ffc800' : '#c8b0ff' },
+          hover:      { background: isTool ? '#332500' : '#241550', border: bdColor },
         },
         borderWidth,
       };
@@ -1630,10 +1630,12 @@
 
     if (_visNetwork) { _visNetwork.destroy(); }
     _visNetwork = new vis.Network(container, data, options);
-    _visNetwork.on('stabilizationIterationsDone', () => {
+    _visNetwork.once('stabilizationIterationsDone', () => {
       _visNetwork.setOptions({ physics: { enabled: false } });
       _visNetwork.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
     });
+    // Fallback fit in case stabilization fires before listener is attached
+    setTimeout(() => { try { _visNetwork.fit(); } catch(_) {} }, 600);
   }
 
   function _kgTooltipHtml(n) {
