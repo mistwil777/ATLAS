@@ -19,6 +19,7 @@ from pathlib import Path as _Path
 from atlas_memory.run_store import RunStore
 from fastapi import BackgroundTasks, Cookie, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 
@@ -44,6 +45,9 @@ class AnswerRequest(BaseModel):
 _DEFAULT_RUN_STORE_DIR = Path.home() / ".atlas" / "runs"
 
 app = FastAPI(title="ATLAS Dashboard", version="1.0.0")
+_static_dir = Path(__file__).parent / "static"
+if _static_dir.exists():
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 _store: RunStore | None = None
 
 # Session store: cookie_value → True (in-memory, single-process)
