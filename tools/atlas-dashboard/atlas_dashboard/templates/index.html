@@ -337,12 +337,10 @@
 </details>
 
 <div class="toolbar">
-  <button id="btn-all" class="active" onclick="showTabRuns(); loadRuns(false)">All runs</button>
-  <button id="btn-review" onclick="showTabRuns(); loadRuns(true)">Needs review</button>
-  <button onclick="refresh()">Refresh</button>
+  <button id="btn-tests" onclick="showTabTests()">Tests</button>
   <button id="btn-kg" onclick="showTabKG()">Knowledge Graph</button>
   <button id="btn-trend" onclick="showTabTrend()">Trends</button>
-  <button id="btn-tests" onclick="showTabTests()">Tests</button>
+  <button id="btn-all" onclick="showTabRuns(); loadRuns(false)">All runs</button>
   <button onclick="openNewCdcModal()" style="margin-left:auto;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">+ New CDC</button>
   <button onclick="bulkDeleteSkipped()" style="border-color:var(--red);color:var(--red)" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
   <button onclick="_toggleWorkspacePanel()" id="btn-workspace" style="border-color:var(--violet);color:var(--violet)" title="Configure export directory">⬡ Workspace</button>
@@ -560,7 +558,6 @@
   async function loadRuns(reviewOnly) {
     currentFilter = reviewOnly;
     document.getElementById('btn-all').classList.toggle('active', !reviewOnly);
-    document.getElementById('btn-review').classList.toggle('active', reviewOnly);
     const url = reviewOnly ? '/api/runs?review=true' : '/api/runs';
     const runs = await fetch(url).then(r => r.json());
     runs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
@@ -1567,7 +1564,7 @@
     document.getElementById('kg-panel').style.display = 'none';
     document.getElementById('trend-panel').style.display = 'none';
     document.getElementById('tests-panel').style.display = 'none';
-    ['btn-all', 'btn-review', 'btn-kg', 'btn-trend', 'btn-tests'].forEach(id => {
+    ['btn-all', 'btn-kg', 'btn-trend', 'btn-tests'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('active');
     });
@@ -2162,7 +2159,7 @@
     document.getElementById('kg-panel').style.display = 'none';
     document.getElementById('trend-panel').style.display = 'none';
     document.getElementById('tests-panel').style.display = 'block';
-    ['btn-all', 'btn-review', 'btn-kg', 'btn-trend'].forEach(id => {
+    ['btn-all', 'btn-kg', 'btn-trend'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('active');
     });
@@ -3271,8 +3268,8 @@
     const tab = (function() { try { return localStorage.getItem('atlas_tab'); } catch(_) { return null; } })();
     if (tab === 'kg') { showTabKG(); }
     else if (tab === 'trend') { showTabTrend(); }
-    else if (tab === 'tests') { showTabTests(); }
-    else { loadRuns(false); }
+    else if (tab === 'runs') { loadRuns(false); }
+    else { showTabTests(); }
   })();
 </script>
 
