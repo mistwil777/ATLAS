@@ -2898,6 +2898,41 @@ def api_test_validate(test_id: str, body: TestValidation):
     return {"ok": True}
 
 
+@app.post("/api/agents/{agent_name}/recalculate-score")
+def api_recalculate_score(agent_name: str):
+    """Recalculate KG judge_score from latest test run validations (latest per ticket)."""
+    import json as _json  # noqa: PLC0415
+
+    try:
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+        kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+        if agent_name not in kg._g:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_name} not in KG")
+        all_runs = sorted(
+            [_json.loads(f.read_text(encoding="utf-8")) for f in _TEST_RUNS_DIR.glob("*.json")],
+            key=lambda r: r.get("created_at", ""),
+        )
+        latest_per_ticket: dict[str, dict] = {}
+        for run in all_runs:
+            v = run.get("validations", {}).get(agent_name, {})
+            if v.get("skipped") or "valid" not in v:
+                continue
+            ticket_key = (run.get("ticket") or run.get("test_id", ""))[:120]
+            latest_per_ticket[ticket_key] = v
+        total = len(latest_per_ticket)
+        if not total:
+            return {"ok": False, "detail": "No validated test runs found for this agent"}
+        valid_count = sum(1 for v in latest_per_ticket.values() if v["valid"])
+        score = round((valid_count / total) * 5.0, 2)
+        kg.update_agent_score(agent_name, score, run_id="recalculate")
+        return {"ok": True, "score": score, "valid": valid_count, "total": total}
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @app.delete("/api/test/runs/{test_id}")
 def api_test_delete(test_id: str):
     path = _TEST_RUNS_DIR / f"{test_id}.json"

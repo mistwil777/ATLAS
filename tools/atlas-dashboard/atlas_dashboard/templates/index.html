@@ -1655,7 +1655,6 @@
       return {
         id:    n.id,
         label: n.id + scoreLabel,
-        title: _kgTooltipHtml(n),
         shape: 'dot',
         size,
         font: {
@@ -1713,7 +1712,7 @@
         },
         stabilization: { iterations: 200, updateInterval: 20 },
       },
-      interaction: { hover: true, tooltipDelay: 150, zoomView: true, dragView: true, dragNodes: true },
+      interaction: { hover: true, tooltipDelay: 99999, zoomView: true, dragView: true, dragNodes: true },
       edges: { selectionWidth: 3 },
     };
 
@@ -1725,6 +1724,48 @@
     });
     // Fallback fit in case stabilization fires before listener is attached
     setTimeout(() => { try { _visNetwork.fit(); } catch(_) {} }, 600);
+
+    // Click on a node → show persistent panel (tooltip has pointer-events:none in vis)
+    _visNetwork.on('click', function(params) {
+      _closeKgPanel();
+      if (!params.nodes.length) return;
+      const nodeId = params.nodes[0];
+      const n = (_kgData.nodes || []).find(x => x.id === nodeId);
+      if (!n) return;
+      const canvasPos = params.pointer.DOM;
+      _showKgPanel(n, canvasPos.x, canvasPos.y);
+    });
+  }
+
+  let _kgPanelEl = null;
+
+  function _closeKgPanel() {
+    if (_kgPanelEl) { _kgPanelEl.remove(); _kgPanelEl = null; }
+  }
+
+  function _showKgPanel(n, cx, cy) {
+    const el = _kgTooltipHtml(n);
+    el.style.position = 'absolute';
+    el.style.zIndex = '1000';
+    el.style.maxWidth = '320px';
+    el.style.pointerEvents = 'all';
+    el.style.boxShadow = '0 4px 24px #00000080';
+    // Position relative to the KG panel container
+    const container = document.getElementById('kg-graph');
+    const rect = container.getBoundingClientRect();
+    let left = cx + 16;
+    let top  = cy - 20;
+    el.style.left = left + 'px';
+    el.style.top  = top  + 'px';
+    container.style.position = 'relative';
+    container.appendChild(el);
+    _kgPanelEl = el;
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', function _onOutside(e) {
+        if (!el.contains(e.target)) { _closeKgPanel(); document.removeEventListener('click', _onOutside); }
+      });
+    }, 50);
   }
 
   function _kgTooltipHtml(n) {
@@ -1761,10 +1802,22 @@
         <span style="color:#5a5a7a">capabilities</span><span>${caps}</span>
         ${n.promoted_score != null ? `<span style="color:#5a5a7a">promoted</span><span style="color:#9085e9">${n.promoted_score.toFixed(1)}/5 → ${(n.promoted_path||'').split('/').slice(-2).join('/')}</span>` : ''}
       </div>
-      ${n.node_type === 'agent' ? `<div style="margin-top:10px;border-top:1px solid #1a1a2e;padding-top:8px">
+      ${n.node_type === 'agent' ? `<div style="margin-top:10px;border-top:1px solid #1a1a2e;padding-top:8px;display:flex;flex-direction:column;gap:6px">
         ${_promoteButtonHtml(n)}
-      </div>` : ''}`;
+        <button onclick="_recalculateScore('${escHtml(n.id)}')" style="font-size:11px;padding:3px 10px;background:transparent;color:var(--ink-dim);border:1px solid #2a2a4a;border-radius:4px;cursor:pointer;width:100%">↻ Recalculate score</button>
+      </div>` : ''}
+      <button onclick="_closeKgPanel()" style="position:absolute;top:6px;right:8px;background:none;border:none;color:#5a5a7a;cursor:pointer;font-size:14px;line-height:1" title="Close">×</button>`;
+    el.style.position = 'relative';
     return el;
+  }
+
+  async function _recalculateScore(agentName) {
+    const res = await fetch(`/api/agents/${encodeURIComponent(agentName)}/recalculate-score`, { method: 'POST' }).catch(() => null);
+    if (!res?.ok) { const d = await res?.json().catch(()=>({})); alert(d?.detail || 'Recalculate failed'); return; }
+    const d = await res.json();
+    _closeKgPanel();
+    await loadKG();
+    alert(`✓ Score recalculé : ${d.score.toFixed(2)}/5 (${d.valid}/${d.total} valides)`);
   }
 
   // ── Workspace / Promote ──────────────────────────────────────
