@@ -437,6 +437,7 @@
     <div class="adv-custom">
       <input type="text" id="adv-custom-input" placeholder="Ajouter une action personnalisée…" class="adv-custom-field" oninput="updateValidateBtn()" />
     </div>
+    <div id="adv-block-reason" style="display:none;font-size:11px;color:var(--yellow);padding:6px 0;line-height:1.5"></div>
     <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Validate and launch scaffold</button>
   </div>
 </div>
@@ -1956,8 +1957,11 @@
     document.getElementById('trend-chart-area').innerHTML = `<div class="trend-chart-wrap">${svg}</div>`;
   }
 
+  let _lastTrendDetailIdx = null;
+
   function showTrendDetail(idx) {
     if (!_trendData) return;
+    _lastTrendDetailIdx = idx;
     const pts = _trendData.points;
     const p = pts[idx];
     const prev = idx > 0 ? pts[idx - 1] : null;
@@ -2013,6 +2017,8 @@
 
     html += '</div>';
     document.getElementById('trend-detail-area').innerHTML = html;
+    // Re-evaluate validate button now that the selected point has changed
+    if (document.getElementById('advisor-panel')?.style.display !== 'none') updateValidateBtn();
   }
 
   refresh();
@@ -2100,10 +2106,30 @@
   }
 
   function updateValidateBtn() {
-    const checks = document.querySelectorAll('[id^="adv-act-"]');
-    const hasChecked = [...checks].some(c => c.checked);
-    const hasCustom = document.getElementById('adv-custom-input').value.trim().length > 0;
-    document.getElementById('adv-validate-btn').disabled = !hasChecked && !hasCustom;
+    const btn = document.getElementById('adv-validate-btn');
+    const panel = document.getElementById('advisor-panel');
+    const tier = document.getElementById('adv-confidence')?.textContent || '';
+    const selectedPoint = _trendData?.points?.[_lastTrendDetailIdx];
+    const isTestValidation = selectedPoint?.cause === 'test_validation';
+    const isLowConfidence = tier.includes('none');
+
+    let reason = '';
+    if (isTestValidation) reason = 'Analyse basée sur une validation humaine — pas un run scaffold. Re-scaffolder ici serait hors contexte.';
+    else if (isLowConfidence) reason = 'Confiance insuffisante (N=1) — pas assez de données pour lancer un re-scaffold fiable.';
+
+    const reasonEl = document.getElementById('adv-block-reason');
+    if (reason) {
+      btn.disabled = true;
+      btn.style.opacity = '0.4';
+      if (reasonEl) { reasonEl.textContent = reason; reasonEl.style.display = 'block'; }
+    } else {
+      const checks = document.querySelectorAll('[id^="adv-act-"]');
+      const hasChecked = [...checks].some(c => c.checked);
+      const hasCustom = document.getElementById('adv-custom-input').value.trim().length > 0;
+      btn.disabled = !hasChecked && !hasCustom;
+      btn.style.opacity = btn.disabled ? '0.4' : '1';
+      if (reasonEl) reasonEl.style.display = 'none';
+    }
   }
 
   async function validateAdvice() {
