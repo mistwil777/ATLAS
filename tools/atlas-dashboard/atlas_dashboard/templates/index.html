@@ -2888,10 +2888,10 @@
 
     if (newRunId) {
       // Auto-validate the fixed agent as "valid" in the new run so the KG score updates
-      await fetch(`/api/test/validate`, {
+      await fetch(`/api/test/runs/${encodeURIComponent(newRunId)}/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ test_id: newRunId, agent_name: agentName, valid: true, comment: 'auto-validated via Suggest Fix' }),
+        body: JSON.stringify({ agent_name: agentName, valid: true, comment: 'auto-validated via Suggest Fix' }),
       }).catch(() => null);
     }
 
