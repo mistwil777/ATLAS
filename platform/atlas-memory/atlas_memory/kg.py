@@ -81,6 +81,13 @@ class KGStore:
         node["confidence"] = max(0.0, min(1.0, judge_score / 5.0))
         self.save()
 
+    def update_human_score(self, name: str, human_score: float) -> None:
+        """Record aggregated human validation score (separate from LLM judge_score)."""
+        if name not in self._g:
+            return
+        self._g.nodes[name]["human_score"] = human_score
+        self.save()
+
     def get_nodes_by_type(self, node_type: str) -> set[str]:
         return {n for n, d in self._g.nodes(data=True) if d.get("node_type", "agent") == node_type}
 

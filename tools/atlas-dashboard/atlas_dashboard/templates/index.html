@@ -1773,6 +1773,7 @@
     const caps   = (n.capabilities || []).join(', ') || '—';
     const tags   = (n.tags || []).join(', ') || '—';
     const score  = n.judge_score != null ? n.judge_score.toFixed(2) + ' / 5' : '—';
+    const hScore = n.human_score != null ? n.human_score.toFixed(2) + ' / 5' : '—';
     const conf   = n.confidence  != null ? (n.confidence * 100).toFixed(0)  + '%' : '—';
     const share  = n.shareable ? 'yes' : 'no';
     const history = (n.score_history || []);
@@ -1794,7 +1795,8 @@
         <span style="color:#5a5a7a">type</span><span>${n.node_type}</span>
         <span style="color:#5a5a7a">project</span><span style="color:#3987e5">${proj}</span>
         <span style="color:#5a5a7a">context</span><span style="font-size:10px;color:#8a8aa0">${cdcSummary}</span>
-        <span style="color:#5a5a7a">judge score</span><span style="color:${scoreColor}">${score}</span>
+        <span style="color:#5a5a7a">judge score</span><span style="color:${scoreColor}">${score} <span style="font-size:9px;color:#5a5a7a">(LLM)</span></span>
+        <span style="color:#5a5a7a">human score</span><span style="color:${n.human_score >= 4 ? '#1baf7a' : n.human_score >= 2.5 ? '#e8a600' : '#a0a0c0'}">${hScore} <span style="font-size:9px;color:#5a5a7a">(validations)</span></span>
         <span style="color:#5a5a7a">confidence</span><span>${conf}</span>
         <span style="color:#5a5a7a">shareable</span><span>${share}</span>
         <span style="color:#5a5a7a">score trend</span><span>${trend}</span>
@@ -2874,25 +2876,30 @@
     cmp.style.display = 'grid';
     const vrd = panel.querySelector('.fix-verdict');
     vrd.style.display = 'flex';
-    status.textContent = 'Done — review below';
+    status.textContent = 'Evaluating quality…';
     btn.disabled = false;
     panel.dataset.backupAgent = agentName;
     panel.dataset.newRunId = run.test_id || '';
+
+    // LLM judge on the new output — updates KG judge_score
+    const judgeRes = await fetch(`/api/test/runs/${encodeURIComponent(run.test_id)}/judge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_name: agentName }),
+    }).catch(() => null);
+    if (judgeRes?.ok) {
+      const jd = await judgeRes.json();
+      const scoreStr = jd.judge_score != null ? jd.judge_score.toFixed(2) + ' / 5' : '—';
+      status.textContent = `Done — judge score: ${scoreStr}`;
+    } else {
+      status.textContent = 'Done — review below';
+    }
   }
 
   async function _keepFix(agentName) {
     const panel = document.querySelector('.suggest-fix-panel');
     const newRunId = panel?.dataset.newRunId || '';
     document.querySelectorAll('.suggest-fix-panel').forEach(p => p.remove());
-
-    if (newRunId) {
-      // Auto-validate the fixed agent as "valid" in the new run so the KG score updates
-      await fetch(`/api/test/runs/${encodeURIComponent(newRunId)}/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_name: agentName, valid: true, comment: 'auto-validated via Suggest Fix' }),
-      }).catch(() => null);
-    }
 
     _loadTestHistory();
     if (newRunId) {

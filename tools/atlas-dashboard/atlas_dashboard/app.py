@@ -95,8 +95,8 @@ def _startup_recalculate_kg_scores() -> None:
             if not total:
                 continue
             valid_count = sum(1 for v in latest_per_ticket.values() if v["valid"])
-            score = round((valid_count / total) * 5.0, 2)
-            kg.update_agent_score(agent_name, score, run_id="startup_sync")
+            human_score = round((valid_count / total) * 5.0, 2)
+            kg.update_human_score(agent_name, human_score)
 
 
 _static_dir = Path(__file__).parent / "static"
@@ -2724,6 +2724,7 @@ def api_get_kg():
                 "capabilities": n.get("capabilities", []),
                 "tags": n.get("tags", []),
                 "judge_score": n.get("judge_score"),
+                "human_score": n.get("human_score"),
                 "confidence": n.get("confidence", 1.0),
                 "shareable": n.get("shareable", True),
                 "score_history": n.get("score_history", []),
@@ -2893,8 +2894,8 @@ def api_test_validate(test_id: str, body: TestValidation):
         }
     path.write_text(_json.dumps(run_data, indent=2), encoding="utf-8")
 
-    # Update aggregated judge_score in KG (skipped entries excluded)
-    # Use latest run per ticket to avoid penalising old runs that were fixed.
+    # Update human_score in KG (latest-per-ticket aggregate of human valid/invalid)
+    # human_score is separate from judge_score (LLM judge).
     if not body.skipped:
         try:
             from atlas_memory.kg import KGStore  # noqa: PLC0415
@@ -2909,7 +2910,6 @@ def api_test_validate(test_id: str, body: TestValidation):
                     key=lambda r: r.get("created_at", ""),
                 )
                 project = run_data.get("project", "")
-                # Keep only the most recent validation per ticket
                 latest_per_ticket: dict[str, dict] = {}
                 for run in all_runs:
                     if run.get("project") != project:
@@ -2922,16 +2922,117 @@ def api_test_validate(test_id: str, body: TestValidation):
                 valid_count = sum(1 for v in latest_per_ticket.values() if v["valid"])
                 total = len(latest_per_ticket)
                 if total > 0:
-                    aggregated_score = round((valid_count / total) * 5.0, 2)
-                    kg.update_agent_score(
-                        body.agent_name,
-                        aggregated_score,
-                        run_id=f"aggregate_{project}",
-                    )
+                    human_score = round((valid_count / total) * 5.0, 2)
+                    kg.update_human_score(body.agent_name, human_score)
         except Exception:  # noqa: BLE001
             pass
 
     return {"ok": True}
+
+
+def _get_agent_criteria(agent_name: str) -> list[str]:
+    """Retrieve judge criteria for agent_name from the most recent scaffold run."""
+
+    runs = sorted(
+        get_store().list_runs(),
+        key=lambda r: r.get("created_at", ""),
+        reverse=True,
+    )
+    for run in runs:
+        entry = run.get("scaffolded", {}).get(agent_name, {})
+        criteria = entry.get("judge_criteria") or []
+        if criteria:
+            return [c.get("criterion", "") for c in criteria if c.get("criterion")]
+        # Also check scaffold_attempts
+        for attempt in run.get("scaffold_attempts", {}).get(agent_name, []):
+            criteria = attempt.get("judge_criteria") or []
+            if criteria:
+                return [c.get("criterion", "") for c in criteria if c.get("criterion")]
+    return []
+
+
+class TestJudgeRequest(BaseModel):
+    agent_name: str
+
+
+@app.post("/api/test/runs/{test_id}/judge")
+def api_test_judge(test_id: str, body: TestJudgeRequest):
+    """Run LLM judge on the output of a test run and update KG judge_score."""
+    import json as _json  # noqa: PLC0415
+    import logging  # noqa: PLC0415
+
+    path = _TEST_RUNS_DIR / f"{test_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Test run not found")
+    run_data = _json.loads(path.read_text(encoding="utf-8"))
+
+    result = next(
+        (r for r in run_data.get("results", []) if r.get("agent") == body.agent_name), None
+    )
+    if not result or not result.get("output"):
+        raise HTTPException(status_code=400, detail="No output found for this agent in this run")
+
+    ticket = run_data.get("ticket", "")
+    agent_output = result["output"]
+    criteria = _get_agent_criteria(body.agent_name)
+
+    try:
+        from atlas_judge.agent import AtlasJudgeAgent  # noqa: PLC0415
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+        llm_fn, llm_cfg = _llm_fn_for_dashboard()
+        judge = AtlasJudgeAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
+        events = list(
+            judge.run(
+                operation="pointwise",
+                output=agent_output,
+                agent_name=body.agent_name,
+                context=ticket,
+                criteria=criteria or None,
+            )
+        )
+        summary = next((e for e in events if e.get("summary")), None)
+        if not summary:
+            raise HTTPException(status_code=500, detail="Judge returned no summary")
+
+        criteria_scores = summary.get("criteria_scores", [])
+        feedback = summary.get("feedback", "")
+        score_val = summary.get("score")
+        if score_val is None and criteria_scores:
+            scores = [
+                c.get("score", 0)
+                for c in criteria_scores
+                if isinstance(c.get("score"), int | float)
+            ]
+            score_val = round(sum(scores) / len(scores), 2) if scores else None
+
+        # Store judge result in test run
+        run_data.setdefault("judge_results", {})[body.agent_name] = {
+            "judge_score": score_val,
+            "judge_criteria": criteria_scores,
+            "judge_feedback": feedback,
+        }
+        path.write_text(_json.dumps(run_data, indent=2), encoding="utf-8")
+
+        # Update KG judge_score
+        if score_val is not None:
+            kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+            if body.agent_name in kg._g:
+                kg.update_agent_score(body.agent_name, score_val, run_id=test_id)
+
+        return {
+            "ok": True,
+            "judge_score": score_val,
+            "judge_criteria": criteria_scores,
+            "judge_feedback": feedback,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "Judge failed for %s: %s", body.agent_name, exc
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/api/agents/{agent_name}/recalculate-score")
