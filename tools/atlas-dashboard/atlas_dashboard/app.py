@@ -63,6 +63,42 @@ class AnswerRequest(BaseModel):
 _DEFAULT_RUN_STORE_DIR = Path.home() / ".atlas" / "runs"
 
 app = FastAPI(title="ATLAS Dashboard", version="1.0.0")
+
+
+@app.on_event("startup")
+def _startup_recalculate_kg_scores() -> None:
+    """Recalculate KG judge_score for all agents from latest test validations at startup."""
+    import contextlib as _cl  # noqa: PLC0415
+    import json as _json  # noqa: PLC0415
+
+    with _cl.suppress(Exception):
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+        kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+        test_runs_dir = _Path.home() / ".atlas" / "test_runs"
+        if not test_runs_dir.exists():
+            return
+        all_runs = sorted(
+            [_json.loads(f.read_text(encoding="utf-8")) for f in test_runs_dir.glob("*.json")],
+            key=lambda r: r.get("created_at", ""),
+        )
+        agent_names = [n for n in kg._g.nodes if kg._g.nodes[n].get("node_type") == "agent"]
+        for agent_name in agent_names:
+            latest_per_ticket: dict[str, dict] = {}
+            for run in all_runs:
+                v = run.get("validations", {}).get(agent_name, {})
+                if v.get("skipped") or "valid" not in v:
+                    continue
+                ticket_key = (run.get("ticket") or run.get("test_id", ""))[:120]
+                latest_per_ticket[ticket_key] = v
+            total = len(latest_per_ticket)
+            if not total:
+                continue
+            valid_count = sum(1 for v in latest_per_ticket.values() if v["valid"])
+            score = round((valid_count / total) * 5.0, 2)
+            kg.update_agent_score(agent_name, score, run_id="startup_sync")
+
+
 _static_dir = Path(__file__).parent / "static"
 if _static_dir.exists():
     app.mount("/static", StaticFiles(directory=_static_dir), name="static")
