@@ -345,6 +345,15 @@
   <button id="btn-tests" onclick="showTabTests()">Tests</button>
   <button onclick="openNewCdcModal()" style="margin-left:auto;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">+ New CDC</button>
   <button onclick="bulkDeleteSkipped()" style="border-color:var(--red);color:var(--red)" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
+  <button onclick="_toggleWorkspacePanel()" id="btn-workspace" style="border-color:var(--violet);color:var(--violet)" title="Configure export directory">⬡ Workspace</button>
+</div>
+
+<!-- ── Workspace panel ─────────────────────────────────────────────────── -->
+<div id="workspace-panel" style="display:none;background:#0d0d1a;border-bottom:1px solid #1a1a2e;padding:10px 24px;align-items:center;gap:12px">
+  <span style="font-size:12px;color:var(--ink-dim);white-space:nowrap">Export agents to:</span>
+  <input id="workspace-target-input" type="text" placeholder="/path/to/your/project/src/agents" style="flex:1;background:#12121f;border:1px solid #333;border-radius:4px;padding:5px 10px;color:#fff;font-size:12px;font-family:monospace">
+  <button onclick="_saveWorkspace()" style="font-size:12px;padding:4px 14px;background:var(--violet);color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
+  <span id="workspace-status" style="font-size:11px;color:var(--ink-dim)"></span>
 </div>
 
 <!-- ── Modale Nouveau CDC ───────────────────────────────────────────────── -->
@@ -1750,8 +1759,55 @@
         <span style="color:#5a5a7a">score trend</span><span>${trend}</span>
         <span style="color:#5a5a7a">context tags</span><span style="font-size:10px">${ctags}</span>
         <span style="color:#5a5a7a">capabilities</span><span>${caps}</span>
-      </div>`;
+        ${n.promoted_score != null ? `<span style="color:#5a5a7a">promoted</span><span style="color:#9085e9">${n.promoted_score.toFixed(1)}/5 → ${(n.promoted_path||'').split('/').slice(-2).join('/')}</span>` : ''}
+      </div>
+      ${n.node_type === 'agent' ? `<div style="margin-top:10px;border-top:1px solid #1a1a2e;padding-top:8px">
+        ${_promoteButtonHtml(n)}
+      </div>` : ''}`;
     return el;
+  }
+
+  // ── Workspace / Promote ──────────────────────────────────────
+
+  async function _toggleWorkspacePanel() {
+    const panel = document.getElementById('workspace-panel');
+    const visible = panel.style.display === 'flex';
+    panel.style.display = visible ? 'none' : 'flex';
+    if (!visible) {
+      const cfg = await fetch('/api/workspace').then(r => r.json()).catch(() => ({}));
+      document.getElementById('workspace-target-input').value = cfg.target_dir || '';
+    }
+  }
+
+  async function _saveWorkspace() {
+    const target_dir = document.getElementById('workspace-target-input').value.trim();
+    const status = document.getElementById('workspace-status');
+    const res = await fetch('/api/workspace', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_dir }),
+    }).catch(() => null);
+    status.textContent = res?.ok ? '✓ Saved' : '✗ Error';
+    setTimeout(() => { status.textContent = ''; }, 2000);
+  }
+
+  function _promoteButtonHtml(n) {
+    if (!n.judge_score) return `<span style="font-size:11px;color:var(--ink-dim)">No score yet — run tests first</span>`;
+    const canPromote = n.promoted_score == null || n.judge_score > n.promoted_score;
+    const label = n.promoted_score == null ? '⬆ Promote to workspace' : `⬆ Re-promote (${n.judge_score.toFixed(1)} > ${n.promoted_score.toFixed(1)})`;
+    if (canPromote) {
+      return `<button onclick="_promoteAgent('${escHtml(n.id)}','${escHtml(n.project||'')}')" style="font-size:11px;padding:4px 12px;background:var(--violet);color:#fff;border:none;border-radius:4px;cursor:pointer;width:100%">${label}</button>`;
+    }
+    return `<span style="font-size:11px;color:var(--ink-dim)">Already promoted at best score (${n.promoted_score.toFixed(1)}/5)</span>`;
+  }
+
+  async function _promoteAgent(agentName, project) {
+    const res = await fetch(`/api/agents/${encodeURIComponent(agentName)}/promote?project=${encodeURIComponent(project)}`, { method: 'POST' }).catch(() => null);
+    if (!res) { alert('Network error'); return; }
+    const data = await res.json();
+    if (!res.ok) { alert(data.detail || 'Promote failed'); return; }
+    alert(`✓ ${agentName} promoted to ${data.dest}\nScore: ${data.score.toFixed(1)}/5`);
+    loadKG();
   }
 
   // ── Trend tab ────────────────────────────────────────────────
@@ -1860,7 +1916,7 @@
     const prevStr = prev?.avg_score != null ? prev.avg_score.toFixed(2) + ' → ' : '';
     const deltaStr = p.delta != null ? (p.delta >= 0 ? `<span style="color:var(--aqua)">+${p.delta.toFixed(2)}</span>` : `<span style="color:var(--red)">${p.delta.toFixed(2)}</span>`) : '';
     const date = fmtDate(p.created_at);
-    const causeLabel = {initial_scaffold:'Initial scaffold', cr_retry:'CR retry', model_change:'Model change'}[p.cause] || p.cause;
+    const causeLabel = {initial_scaffold:'Initial scaffold', cr_retry:'CR retry', model_change:'Model change', test_validation:'Validation humaine'}[p.cause] || p.cause;
 
     let html = `<div class="trend-detail">
       <h3>${escHtml(_trendData.agent)} — Run ${idx+1}</h3>
@@ -2320,9 +2376,29 @@
       const clean = raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'').trim();
       let parsed = null; try { parsed = JSON.parse(clean); } catch(_) {}
       const meta = parsed ? `${parsed.priority || '—'} / ${parsed.category || '—'}  conf ${parsed.confidence ?? '—'}` : '—';
+      // Score delta from KG
+      const kgNode = (_kgData?.nodes || []).find(n => n.id === r.agent);
+      let deltaHtml = '';
+      if (kgNode && !v?.skipped) {
+        const score = kgNode.judge_score;
+        const hist = kgNode.score_history || [];
+        const prev = hist.length >= 2 ? hist[hist.length - 2].score : null;
+        if (score != null) {
+          const scoreStr = score.toFixed(1) + '/5';
+          if (prev != null) {
+            const delta = score - prev;
+            const sign = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
+            const dc = delta > 0 ? 'var(--aqua)' : delta < 0 ? 'var(--red)' : 'var(--ink-dim)';
+            deltaHtml = `<span style="font-size:11px;color:${dc};min-width:80px;text-align:right">${sign} ${scoreStr}</span>`;
+          } else {
+            deltaHtml = `<span style="font-size:11px;color:var(--ink-dim);min-width:80px;text-align:right">${scoreStr}</span>`;
+          }
+        }
+      }
       return `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:4px;border:1px solid #1a1a2e;margin-bottom:4px;background:#0d0d14">
         <span style="font-weight:600;color:var(--violet);font-size:12px;min-width:180px">${escHtml(r.agent)}</span>
         <span style="flex:1;font-size:11px;color:var(--ink-dim)">${escHtml(meta)}</span>
+        ${deltaHtml}
         <span style="font-size:11px;color:${verdictColor};font-weight:600;min-width:70px;text-align:right">${verdictLabel}</span>
         <button onclick="_expandAgentCard('${tid}','${escHtml(r.agent)}')" style="font-size:10px;padding:2px 7px;border:1px solid #333;border-radius:3px;color:var(--ink-dim);background:transparent;cursor:pointer">Details</button>
       </div>`;
@@ -2756,6 +2832,16 @@
     const panel = document.querySelector('.suggest-fix-panel');
     const newRunId = panel?.dataset.newRunId || '';
     document.querySelectorAll('.suggest-fix-panel').forEach(p => p.remove());
+
+    if (newRunId) {
+      // Auto-validate the fixed agent as "valid" in the new run so the KG score updates
+      await fetch(`/api/test/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test_id: newRunId, agent_name: agentName, valid: true, comment: 'auto-validated via Suggest Fix' }),
+      }).catch(() => null);
+    }
+
     _loadTestHistory();
     if (newRunId) {
       // Navigate to the new (fixed) run
@@ -2847,7 +2933,7 @@
           <td style="color:var(--violet);font-size:12px;padding:6px 8px">Batch — ${g.runs.length} cases</td>
           <td style="text-align:center;padding:6px 8px">${totalAgents}</td>
           <td style="text-align:center;padding:6px 8px;color:${pctV===100&&judged?'var(--aqua)':judged>0?'var(--yellow)':'var(--ink-dim)'}">${pctLabel}</td>
-          <td></td>
+          <td style="text-align:center;padding:6px 8px"><button onclick="event.stopPropagation();_deleteBatch('${escHtml(g.batchId)}')" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0" title="Delete batch">🗑</button></td>
         </tr>`;
       }
       const r = g.runs[0];
@@ -2891,6 +2977,27 @@
     if (!batchRuns.length) return;
     _renderBatchCaseList(batchRuns, id);
     document.getElementById('test-results-area').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function _deleteBatch(batchId) {
+    _confirmDialog(
+      'Delete batch',
+      'This will permanently delete all runs in this batch. This cannot be undone.',
+      'Delete all', 'background:var(--red);color:#fff;border:none',
+      async () => {
+        const allRuns = await fetch('/api/test/runs').then(r => r.json()).catch(() => []);
+        const batchRuns = allRuns.filter(r => {
+          const key = r.batch_id || `${r.project}__${(r.created_at||'').substring(0,16)}`;
+          return key === batchId;
+        });
+        await Promise.all(batchRuns.map(r =>
+          fetch(`/api/test/runs/${encodeURIComponent(r.test_id)}`, { method: 'DELETE' })
+        ));
+        if (_lastBatchResults?.batchId === batchId) _lastBatchResults = null;
+        document.getElementById('test-results-area').innerHTML = '';
+        _loadTestHistory();
+      }
+    );
   }
 
   function _renderBatchCaseList(batchRuns, batchId) {

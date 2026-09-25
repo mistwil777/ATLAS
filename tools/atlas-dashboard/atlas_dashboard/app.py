@@ -870,6 +870,54 @@ def _has_scores(points: list[dict]) -> bool:
     return any(p.get("avg_score") is not None for p in points)
 
 
+def _build_trend_points_from_test_runs(agent: str) -> list[dict]:
+    """Build trend points from test validation runs, one point per batch/session."""
+    import json as _json  # noqa: PLC0415
+
+    if not _TEST_RUNS_DIR.exists():
+        return []
+    test_runs = sorted(
+        [_json.loads(f.read_text(encoding="utf-8")) for f in _TEST_RUNS_DIR.glob("*.json")],
+        key=lambda r: r.get("created_at", ""),
+    )
+    # Group by batch_id or project+minute heuristic
+    from collections import defaultdict  # noqa: PLC0415
+
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for run in test_runs:
+        v = run.get("validations", {}).get(agent, {})
+        if v.get("skipped") or "valid" not in v:
+            continue
+        key = run.get("batch_id") or f"{run.get('project','')}_{(run.get('created_at',''))[:16]}"
+        groups[key].append(run)
+
+    points = []
+    prev_score = None
+    for key in sorted(groups.keys()):
+        batch = groups[key]
+        valid = sum(1 for r in batch if r.get("validations", {}).get(agent, {}).get("valid"))
+        total = len(batch)
+        avg = round((valid / total) * 5.0, 2) if total else None
+        created_at = batch[0].get("created_at", "")
+        delta = round(avg - prev_score, 2) if avg is not None and prev_score is not None else None
+        pt: dict = {
+            "run_id": key,
+            "created_at": created_at,
+            "avg_score": avg,
+            "cause": "test_validation",
+            "criteria": [],
+            "feedback": "",
+            "patches_applied": [],
+            "user_answers": [],
+            "model_id": "",
+        }
+        if delta is not None:
+            pt["delta"] = delta
+        points.append(pt)
+        prev_score = avg
+    return points
+
+
 @app.get("/api/stats/trend")
 def api_stats_trend(agent: str):
     runs = sorted(get_store().list_runs(), key=lambda r: r.get("created_at", ""))
@@ -878,6 +926,17 @@ def api_stats_trend(agent: str):
         points = _build_trend_points(agent, runs)
     if not _has_scores(points):
         points = _build_trend_points_from_scaffold(agent, runs)
+    # Merge test-validation points (append after scaffold points)
+    test_points = _build_trend_points_from_test_runs(agent)
+    if test_points:
+        # Recalculate delta for the seam
+        if points and test_points:
+            last_scaffold = next(
+                (p["avg_score"] for p in reversed(points) if p.get("avg_score") is not None), None
+            )
+            if last_scaffold is not None and test_points[0].get("avg_score") is not None:
+                test_points[0]["delta"] = round(test_points[0]["avg_score"] - last_scaffold, 2)
+        points = points + test_points
     return {"agent": agent, "points": points}
 
 
@@ -2799,31 +2858,33 @@ def api_test_validate(test_id: str, body: TestValidation):
     path.write_text(_json.dumps(run_data, indent=2), encoding="utf-8")
 
     # Update aggregated judge_score in KG (skipped entries excluded)
+    # Use latest run per ticket to avoid penalising old runs that were fixed.
     if not body.skipped:
         try:
             from atlas_memory.kg import KGStore  # noqa: PLC0415
 
             kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
             if body.agent_name in kg._g:
-                all_runs = [
-                    _json.loads(f.read_text(encoding="utf-8"))
-                    for f in _TEST_RUNS_DIR.glob("*.json")
-                ]
+                all_runs = sorted(
+                    [
+                        _json.loads(f.read_text(encoding="utf-8"))
+                        for f in _TEST_RUNS_DIR.glob("*.json")
+                    ],
+                    key=lambda r: r.get("created_at", ""),
+                )
                 project = run_data.get("project", "")
-                valid_count = 0
-                invalid_count = 0
+                # Keep only the most recent validation per ticket
+                latest_per_ticket: dict[str, dict] = {}
                 for run in all_runs:
                     if run.get("project") != project:
                         continue
                     v = run.get("validations", {}).get(body.agent_name, {})
-                    if v.get("skipped"):
+                    if v.get("skipped") or "valid" not in v:
                         continue
-                    if "valid" in v:
-                        if v["valid"]:
-                            valid_count += 1
-                        else:
-                            invalid_count += 1
-                total = valid_count + invalid_count
+                    ticket_key = (run.get("ticket") or run.get("test_id", ""))[:120]
+                    latest_per_ticket[ticket_key] = v
+                valid_count = sum(1 for v in latest_per_ticket.values() if v["valid"])
+                total = len(latest_per_ticket)
                 if total > 0:
                     aggregated_score = round((valid_count / total) * 5.0, 2)
                     kg.update_agent_score(
@@ -3033,6 +3094,102 @@ def api_agent_restore_prompt(agent_name: str, project: str = ""):
     path.write_text(backup.read_text(encoding="utf-8"), encoding="utf-8")
     backup.unlink()
     return {"ok": True}
+
+
+_WORKSPACE_CFG = _Path.home() / ".atlas" / "workspace.json"
+
+
+class WorkspaceConfig(BaseModel):
+    target_dir: str
+
+
+@app.get("/api/workspace")
+def api_workspace_get():
+    if _WORKSPACE_CFG.exists():
+        import json as _j  # noqa: PLC0415
+
+        return _j.loads(_WORKSPACE_CFG.read_text(encoding="utf-8"))
+    return {"target_dir": ""}
+
+
+@app.post("/api/workspace")
+def api_workspace_set(body: WorkspaceConfig):
+    import json as _j  # noqa: PLC0415
+
+    _WORKSPACE_CFG.parent.mkdir(parents=True, exist_ok=True)
+    _WORKSPACE_CFG.write_text(_j.dumps({"target_dir": body.target_dir}, indent=2), encoding="utf-8")
+    return {"ok": True}
+
+
+@app.post("/api/agents/{agent_name}/promote")
+def api_agent_promote(agent_name: str, project: str = ""):
+    import json as _j  # noqa: PLC0415
+    import re as _re  # noqa: PLC0415
+    import shutil as _shutil  # noqa: PLC0415
+
+    if not _WORKSPACE_CFG.exists():
+        raise HTTPException(
+            status_code=400, detail="No workspace configured. Set target_dir first."
+        )
+    target_dir = _Path(_j.loads(_WORKSPACE_CFG.read_text(encoding="utf-8")).get("target_dir", ""))
+    if not target_dir or not target_dir.exists():
+        raise HTTPException(status_code=400, detail=f"target_dir does not exist: {target_dir}")
+
+    # Find agent source directory
+    slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
+    base = _Path.home() / ".atlas" / "projects"
+    agent_src = None
+    if project:
+        candidate = base / project / "agents" / slug
+        if candidate.exists():
+            agent_src = candidate
+    if not agent_src:
+        for p in base.iterdir() if base.exists() else []:
+            candidate = p / "agents" / slug
+            if candidate.exists():
+                agent_src = candidate
+                break
+    if not agent_src:
+        raise HTTPException(status_code=404, detail=f"Agent source not found for {agent_name}")
+
+    # Check score vs last promoted score in KG
+    from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+    kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+    node = kg._g.nodes.get(agent_name, {})
+    current_score = node.get("judge_score")
+    promoted_score = node.get("promoted_score")
+
+    if current_score is None:
+        raise HTTPException(
+            status_code=400, detail="Agent has no judge_score yet. Run and validate tests first."
+        )
+    if promoted_score is not None and current_score <= promoted_score:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Current score ({current_score:.1f}) is not better than last promoted score ({promoted_score:.1f}). No promotion.",
+        )
+
+    # Copy agent directory to target
+    dest = target_dir / slug
+    if dest.exists():
+        _shutil.rmtree(dest)
+    _shutil.copytree(str(agent_src), str(dest))
+
+    # Update KG with promotion metadata
+    import datetime as _dt  # noqa: PLC0415
+
+    kg._g.nodes[agent_name]["promoted_score"] = current_score
+    kg._g.nodes[agent_name]["promoted_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    kg._g.nodes[agent_name]["promoted_path"] = str(dest)
+    kg.save()
+
+    return {
+        "ok": True,
+        "agent": agent_name,
+        "score": current_score,
+        "dest": str(dest),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
