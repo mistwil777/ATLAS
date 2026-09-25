@@ -18,7 +18,7 @@ SAMPLE_SPEC = FIXTURES / "sample_spec.md"
 
 EXPECTED_FILES = [
     "pyproject.toml",
-    "{pkg}/manifest.py",
+    "{pkg}/tools.py",
     "{pkg}/tests/smoke/test_smoke.py",
     "{pkg}/__main__.py",
 ]
