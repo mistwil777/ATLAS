@@ -3062,7 +3062,7 @@ def api_recalculate_score(agent_name: str):
             return {"ok": False, "detail": "No validated test runs found for this agent"}
         valid_count = sum(1 for v in latest_per_ticket.values() if v["valid"])
         score = round((valid_count / total) * 5.0, 2)
-        kg.update_agent_score(agent_name, score, run_id="recalculate")
+        kg.update_human_score(agent_name, score)
         return {"ok": True, "score": score, "valid": valid_count, "total": total}
     except HTTPException:
         raise
