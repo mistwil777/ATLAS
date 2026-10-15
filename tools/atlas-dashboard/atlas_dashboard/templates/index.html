@@ -495,6 +495,59 @@
   <div id="test-history-area"><div style="color:var(--ink-dim);font-size:13px">No test runs yet.</div></div>
 </div>
 
+<!-- ── Test agent panel ──────────────────────────────────────────────────── -->
+<div id="test-agent-panel" style="display:none;padding:24px;max-width:900px;margin:0 auto">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:6px">
+    <button onclick="_closeTestAgentPanel()" style="background:none;border:none;color:var(--ink-dim);cursor:pointer;font-size:18px;padding:0;line-height:1">←</button>
+    <h2 style="margin:0" id="tap-title">Test agent</h2>
+  </div>
+  <div style="font-size:12px;color:var(--ink-dim);margin-bottom:20px" id="tap-subtitle"></div>
+
+  <!-- Step 1 — inputs -->
+  <div id="tap-step-inputs">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Inputs</span>
+      <button id="tap-btn-generate" onclick="_tapGenerateInputs()" style="font-size:12px;padding:4px 12px;border:1px solid var(--blue);color:var(--blue);border-radius:4px;background:none;cursor:pointer">Générer depuis CDC</button>
+    </div>
+    <div id="tap-inputs-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+    <button onclick="_tapAddInput()" style="font-size:12px;padding:4px 12px;border:1px dashed #444;color:var(--ink-dim);border-radius:4px;background:none;cursor:pointer">+ Ajouter un input</button>
+  </div>
+
+  <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
+    <button id="tap-btn-run" onclick="_tapRunTest()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">Lancer test</button>
+    <span id="tap-run-status" style="font-size:12px;color:var(--ink-dim)"></span>
+  </div>
+
+  <!-- Step 2 — output + score -->
+  <div id="tap-step-result" style="display:none;margin-top:24px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <span style="font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Output</span>
+      <span id="tap-passed-badge" style="font-size:11px;padding:2px 8px;border-radius:3px"></span>
+    </div>
+    <pre id="tap-output-box" style="background:#0d0d1a;border:1px solid #1a1a2e;border-radius:6px;padding:14px;font-size:12px;color:var(--ink);overflow-x:auto;white-space:pre-wrap;max-height:260px;overflow-y:auto"></pre>
+
+    <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
+      <button id="tap-btn-judge" onclick="_tapJudge()" style="background:var(--aqua);color:#0d0d1a;border-color:var(--aqua);font-weight:600">Évaluer (juge)</button>
+      <span id="tap-judge-status" style="font-size:12px;color:var(--ink-dim)"></span>
+    </div>
+
+    <!-- Judge result -->
+    <div id="tap-step-judge" style="display:none;margin-top:20px">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
+        <span style="font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Score post-test</span>
+        <span id="tap-score-badge" style="font-size:20px;font-weight:700"></span>
+      </div>
+      <div id="tap-feedback-box" style="font-size:12px;color:var(--ink);background:#0d0d1a;border:1px solid #1a1a2e;border-radius:6px;padding:12px;margin-bottom:12px;line-height:1.6"></div>
+      <div id="tap-criteria-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px"></div>
+      <div id="tap-action-bar" style="display:none;padding:12px 16px;background:#12121f;border:1px solid #252535;border-radius:6px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:12px;color:var(--ink-dim);flex:1" id="tap-action-hint"></span>
+        <button id="tap-btn-rescaffold" onclick="_tapReScaffold()" style="font-size:12px;padding:5px 14px;border:1px solid var(--yellow);color:var(--yellow);border-radius:4px;background:none;cursor:pointer">Re-scaffold</button>
+        <button onclick="_tapRunTest()" style="font-size:12px;padding:5px 14px;border:1px solid var(--blue);color:var(--blue);border-radius:4px;background:none;cursor:pointer">Relancer test</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Folders panel ────────────────────────────────────────────────────── -->
 <div id="folders-panel" style="display:none;padding:24px;max-width:1000px;margin:0 auto">
   <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
@@ -1068,6 +1121,7 @@
                 : ''
               }
               <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
+              <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:4px;background:none;cursor:pointer">Test</button>
             </div>
           </div>
           <div class="card-body" style="width:100%">
@@ -1117,6 +1171,7 @@
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
               <input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:#0d1117;border:1px solid #2a3040;border-radius:4px;color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
               <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--ink-dim);color:var(--ink-dim);font-size:11px">Re-scaffold</button>
+              <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:11px;padding:3px 10px;border:1px solid var(--violet);color:var(--violet);border-radius:4px;background:none;cursor:pointer">Test</button>
             </div>
           </div>
           ${iAllFiles.length ? `<div class="card-body" style="width:100%">
@@ -1557,6 +1612,7 @@
     document.getElementById('trend-panel').style.display = 'none';
     document.getElementById('tests-panel').style.display = 'none';
     document.getElementById('folders-panel').style.display = 'none';
+    document.getElementById('test-agent-panel').style.display = 'none';
     ['btn-all', 'btn-kg', 'btn-trend', 'btn-tests', 'btn-folders'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('active');
@@ -3329,6 +3385,200 @@
   });
 
   // Restore last active tab on page load
+  // ── Test Agent Panel ────────────────────────────────────────────────────────
+
+  let _tapRunId = '';
+  let _tapAgentName = '';
+  let _tapInputs = [];      // [{cdc_bloc, context}]
+  let _tapOutput = '';
+  let _tapJudgeScore = null;
+
+  function openTestAgentPanel(runId, agentName) {
+    _tapRunId = runId;
+    _tapAgentName = agentName;
+    _tapInputs = [];
+    _tapOutput = '';
+    _tapJudgeScore = null;
+
+    _hideAllPanels();
+    document.getElementById('btn-tests').classList.add('active');
+    document.getElementById('test-agent-panel').style.display = 'block';
+    document.getElementById('tap-title').textContent = `Test — ${agentName}`;
+    document.getElementById('tap-subtitle').textContent = `run ${runId}`;
+    document.getElementById('tap-step-result').style.display = 'none';
+    document.getElementById('tap-step-judge').style.display = 'none';
+    document.getElementById('tap-run-status').textContent = '';
+    document.getElementById('tap-judge-status').textContent = '';
+
+    _tapAddInput();
+  }
+
+  function _closeTestAgentPanel() {
+    _hideAllPanels();
+    document.getElementById('btn-tests').classList.add('active');
+    document.getElementById('tests-panel').style.display = 'block';
+  }
+
+  function _tapInputCard(idx, value) {
+    const cdc = (value && value.cdc_bloc) ? escHtml(value.cdc_bloc) : '';
+    const ctx = (value && value.context) ? escHtml(value.context) : '';
+    return `
+      <div style="background:#0d0d1a;border:1px solid #1a1a2e;border-radius:6px;padding:12px;position:relative" id="tap-input-card-${idx}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:11px;color:var(--ink-dim)">Cas ${idx + 1}</span>
+          ${_tapInputs.length > 1 ? `<button onclick="_tapRemoveInput(${idx})" style="background:none;border:none;color:var(--ink-dim);cursor:pointer;font-size:14px;padding:0">×</button>` : ''}
+        </div>
+        <label style="font-size:11px;color:var(--ink-dim);display:block;margin-bottom:3px">cdc_bloc</label>
+        <textarea id="tap-cdc-${idx}" rows="4" style="width:100%;box-sizing:border-box;background:#12121f;border:1px solid #252535;border-radius:4px;padding:8px;color:#fff;font-size:12px;resize:vertical;font-family:monospace">${cdc}</textarea>
+        <label style="font-size:11px;color:var(--ink-dim);display:block;margin-top:6px;margin-bottom:3px">context (optionnel)</label>
+        <input id="tap-ctx-${idx}" type="text" value="${ctx}" placeholder="" style="width:100%;box-sizing:border-box;background:#12121f;border:1px solid #252535;border-radius:4px;padding:6px 8px;color:#fff;font-size:12px">
+      </div>`;
+  }
+
+  function _tapRenderInputs() {
+    document.getElementById('tap-inputs-list').innerHTML = _tapInputs.map((v, i) => _tapInputCard(i, v)).join('');
+  }
+
+  function _tapAddInput() {
+    _tapInputs.push({ cdc_bloc: '', context: '' });
+    _tapRenderInputs();
+  }
+
+  function _tapRemoveInput(idx) {
+    _tapInputs.splice(idx, 1);
+    _tapRenderInputs();
+  }
+
+  async function _tapGenerateInputs() {
+    const btn = document.getElementById('tap-btn-generate');
+    btn.textContent = 'Génération…';
+    btn.disabled = true;
+    const res = await fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/test-inputs?n=2`)
+      .then(r => r.json()).catch(() => null);
+    btn.textContent = 'Générer depuis CDC';
+    btn.disabled = false;
+    if (!res || !res.inputs) { alert('Échec de la génération.'); return; }
+    _tapInputs = res.inputs.map(inp => ({
+      cdc_bloc: inp.cdc_bloc || JSON.stringify(inp),
+      context: inp.context || '',
+    }));
+    _tapRenderInputs();
+  }
+
+  function _tapCollectInputs() {
+    return _tapInputs.map((_, i) => ({
+      cdc_bloc: document.getElementById(`tap-cdc-${i}`)?.value || '',
+      context: document.getElementById(`tap-ctx-${i}`)?.value || '',
+    }));
+  }
+
+  async function _tapRunTest() {
+    const inputs = _tapCollectInputs();
+    if (!inputs[0]?.cdc_bloc.trim()) { alert('Remplis au moins un cdc_bloc.'); return; }
+
+    const btn = document.getElementById('tap-btn-run');
+    const status = document.getElementById('tap-run-status');
+    btn.disabled = true;
+    status.textContent = 'Exécution…';
+
+    // Run first input (UI shows one result at a time)
+    const payload = { inputs: inputs[0] };
+    const res = await fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/run-test`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(r => r.json()).catch(e => ({ error: String(e) }));
+
+    btn.disabled = false;
+
+    if (res.error && !res.passed) {
+      status.textContent = '';
+      document.getElementById('tap-step-result').style.display = 'block';
+      document.getElementById('tap-step-judge').style.display = 'none';
+      const badge = document.getElementById('tap-passed-badge');
+      badge.textContent = 'Échec';
+      badge.style.background = '#3a1515';
+      badge.style.color = 'var(--red)';
+      document.getElementById('tap-output-box').textContent = res.error;
+      _tapOutput = '';
+      return;
+    }
+
+    status.textContent = '';
+    _tapOutput = res.output?.output || JSON.stringify(res.output, null, 2);
+
+    document.getElementById('tap-step-result').style.display = 'block';
+    document.getElementById('tap-step-judge').style.display = 'none';
+    document.getElementById('tap-judge-status').textContent = '';
+
+    const badge = document.getElementById('tap-passed-badge');
+    badge.textContent = res.passed ? 'OK' : 'Erreur';
+    badge.style.background = res.passed ? '#0d2a1a' : '#3a1515';
+    badge.style.color = res.passed ? 'var(--aqua)' : 'var(--red)';
+    document.getElementById('tap-output-box').textContent = _tapOutput;
+  }
+
+  async function _tapJudge() {
+    if (!_tapOutput) { alert('Lance d\'abord le test.'); return; }
+
+    const btn = document.getElementById('tap-btn-judge');
+    const status = document.getElementById('tap-judge-status');
+    btn.disabled = true;
+    status.textContent = 'Évaluation en cours…';
+
+    const inputs = _tapCollectInputs();
+    const res = await fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/judge-test`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_name: _tapAgentName, input: inputs[0], output: _tapOutput }),
+    }).then(r => r.json()).catch(e => ({ error: String(e) }));
+
+    btn.disabled = false;
+    status.textContent = '';
+
+    if (res.error) { alert(`Erreur juge : ${res.error}`); return; }
+
+    _tapJudgeScore = res.judge_score;
+    const score = res.judge_score;
+    const scoreEl = document.getElementById('tap-score-badge');
+    scoreEl.textContent = score != null ? `${score.toFixed(1)} / 5` : '—';
+    scoreEl.style.color = score >= 4 ? 'var(--aqua)' : score >= 3 ? 'var(--yellow)' : 'var(--red)';
+
+    document.getElementById('tap-feedback-box').textContent = res.judge_feedback || '';
+
+    const cList = document.getElementById('tap-criteria-list');
+    cList.innerHTML = (res.judge_criteria || []).map(c => `
+      <div style="display:flex;gap:10px;align-items:flex-start;padding:6px 10px;background:#0d0d1a;border-radius:4px;border:1px solid #1a1a2e">
+        <span style="font-size:13px;font-weight:700;min-width:20px;color:${c.score >= 4 ? 'var(--aqua)' : c.score >= 3 ? 'var(--yellow)' : 'var(--red)'}">${c.score}</span>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--ink)">${escHtml(c.criterion)}</div>
+          <div style="font-size:11px;color:var(--ink-dim);margin-top:2px">${escHtml(c.comment || '')}</div>
+        </div>
+      </div>`).join('');
+
+    document.getElementById('tap-step-judge').style.display = 'block';
+
+    // Action bar: show if score < 4
+    const actionBar = document.getElementById('tap-action-bar');
+    if (score != null && score < 4) {
+      actionBar.style.display = 'flex';
+      document.getElementById('tap-action-hint').textContent =
+        score < 3
+          ? `Score ${score.toFixed(1)}/5 — qualité insuffisante. Re-scaffold recommandé.`
+          : `Score ${score.toFixed(1)}/5 — améliorations possibles. Re-scaffold ou relancer le test.`;
+      document.getElementById('tap-btn-rescaffold').setAttribute('data-run', _tapRunId);
+      document.getElementById('tap-btn-rescaffold').setAttribute('data-agent', _tapAgentName);
+    } else {
+      actionBar.style.display = 'none';
+    }
+  }
+
+  function _tapReScaffold() {
+    scaffold(_tapRunId, _tapAgentName);
+    _closeTestAgentPanel();
+    showTabRuns();
+  }
+
+  // ── Init ────────────────────────────────────────────────────────────────────
+
   (function() {
     const tab = (function() { try { return localStorage.getItem('atlas_tab'); } catch(_) { return null; } })();
     if (tab === 'kg') { showTabKG(); }
