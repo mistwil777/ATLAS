@@ -2631,6 +2631,7 @@ def _register_agent_in_kg(
                     name=effective_name,
                     judge_score=judge_score,
                     run_id=run_id,
+                    source="scaffold",
                 )
             )
     except Exception as exc:  # noqa: BLE001
@@ -3048,7 +3049,7 @@ def api_test_judge(test_id: str, body: TestJudgeRequest):
         if score_val is not None:
             kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
             if body.agent_name in kg._g:
-                kg.update_agent_score(body.agent_name, score_val, run_id=test_id)
+                kg.update_agent_score(body.agent_name, score_val, run_id=test_id, source="scaffold")
 
         return {
             "ok": True,
@@ -3298,8 +3299,6 @@ def api_agent_restore_prompt(agent_name: str, project: str = ""):
     return {"ok": True}
 
 
-
-
 @app.get("/api/folders")
 def api_folders():
     """Return all CDC projects with their agents and tools."""
@@ -3404,11 +3403,7 @@ def _mcp_kg() -> "KGStore":  # type: ignore[name-defined]
 
 def _mcp_list_projects() -> list[str]:
     kg = _mcp_kg()
-    projects = {
-        d.get("project", "")
-        for _, d in kg._g.nodes(data=True)
-        if d.get("project")
-    }
+    projects = {d.get("project", "") for _, d in kg._g.nodes(data=True) if d.get("project")}
     return sorted(projects)
 
 
@@ -3499,11 +3494,13 @@ async def mcp_endpoint(request: Request):
         return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
     if method == "initialize":
-        return _ok({
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "atlas-mcp", "version": "0.1.0"},
-        })
+        return _ok(
+            {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "atlas-mcp", "version": "0.1.0"},
+            }
+        )
 
     if method == "tools/list":
         return _ok({"tools": _MCP_TOOLS})
@@ -3530,13 +3527,16 @@ async def mcp_endpoint(request: Request):
                 agent = args.get("agent", "")
                 zip_bytes = _mcp_agent_zip(project, agent)
                 import base64  # noqa: PLC0415
+
                 b64 = base64.b64encode(zip_bytes).decode()
-                return _ok({
-                    "content": [
-                        {"type": "text", "text": f"Agent '{agent}' zip (base64):"},
-                        {"type": "text", "text": b64},
-                    ]
-                })
+                return _ok(
+                    {
+                        "content": [
+                            {"type": "text", "text": f"Agent '{agent}' zip (base64):"},
+                            {"type": "text", "text": b64},
+                        ]
+                    }
+                )
 
             return _err(-32601, f"Unknown tool: {tool_name}")
         except HTTPException as exc:

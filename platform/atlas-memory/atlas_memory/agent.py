@@ -133,10 +133,10 @@ class AtlasMemoryAgent:
         return {"run_id": run_id, "invalidated": count}
 
     def _op_update_agent_score(
-        self, name: str, judge_score: float, run_id: str, **_: object
+        self, name: str, judge_score: float, run_id: str, source: str = "scaffold", **_: object
     ) -> dict:
-        self._get_kg().update_agent_score(name, judge_score, run_id)
-        return {"name": name, "judge_score": judge_score}
+        self._get_kg().update_agent_score(name, judge_score, run_id, source=source)
+        return {"name": name, "judge_score": judge_score, "source": source}
 
     def _op_search(
         self,

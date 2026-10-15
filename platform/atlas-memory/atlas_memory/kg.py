@@ -128,8 +128,17 @@ class KGStore:
         incoming_tags = set(context_tags or [])
         return bool(existing_tags) and bool(incoming_tags) and existing_tags != incoming_tags
 
-    def update_agent_score(self, name: str, judge_score: float, run_id: str) -> None:
-        """Record a new judge score and update confidence = judge_score / 5.0."""
+    def update_agent_score(
+        self,
+        name: str,
+        judge_score: float,
+        run_id: str,
+        source: str = "scaffold",
+    ) -> None:
+        """Record a new judge score and update confidence = judge_score / 5.0.
+
+        source: "scaffold" (code evaluated without execution) or "test" (real execution).
+        """
         if name not in self._g:
             return
         node = self._g.nodes[name]
@@ -138,6 +147,7 @@ class KGStore:
             {
                 "score": judge_score,
                 "run_id": run_id,
+                "source": source,
                 "timestamp": __import__("datetime")
                 .datetime.now(__import__("datetime").timezone.utc)
                 .isoformat(),
