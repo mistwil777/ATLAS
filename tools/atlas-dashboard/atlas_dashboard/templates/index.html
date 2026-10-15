@@ -2128,21 +2128,45 @@
         const sc = t.score != null ? t.score.toFixed(1) : '—';
         const col = t.score >= 4 ? 'var(--aqua)' : t.score >= 3 ? 'var(--yellow)' : 'var(--red)';
         const inputPreview = t.input?.cdc_bloc
-          ? escHtml(t.input.cdc_bloc.slice(0, 120)) + (t.input.cdc_bloc.length > 120 ? '…' : '')
+          ? escHtml(t.input.cdc_bloc.slice(0, 100)) + (t.input.cdc_bloc.length > 100 ? '…' : '')
           : '—';
-        const retestBtn = !t.passed && _lastRunId
-          ? `<button onclick="_retestTicket(${JSON.stringify(JSON.stringify(t.input))})" style="font-size:11px;padding:2px 10px;border:1px solid var(--yellow);color:var(--yellow);border-radius:3px;background:none;cursor:pointer;white-space:nowrap">Re-tester</button>`
+        const cardId = `trend-ticket-${idx}-${ti}`;
+
+        // Criteria rows
+        const criteriaHtml = (t.criteria || []).map(c => {
+          const cs = c.score ?? 0;
+          const cc = cs >= 4 ? 'var(--aqua)' : cs >= 3 ? 'var(--yellow)' : 'var(--red)';
+          return `<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;border-top:1px solid #1a1a2e">
+            <span style="font-size:12px;font-weight:700;color:${cc};min-width:18px">${cs}</span>
+            <div>
+              <div style="font-size:11px;color:var(--ink)">${escHtml(c.criterion||'')}</div>
+              ${c.comment ? `<div style="font-size:10px;color:var(--ink-dim)">${escHtml(c.comment)}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('');
+
+        const retestBtn = _lastRunId
+          ? `<button onclick="event.stopPropagation();_retestTicket(${JSON.stringify(JSON.stringify(t.input))})" style="font-size:11px;padding:4px 12px;border:1px solid ${t.passed ? 'var(--blue)' : 'var(--yellow)'};color:${t.passed ? 'var(--blue)' : 'var(--yellow)'};border-radius:3px;background:none;cursor:pointer;white-space:nowrap">${t.passed ? 'Re-tester' : 'Re-tester (échec)'}</button>`
           : '';
+
         html += `
-          <div style="background:#0d0d1a;border:1px solid ${t.passed ? '#1a2a1a' : '#2a1a1a'};border-radius:5px;padding:10px 12px;margin-bottom:6px">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:5px">
+          <div style="background:#0d0d1a;border:1px solid ${t.passed ? '#1a2a1a' : '#2a1a1a'};border-radius:5px;margin-bottom:6px;overflow:hidden">
+            <div onclick="document.getElementById('${cardId}').style.display=document.getElementById('${cardId}').style.display==='none'?'block':'none'"
+                 style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer">
               <span style="font-size:13px;font-weight:700;color:${col}">${sc}/5</span>
               <span style="font-size:11px;padding:1px 7px;border-radius:3px;background:${t.passed ? '#0d2a1a' : '#2a0d0d'};color:${col}">${t.passed ? 'Passé' : 'Échoué'}</span>
-              <span style="font-size:10px;color:var(--ink-dim);flex:1">Ticket ${ti+1}</span>
-              ${retestBtn}
+              <span style="font-size:10px;color:var(--ink-dim);flex:1;font-family:monospace">${inputPreview}</span>
+              <span style="font-size:11px;color:var(--ink-dim)">▶</span>
             </div>
-            <div style="font-size:11px;color:var(--ink-dim);font-family:monospace;margin-bottom:4px">${inputPreview}</div>
-            ${t.feedback ? `<div style="font-size:11px;color:var(--ink);margin-top:4px;font-style:italic">${escHtml(t.feedback.slice(0, 180))}${t.feedback.length > 180 ? '…' : ''}</div>` : ''}
+            <div id="${cardId}" style="display:none;padding:0 12px 12px;border-top:1px solid #1a1a2e">
+              <div style="font-size:11px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px">Input</div>
+              <pre style="font-size:11px;color:var(--ink);background:#12121f;border-radius:4px;padding:8px;max-height:120px;overflow-y:auto;white-space:pre-wrap;margin:0 0 8px">${escHtml(t.input?.cdc_bloc || '—')}</pre>
+              <div style="font-size:11px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Output</div>
+              <pre style="font-size:11px;color:var(--ink);background:#12121f;border-radius:4px;padding:8px;max-height:120px;overflow-y:auto;white-space:pre-wrap;margin:0 0 8px">${escHtml(t.output || '—')}</pre>
+              ${t.feedback ? `<div style="font-size:11px;color:var(--ink);font-style:italic;margin-bottom:8px">${escHtml(t.feedback)}</div>` : ''}
+              ${criteriaHtml ? `<div style="margin-bottom:10px">${criteriaHtml}</div>` : ''}
+              <div style="margin-top:8px">${retestBtn}</div>
+            </div>
           </div>`;
       });
     } else if (p.feedback) {
