@@ -450,9 +450,7 @@ def api_answer(run_id: str, body: AnswerRequest):
         "cdc_full", run.get("metadata", {}).get("cdc_preview", "")
     )
 
-    import re as _re  # noqa: PLC0415
-
-    agent_slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
+    agent_slug = _agent_slug(agent_name)
     meta = run.get("metadata", {})
     project_dir = meta.get("project_dir", "")
     if meta.get("project_owner") == "capgemini" or not project_dir:
@@ -1036,6 +1034,19 @@ def api_improve(agent_name: str, body: ImproveRequest | None = None):
 # ── Scaffold / Install / Re-run ────────────────────────────────────────────────
 
 
+def _agent_slug(agent_name: str) -> str:
+    """Convert agent name to kebab-case slug for filesystem use.
+
+    Strips the fork suffix (#context) before conversion so that
+    JustificationGenerator#sncf and JustificationGenerator share the same
+    base slug on disk — the forge operates on base code, the KG tracks the fork.
+    """
+    import re as _re  # noqa: PLC0415
+
+    base = agent_name.split("#")[0]
+    return _re.sub(r"(?<!^)(?=[A-Z])", "-", base).lower()
+
+
 def _llm_fn_for_dashboard():
     """Build LLM callable from atlas.toml (CWD) — same logic as atlas-cli."""
     try:
@@ -1579,8 +1590,6 @@ async def api_scaffold_ingest(
 
 def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
     """Synchronous scaffold logic — runs in a background thread."""
-    import re as _re  # noqa: PLC0415
-
     from agent_forge.agent import AgentForgeAgent  # noqa: PLC0415
 
     store = get_store()
@@ -1593,7 +1602,7 @@ def _scaffold_sync(run_id: str, agent_name: str, body: ScaffoldRequest) -> dict:
     )
     llm_fn, llm_cfg = _llm_fn_for_dashboard()
 
-    agent_slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
+    agent_slug = _agent_slug(agent_name)
 
     meta = run.get("metadata", {})
     project_dir = meta.get("project_dir", "")
@@ -2566,9 +2575,29 @@ def _register_agent_in_kg(
     project: str = "",
     cdc_summary: str = "",
     context_tags: list[str] | None = None,
-) -> None:
-    """Add the freshly installed agent to atlas-memory KG with confidence and context."""
+) -> str:
+    """Add the freshly installed agent to atlas-memory KG. Returns the effective KG name.
+
+    If an agent with the same base name already exists for a different context,
+    a fork is created automatically: {agent_name}#{project}.
+    """
     import logging  # noqa: PLC0415
+
+    effective_name = agent_name
+    try:
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+        kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+        if kg.needs_fork(agent_name, context_tags or []):
+            context_id = (project or "unknown").replace(" ", "_").lower()
+            effective_name = kg.fork_agent(agent_name, context_id)
+            logging.getLogger("atlas_dashboard").info(
+                "Auto-forked %s → %s (context mismatch)", agent_name, effective_name
+            )
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "Fork check failed for %s (non-blocking): %s", agent_name, exc
+        )
 
     try:
         from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
@@ -2578,7 +2607,7 @@ def _register_agent_in_kg(
         events = list(
             mem.run(
                 operation="register_agent",
-                name=agent_name,
+                name=effective_name,
                 capabilities=[f"Handles {agent_name} tasks as defined in CDC"],
                 tags=["scaffolded"],
                 judge_score=judge_score,
@@ -2587,27 +2616,28 @@ def _register_agent_in_kg(
                 cdc_summary=cdc_summary,
                 context_tags=context_tags or [],
                 output_type="json",
+                parent=agent_name if effective_name != agent_name else None,
             )
         )
         err = next((e for e in events if e.get("level") == "error"), None)
         if err:
             logging.getLogger("atlas_dashboard").warning(
-                "KG registration warning for %s: %s", agent_name, err.get("msg")
+                "KG registration warning for %s: %s", effective_name, err.get("msg")
             )
-        # Also record score history if we have a run_id
         if judge_score is not None and run_id:
             list(
                 mem.run(
                     operation="update_agent_score",
-                    name=agent_name,
+                    name=effective_name,
                     judge_score=judge_score,
                     run_id=run_id,
                 )
             )
     except Exception as exc:  # noqa: BLE001
         logging.getLogger("atlas_dashboard").warning(
-            "KG registration failed for %s (non-blocking): %s", agent_name, exc
+            "KG registration failed for %s (non-blocking): %s", effective_name, exc
         )
+    return effective_name
 
 
 @app.post("/api/runs/{run_id}/rerun")
@@ -3203,7 +3233,7 @@ def _find_prompts_py(agent_name: str, project: str = "") -> _Path | None:
     """Locate the prompts.py for a given agent name across all projects."""
     import re as _re  # noqa: PLC0415
 
-    slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
+    slug = _agent_slug(agent_name)
     base = _Path.home() / ".atlas" / "projects"
     if project:
         candidate = base / project / "agents" / slug / slug.replace("-", "_") / "prompts.py"
@@ -3268,100 +3298,253 @@ def api_agent_restore_prompt(agent_name: str, project: str = ""):
     return {"ok": True}
 
 
-_WORKSPACE_CFG = _Path.home() / ".atlas" / "workspace.json"
 
 
-class WorkspaceConfig(BaseModel):
-    target_dir: str
+@app.get("/api/folders")
+def api_folders():
+    """Return all CDC projects with their agents and tools."""
+    try:
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+        kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+        projects: dict[str, dict] = {}
+        for n, d in kg._g.nodes(data=True):
+            proj = d.get("project", "")
+            if not proj or d.get("node_type") not in ("agent", "tool"):
+                continue
+            if proj not in projects:
+                projects[proj] = {"name": proj, "agents": [], "tools": []}
+            entry = {
+                "name": n,
+                "node_type": d.get("node_type", "agent"),
+                "judge_score": d.get("judge_score"),
+                "human_score": d.get("human_score"),
+                "parent": d.get("parent"),
+            }
+            if d.get("node_type") == "tool":
+                projects[proj]["tools"].append(entry)
+            else:
+                projects[proj]["agents"].append(entry)
+        return {"projects": sorted(projects.values(), key=lambda p: p["name"])}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@app.get("/api/workspace")
-def api_workspace_get():
-    if _WORKSPACE_CFG.exists():
-        import json as _j  # noqa: PLC0415
-
-        return _j.loads(_WORKSPACE_CFG.read_text(encoding="utf-8"))
-    return {"target_dir": ""}
+class DownloadZipRequest(BaseModel):
+    project: str
+    agent: str
 
 
-@app.post("/api/workspace")
-def api_workspace_set(body: WorkspaceConfig):
-    import json as _j  # noqa: PLC0415
+@app.post("/api/agents/download-zip")
+def api_download_agent_zip(body: DownloadZipRequest):
+    """Stream a zip of the agent package for download."""
+    zip_bytes = _mcp_agent_zip(body.project, body.agent)
+    slug = body.agent.replace("#", "_")
+    return StreamingResponse(
+        iter([zip_bytes]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{slug}.zip"'},
+    )
 
-    _WORKSPACE_CFG.parent.mkdir(parents=True, exist_ok=True)
-    _WORKSPACE_CFG.write_text(_j.dumps({"target_dir": body.target_dir}, indent=2), encoding="utf-8")
-    return {"ok": True}
+
+@app.get("/api/agents/{agent_name}/forks")
+def api_agent_forks(agent_name: str):
+    """Return all KG forks of a base agent."""
+    try:
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+        kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+        forks = [
+            {"name": n, **{k: v for k, v in d.items() if k != "coaching_history"}}
+            for n, d in kg._g.nodes(data=True)
+            if d.get("parent") == agent_name
+        ]
+        return {"base": agent_name, "forks": forks}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@app.post("/api/agents/{agent_name}/promote")
-def api_agent_promote(agent_name: str, project: str = ""):
-    import json as _j  # noqa: PLC0415
-    import re as _re  # noqa: PLC0415
-    import shutil as _shutil  # noqa: PLC0415
+@app.post("/api/agents/{agent_name}/propagate")
+def api_agent_propagate(agent_name: str):
+    """Propagate coaching patches from a fork to its parent agent."""
+    try:
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
 
-    if not _WORKSPACE_CFG.exists():
-        raise HTTPException(
-            status_code=400, detail="No workspace configured. Set target_dir first."
-        )
-    target_dir = _Path(_j.loads(_WORKSPACE_CFG.read_text(encoding="utf-8")).get("target_dir", ""))
-    if not target_dir or not target_dir.exists():
-        raise HTTPException(status_code=400, detail=f"target_dir does not exist: {target_dir}")
+        kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+        parent = kg.propagate_to_parent(agent_name)
+        if parent is None:
+            raise HTTPException(
+                status_code=400, detail="Agent has no parent or parent not found in KG."
+            )
+        return {"ok": True, "fork": agent_name, "parent": parent}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    # Find agent source directory
-    slug = _re.sub(r"(?<!^)(?=[A-Z])", "-", agent_name).lower()
-    base = _Path.home() / ".atlas" / "projects"
-    agent_src = None
-    if project:
-        candidate = base / project / "agents" / slug
-        if candidate.exists():
-            agent_src = candidate
-    if not agent_src:
-        for p in base.iterdir() if base.exists() else []:
-            candidate = p / "agents" / slug
-            if candidate.exists():
-                agent_src = candidate
-                break
-    if not agent_src:
-        raise HTTPException(status_code=404, detail=f"Agent source not found for {agent_name}")
 
-    # Check score vs last promoted score in KG
+# ── MCP Server (HTTP Streamable, 2025 spec) ───────────────────────────────────
+#
+# Exposes three tools:
+#   list_projects         → list CDC projects known in the KG
+#   open_project(name)    → agents + tools in the project with descriptions
+#   download_agent(project, agent) → zip of the agent package
+#
+# Config for VSCode / Claude Code:
+#   { "mcpServers": { "atlas": { "url": "http://localhost:8050/mcp" } } }
+
+import json as _json  # noqa: E402
+
+
+def _mcp_kg() -> "KGStore":  # type: ignore[name-defined]
     from atlas_memory.kg import KGStore  # noqa: PLC0415
 
-    kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
-    node = kg._g.nodes.get(agent_name, {})
-    current_score = node.get("judge_score")
-    promoted_score = node.get("promoted_score")
+    return KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
 
-    if current_score is None:
-        raise HTTPException(
-            status_code=400, detail="Agent has no judge_score yet. Run and validate tests first."
-        )
-    if promoted_score is not None and current_score <= promoted_score:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Current score ({current_score:.1f}) is not better than last promoted score ({promoted_score:.1f}). No promotion.",
-        )
 
-    # Copy agent directory to target
-    dest = target_dir / slug
-    if dest.exists():
-        _shutil.rmtree(dest)
-    _shutil.copytree(str(agent_src), str(dest))
-
-    # Update KG with promotion metadata
-    import datetime as _dt  # noqa: PLC0415
-
-    kg._g.nodes[agent_name]["promoted_score"] = current_score
-    kg._g.nodes[agent_name]["promoted_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
-    kg._g.nodes[agent_name]["promoted_path"] = str(dest)
-    kg.save()
-
-    return {
-        "ok": True,
-        "agent": agent_name,
-        "score": current_score,
-        "dest": str(dest),
+def _mcp_list_projects() -> list[str]:
+    kg = _mcp_kg()
+    projects = {
+        d.get("project", "")
+        for _, d in kg._g.nodes(data=True)
+        if d.get("project")
     }
+    return sorted(projects)
+
+
+def _mcp_open_project(name: str) -> list[dict]:
+    kg = _mcp_kg()
+    return [
+        {
+            "name": n,
+            "node_type": d.get("node_type", "agent"),
+            "capabilities": d.get("capabilities", []),
+            "judge_score": d.get("judge_score"),
+            "human_score": d.get("human_score"),
+            "parent": d.get("parent"),
+            "context_tags": d.get("context_tags", []),
+        }
+        for n, d in kg._g.nodes(data=True)
+        if d.get("project") == name and d.get("node_type") in ("agent", "tool")
+    ]
+
+
+def _mcp_agent_zip(project: str, agent: str) -> bytes:
+    """Return a zip of the installed agent package, or raise HTTPException."""
+    workspace_dir = _Path.home() / ".atlas" / "workspace"
+    slug = agent.replace("#", "_")
+    agent_dir = workspace_dir / slug
+    if not agent_dir.exists():
+        # Fallback: search by project slug
+        project_slug = project.replace(" ", "_").lower()
+        agent_dir = workspace_dir / project_slug / slug
+    if not agent_dir.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent package not found for '{agent}' in project '{project}'. Run 'atlas install' first.",
+        )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in agent_dir.rglob("*"):
+            if f.is_file() and "__pycache__" not in f.parts:
+                zf.write(f, f.relative_to(agent_dir.parent))
+    return buf.getvalue()
+
+
+_MCP_TOOLS = [
+    {
+        "name": "list_projects",
+        "description": "List all CDC projects available in the ATLAS Knowledge Graph.",
+        "inputSchema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "open_project",
+        "description": "List all agents and tools in a given ATLAS project with their descriptions and scores.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "Project name"}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "download_agent",
+        "description": "Download the zip package of a scaffolded agent from an ATLAS project.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name"},
+                "agent": {"type": "string", "description": "Agent name (as shown in open_project)"},
+            },
+            "required": ["project", "agent"],
+        },
+    },
+]
+
+
+@app.post("/mcp")
+async def mcp_endpoint(request: Request):
+    """MCP HTTP Streamable endpoint."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    method = body.get("method", "")
+    req_id = body.get("id")
+
+    def _ok(result: object) -> dict:
+        return {"jsonrpc": "2.0", "id": req_id, "result": result}
+
+    def _err(code: int, message: str) -> dict:
+        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+
+    if method == "initialize":
+        return _ok({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "atlas-mcp", "version": "0.1.0"},
+        })
+
+    if method == "tools/list":
+        return _ok({"tools": _MCP_TOOLS})
+
+    if method == "tools/call":
+        params = body.get("params", {})
+        tool_name = params.get("name", "")
+        args = params.get("arguments", {})
+
+        try:
+            if tool_name == "list_projects":
+                projects = _mcp_list_projects()
+                text = _json.dumps(projects, ensure_ascii=False, indent=2)
+                return _ok({"content": [{"type": "text", "text": text}]})
+
+            if tool_name == "open_project":
+                name = args.get("name", "")
+                items = _mcp_open_project(name)
+                text = _json.dumps(items, ensure_ascii=False, indent=2)
+                return _ok({"content": [{"type": "text", "text": text}]})
+
+            if tool_name == "download_agent":
+                project = args.get("project", "")
+                agent = args.get("agent", "")
+                zip_bytes = _mcp_agent_zip(project, agent)
+                import base64  # noqa: PLC0415
+                b64 = base64.b64encode(zip_bytes).decode()
+                return _ok({
+                    "content": [
+                        {"type": "text", "text": f"Agent '{agent}' zip (base64):"},
+                        {"type": "text", "text": b64},
+                    ]
+                })
+
+            return _err(-32601, f"Unknown tool: {tool_name}")
+        except HTTPException as exc:
+            return _err(-32603, exc.detail)
+        except Exception as exc:  # noqa: BLE001
+            return _err(-32603, str(exc))
+
+    return _err(-32601, f"Unknown method: {method}")
 
 
 @app.get("/", response_class=HTMLResponse)

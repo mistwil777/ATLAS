@@ -36,6 +36,7 @@ class KGStore:
         cdc_summary: str = "",
         context_tags: list[str] | None = None,
         output_type: str = "json",
+        parent: str | None = None,
     ) -> None:
         existing = dict(self._g.nodes.get(name, {}))
         attrs: dict = {
@@ -58,8 +59,74 @@ class KGStore:
         }
         if judge_score is not None:
             attrs["judge_score"] = judge_score
+        if parent is not None:
+            attrs["parent"] = parent
+        elif existing.get("parent"):
+            attrs["parent"] = existing["parent"]
         self._g.add_node(name, **attrs)
         self.save()
+
+    def fork_agent(self, base_name: str, context: str) -> str:
+        """Create a context-specific fork of base_name. Returns the fork name.
+
+        The fork inherits base capabilities/tags/cdc_summary but starts with
+        a clean score history. A FORKED_FROM edge links fork → base.
+        """
+        fork_name = f"{base_name}#{context}"
+        if fork_name in self._g:
+            return fork_name
+
+        base = dict(self._g.nodes.get(base_name, {}))
+        attrs: dict = {
+            "node_type": base.get("node_type", "agent"),
+            "capabilities": list(base.get("capabilities", [])),
+            "inputs": list(base.get("inputs", [])),
+            "outputs": list(base.get("outputs", [])),
+            "tags": list(base.get("tags", [])),
+            "shareable": base.get("shareable", True),
+            "confidence": base.get("confidence", 1.0),
+            "project": context,
+            "cdc_summary": base.get("cdc_summary", ""),
+            "context_tags": [],
+            "output_type": base.get("output_type", "json"),
+            "score_history": [],
+            "coaching_history": [],
+            "parent": base_name,
+        }
+        if base.get("judge_score") is not None:
+            attrs["judge_score"] = base["judge_score"]
+
+        self._g.add_node(fork_name, **attrs)
+        self._g.add_edge(fork_name, base_name, relation="FORKED_FROM")
+        self.save()
+        return fork_name
+
+    def propagate_to_parent(self, fork_name: str) -> str | None:
+        """Copy coaching_history patches from fork to its parent. Returns parent name or None."""
+        fork = self._g.nodes.get(fork_name)
+        if not fork:
+            return None
+        parent_name: str | None = fork.get("parent")
+        if not parent_name or parent_name not in self._g:
+            return None
+        parent = self._g.nodes[parent_name]
+        fork_patches = fork.get("coaching_history", [])
+        parent_patches = parent.get("coaching_history", [])
+        existing_descs = {p.get("patch") for p in parent_patches}
+        for patch in fork_patches:
+            if patch.get("patch") not in existing_descs:
+                parent_patches.append(patch)
+        parent["coaching_history"] = parent_patches
+        self.save()
+        return parent_name
+
+    def needs_fork(self, name: str, context_tags: list[str]) -> bool:
+        """True if agent exists but was created for a different context."""
+        if name not in self._g:
+            return False
+        existing_tags = set(self._g.nodes[name].get("context_tags", []))
+        incoming_tags = set(context_tags or [])
+        return bool(existing_tags) and bool(incoming_tags) and existing_tags != incoming_tags
 
     def update_agent_score(self, name: str, judge_score: float, run_id: str) -> None:
         """Record a new judge score and update confidence = judge_score / 5.0."""

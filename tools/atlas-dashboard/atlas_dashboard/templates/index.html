@@ -337,21 +337,13 @@
 </details>
 
 <div class="toolbar">
+  <button id="btn-all" onclick="showTabRuns(); loadRuns(false)">All runs</button>
   <button id="btn-tests" onclick="showTabTests()">Tests</button>
+  <button id="btn-folders" onclick="showTabFolders()">Folders</button>
   <button id="btn-kg" onclick="showTabKG()">Knowledge Graph</button>
   <button id="btn-trend" onclick="showTabTrend()">Trends</button>
-  <button id="btn-all" onclick="showTabRuns(); loadRuns(false)">All runs</button>
   <button onclick="openNewCdcModal()" style="margin-left:auto;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">+ New CDC</button>
   <button onclick="bulkDeleteSkipped()" style="border-color:var(--red);color:var(--red)" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
-  <button onclick="_toggleWorkspacePanel()" id="btn-workspace" style="border-color:var(--violet);color:var(--violet)" title="Configure export directory">⬡ Workspace</button>
-</div>
-
-<!-- ── Workspace panel ─────────────────────────────────────────────────── -->
-<div id="workspace-panel" style="display:none;background:#0d0d1a;border-bottom:1px solid #1a1a2e;padding:10px 24px;align-items:center;gap:12px">
-  <span style="font-size:12px;color:var(--ink-dim);white-space:nowrap">Export agents to:</span>
-  <input id="workspace-target-input" type="text" placeholder="/path/to/your/project/src/agents" style="flex:1;background:#12121f;border:1px solid #333;border-radius:4px;padding:5px 10px;color:#fff;font-size:12px;font-family:monospace">
-  <button onclick="_saveWorkspace()" style="font-size:12px;padding:4px 14px;background:var(--violet);color:#fff;border:none;border-radius:4px;cursor:pointer">Save</button>
-  <span id="workspace-status" style="font-size:11px;color:var(--ink-dim)"></span>
 </div>
 
 <!-- ── Modale Nouveau CDC ───────────────────────────────────────────────── -->
@@ -417,7 +409,7 @@
 
 <div id="trend-panel">
   <div class="trend-toolbar">
-    <h2>Trends — agent progression</h2>
+    <h2>Trends — agent progression <span style="display:inline-block;position:relative;cursor:default" onmouseenter="document.getElementById('trends-info').style.display='block'" onmouseleave="document.getElementById('trends-info').style.display='none'"><span style="font-size:11px;color:var(--ink-dim);border:1px solid var(--border);border-radius:50%;padding:1px 5px;vertical-align:middle">?</span><div id="trends-info" style="display:none;position:absolute;top:24px;left:0;z-index:99;background:#1a1a2e;border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:11px;color:var(--ink);width:280px;line-height:1.6;font-weight:normal"><strong>Score affiché (axe Y)</strong> : score donné par le <em>juge LLM</em> après chaque tentative de scaffold (0–5).<br><strong>R1, R2…</strong> : chaque point = une tentative de scaffold ou re-scaffold.<br><strong>CR</strong> : tentative suite à un correctif manuel (CR retry).<br><strong>Ligne pointillée</strong> : seuil de qualité à 4/5.<br><br>Ce score est distinct du score de validation humaine affiché dans le Knowledge Graph.</div></span></h2>
     <select class="trend-select" id="trend-agent-select" onchange="loadTrend(this.value)">
       <option value="">— Choisir un agent —</option>
     </select>
@@ -501,6 +493,15 @@
 
   <h3 style="margin:0 0 16px;color:var(--ink-dim);font-size:14px">History</h3>
   <div id="test-history-area"><div style="color:var(--ink-dim);font-size:13px">No test runs yet.</div></div>
+</div>
+
+<!-- ── Folders panel ────────────────────────────────────────────────────── -->
+<div id="folders-panel" style="display:none;padding:24px;max-width:1000px;margin:0 auto">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+    <h2 style="margin:0">Folders — projets CDC</h2>
+    <button class="btn-refresh-kg" onclick="loadFolders()">Refresh</button>
+  </div>
+  <div id="folders-list"><div style="color:var(--ink-dim);font-size:13px">Chargement…</div></div>
 </div>
 
 <script>
@@ -1063,15 +1064,10 @@
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
               ${judgeScore !== null && judgeScore < 5
                 ? `<input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:#0d1117;border:1px solid #2a3040;border-radius:4px;color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
-                  <label title="Joindre des documents" style="cursor:pointer;padding:3px 7px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px">
-                    <span id="ingest-label-${agent}">📎</span>
-                    <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎'+this.files.length:'📎'">
-                  </label>
                   <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--yellow);color:var(--yellow)">Re-scaffold</button>`
                 : ''
               }
               <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
-              <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
             </div>
           </div>
           <div class="card-body" style="width:100%">
@@ -1120,12 +1116,7 @@
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
               <input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:#0d1117;border:1px solid #2a3040;border-radius:4px;color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
-              <label title="Joindre des documents" style="cursor:pointer;padding:3px 7px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px">
-                <span id="ingest-label-${agent}">📎</span>
-                <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎'+this.files.length:'📎'">
-              </label>
               <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--ink-dim);color:var(--ink-dim);font-size:11px">Re-scaffold</button>
-              <a class="btn-download" href="/api/runs/${run.run_id}/agents/${agent}/download" download="${agent}.zip">Download</a>
             </div>
           </div>
           ${iAllFiles.length ? `<div class="card-body" style="width:100%">
@@ -1565,10 +1556,74 @@
     document.getElementById('kg-panel').style.display = 'none';
     document.getElementById('trend-panel').style.display = 'none';
     document.getElementById('tests-panel').style.display = 'none';
-    ['btn-all', 'btn-kg', 'btn-trend', 'btn-tests'].forEach(id => {
+    document.getElementById('folders-panel').style.display = 'none';
+    ['btn-all', 'btn-kg', 'btn-trend', 'btn-tests', 'btn-folders'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('active');
     });
+  }
+
+  function showTabFolders() {
+    _hideAllPanels();
+    document.getElementById('folders-panel').style.display = 'block';
+    document.getElementById('btn-folders').classList.add('active');
+    loadFolders();
+    _saveTab('folders');
+  }
+
+  async function loadFolders() {
+    const el = document.getElementById('folders-list');
+    el.innerHTML = '<div style="color:var(--ink-dim);font-size:13px">Chargement…</div>';
+    const data = await fetch('/api/folders').then(r => r.json()).catch(() => ({ projects: [] }));
+    if (!data.projects || data.projects.length === 0) {
+      el.innerHTML = '<div style="color:var(--ink-dim);font-size:13px">Aucun projet trouvé. Lancez un run avec atlas run --cdc pour créer un projet.</div>';
+      return;
+    }
+    el.innerHTML = data.projects.map(p => `
+      <div style="margin-bottom:24px;border:1px solid #1a1a2e;border-radius:8px;overflow:hidden">
+        <div style="background:#0d0d1a;padding:12px 16px;display:flex;align-items:center;gap:12px">
+          <span style="font-weight:600;font-size:14px;color:var(--blue);flex:1">${escHtml(p.name)}</span>
+          <span style="font-size:11px;color:var(--ink-dim)">${p.agents.length} agent${p.agents.length > 1 ? 's' : ''} · ${p.tools.length} tool${p.tools.length !== 1 ? 's' : ''}</span>
+          <button onclick="_copyMcpConfig('${escHtml(p.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--aqua);color:var(--aqua);border-radius:4px;cursor:pointer">Copier config MCP</button>
+        </div>
+        <div style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px">
+          ${[...p.agents, ...p.tools].map(n => `
+            <div style="background:#12121f;border:1px solid #222;border-radius:6px;padding:8px 12px;min-width:180px;flex:1;max-width:280px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:${n.node_type === 'tool' ? '#2a1f00' : '#1e1540'};color:${n.node_type === 'tool' ? 'var(--yellow)' : 'var(--violet)'}">${n.node_type}</span>
+                <span style="font-size:12px;font-weight:600;color:var(--ink)">${escHtml(n.name)}</span>
+                ${n.parent ? `<span style="font-size:10px;color:var(--aqua)" title="Fork de ${escHtml(n.parent)}">fork</span>` : ''}
+              </div>
+              <div style="font-size:11px;color:var(--ink-dim);margin-bottom:6px">${n.human_score != null ? `H: ${n.human_score.toFixed(1)}/5` : n.judge_score != null ? `J: ${n.judge_score.toFixed(1)}/5` : '—'}</div>
+              <button onclick="_downloadAgentZip('${escHtml(p.name)}','${escHtml(n.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--blue);color:var(--blue);border-radius:4px;cursor:pointer;width:100%">Télécharger zip</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function _copyMcpConfig(projectName) {
+    const config = JSON.stringify({
+      mcpServers: { atlas: { url: `${location.origin}/mcp` } }
+    }, null, 2);
+    navigator.clipboard.writeText(config).then(() => {
+      alert(`Config MCP copiée !\n\nAjoutez ceci dans .vscode/mcp.json ou votre config Claude Code :\n${config}`);
+    }).catch(() => alert(config));
+  }
+
+  async function _downloadAgentZip(project, agent) {
+    const res = await fetch('/api/agents/download-zip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project, agent }),
+    }).catch(() => null);
+    if (!res || !res.ok) { alert('Zip non disponible — vérifiez que l\'agent a été installé (atlas install).'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${agent.replace('#','_')}.zip`; a.click();
+    URL.revokeObjectURL(url);
   }
 
   function _saveTab(name) { try { localStorage.setItem('atlas_tab', name); } catch(_) {} }
@@ -1646,7 +1701,8 @@
       const size       = (isTool ? 22 : 30) + degree * 4;
       const conf       = n.confidence ?? 1.0;
       const borderWidth = 2 + Math.round(conf * 2);
-      const scoreLabel = n.judge_score != null ? `\n${n.judge_score.toFixed(1)}/5` : '';
+      const displayScore = n.human_score != null ? n.human_score : n.judge_score;
+      const scoreLabel = displayScore != null ? `\n${displayScore.toFixed(1)}/5` : '';
       // Use solid visible colors — node fill must contrast the #0d0d14 canvas
       const bgColor  = isTool ? '#2a1f00' : '#1e1540';
       const bdColor  = isTool ? '#e8a600' : '#9085e9';
@@ -1680,15 +1736,18 @@
         el.textContent = `${e.from}  →  ${e.to}\n${e.relation || ''}`;
         el.style.whiteSpace = 'pre';
         const isPipeline = e.relation === 'PIPELINE_MEMBER';
+        const isForked = e.relation === 'FORKED_FROM';
         return {
           from: e.from, to: e.to,
           title: el,
           arrows: { to: { enabled: true, scaleFactor: 0.7 } },
           color: isPipeline
             ? { color: '#4a2d7a', highlight: '#9085e9', hover: '#9085e9', opacity: 0.7 }
+            : isForked
+            ? { color: '#1baf7a', highlight: '#1baf7a', hover: '#1baf7a', opacity: 0.6 }
             : { color: '#2d4a7a', highlight: '#3987e5', hover: '#3987e5', opacity: 0.8 },
-          dashes: isPipeline,
-          width: isPipeline ? 1 : 1.5,
+          dashes: isPipeline || isForked,
+          width: isPipeline ? 1 : isForked ? 1 : 1.5,
           smooth: { type: isPipeline ? 'curvedCCW' : 'curvedCW', roundness: 0.2 },
           hoverWidth: 3,
           selectionWidth: 3,
@@ -1791,6 +1850,7 @@
       <div style="font-weight:bold;font-size:13px;color:${typeColor};margin-bottom:8px;word-break:break-word">${n.id}</div>
       <div style="display:grid;grid-template-columns:auto auto;gap:2px 16px;color:#a0a0c0">
         <span style="color:#5a5a7a">type</span><span>${n.node_type}</span>
+        ${n.parent ? `<span style="color:#1baf7a">fork of</span><span style="color:#1baf7a;cursor:pointer;text-decoration:underline" onclick="selectKGNode('${n.parent}')">${n.parent}</span>` : ''}
         <span style="color:#5a5a7a">project</span><span style="color:#3987e5">${proj}</span>
         <span style="color:#5a5a7a">context</span><span style="font-size:10px;color:#8a8aa0">${cdcSummary}</span>
         <span style="color:#5a5a7a">judge score</span><span style="color:${scoreColor}">${score} <span style="font-size:9px;color:#5a5a7a">(LLM)</span></span>
@@ -1800,10 +1860,9 @@
         <span style="color:#5a5a7a">score trend</span><span>${trend}</span>
         <span style="color:#5a5a7a">context tags</span><span style="font-size:10px">${ctags}</span>
         <span style="color:#5a5a7a">capabilities</span><span>${caps}</span>
-        ${n.promoted_score != null ? `<span style="color:#5a5a7a">promoted</span><span style="color:#9085e9">${n.promoted_score.toFixed(1)}/5 → ${(n.promoted_path||'').split('/').slice(-2).join('/')}</span>` : ''}
       </div>
-      ${n.node_type === 'agent' ? `<div style="margin-top:10px;border-top:1px solid #1a1a2e;padding-top:8px">
-        ${_promoteButtonHtml(n)}
+      ${n.node_type === 'agent' && n.parent ? `<div style="margin-top:10px;border-top:1px solid #1a1a2e;padding-top:8px">
+        ${_propagateButtonHtml(n)}
       </div>` : ''}
       <button onclick="_closeKgPanel()" style="position:absolute;top:6px;right:8px;background:none;border:none;color:#5a5a7a;cursor:pointer;font-size:14px;line-height:1" title="Close">×</button>`;
     el.style.position = 'relative';
@@ -1819,47 +1878,27 @@
     alert(`✓ Score recalculé : ${d.score.toFixed(2)}/5 (${d.valid}/${d.total} valides)`);
   }
 
-  // ── Workspace / Promote ──────────────────────────────────────
 
-  async function _toggleWorkspacePanel() {
-    const panel = document.getElementById('workspace-panel');
-    const visible = panel.style.display === 'flex';
-    panel.style.display = visible ? 'none' : 'flex';
-    if (!visible) {
-      const cfg = await fetch('/api/workspace').then(r => r.json()).catch(() => ({}));
-      document.getElementById('workspace-target-input').value = cfg.target_dir || '';
-    }
+  function _propagateButtonHtml(n) {
+    if (!n.parent) return '';
+    return `<button onclick="_propagateToParent('${escHtml(n.id)}')" style="font-size:11px;padding:4px 12px;background:#0d2a1f;color:#1baf7a;border:1px solid #1baf7a;border-radius:4px;cursor:pointer;width:100%;margin-top:6px">↑ Propager les améliorations vers ${escHtml(n.parent)}</button>`;
   }
 
-  async function _saveWorkspace() {
-    const target_dir = document.getElementById('workspace-target-input').value.trim();
-    const status = document.getElementById('workspace-status');
-    const res = await fetch('/api/workspace', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target_dir }),
-    }).catch(() => null);
-    status.textContent = res?.ok ? '✓ Saved' : '✗ Error';
-    setTimeout(() => { status.textContent = ''; }, 2000);
-  }
-
-  function _promoteButtonHtml(n) {
-    if (!n.judge_score) return `<span style="font-size:11px;color:var(--ink-dim)">No score yet — run tests first</span>`;
-    const canPromote = n.promoted_score == null || n.judge_score > n.promoted_score;
-    const label = n.promoted_score == null ? '⬆ Promote to workspace' : `⬆ Re-promote (${n.judge_score.toFixed(1)} > ${n.promoted_score.toFixed(1)})`;
-    if (canPromote) {
-      return `<button onclick="_promoteAgent('${escHtml(n.id)}','${escHtml(n.project||'')}')" style="font-size:11px;padding:4px 12px;background:var(--violet);color:#fff;border:none;border-radius:4px;cursor:pointer;width:100%">${label}</button>`;
-    }
-    return `<span style="font-size:11px;color:var(--ink-dim)">Already promoted at best score (${n.promoted_score.toFixed(1)}/5)</span>`;
-  }
-
-  async function _promoteAgent(agentName, project) {
-    const res = await fetch(`/api/agents/${encodeURIComponent(agentName)}/promote?project=${encodeURIComponent(project)}`, { method: 'POST' }).catch(() => null);
+  async function _propagateToParent(agentName) {
+    const res = await fetch(`/api/agents/${encodeURIComponent(agentName)}/propagate`, { method: 'POST' }).catch(() => null);
     if (!res) { alert('Network error'); return; }
     const data = await res.json();
-    if (!res.ok) { alert(data.detail || 'Promote failed'); return; }
-    alert(`✓ ${agentName} promoted to ${data.dest}\nScore: ${data.score.toFixed(1)}/5`);
+    if (!res.ok) { alert(data.detail || 'Propagation failed'); return; }
+    alert(`✓ Améliorations propagées vers ${data.parent}`);
     loadKG();
+  }
+
+  function selectKGNode(nodeId) {
+    if (!_visNetwork) return;
+    _visNetwork.selectNodes([nodeId]);
+    _visNetwork.focus(nodeId, { scale: 1.2, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+    const node = (_kgData.nodes || []).find(n => n.id === nodeId);
+    if (node) _showKgPanel(node);
   }
 
   // ── Trend tab ────────────────────────────────────────────────
@@ -3295,6 +3334,7 @@
     if (tab === 'kg') { showTabKG(); }
     else if (tab === 'trend') { showTabTrend(); }
     else if (tab === 'runs') { loadRuns(false); }
+    else if (tab === 'folders') { showTabFolders(); }
     else { showTabTests(); }
   })();
 </script>

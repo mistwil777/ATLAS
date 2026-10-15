@@ -11,11 +11,10 @@ def main() -> None:
         print("Usage: atlas-coherence <blocs.json>", file=sys.stderr)
         sys.exit(1)
 
-    blocs = json.loads(open(sys.argv[1]).read())  # noqa: PTH123, SIM115
-    if isinstance(blocs, dict) and "blocs" in blocs:
-        blocs = blocs["blocs"]
+    raw: list[dict] | dict = json.loads(open(sys.argv[1]).read())  # noqa: PTH123, SIM115
+    blocs: list[dict] = raw["blocs"] if isinstance(raw, dict) else raw  # type: ignore[assignment]
 
-    def _llm_fn(prompt: str, cfg: dict, max_tokens: int = 2048) -> str | None:
+    def _llm_fn(*_: object) -> str | None:
         print("LLM not configured — set up a provider to use atlas-coherence CLI", file=sys.stderr)
         return None
 

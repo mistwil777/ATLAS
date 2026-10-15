@@ -161,6 +161,7 @@ class AtlasMemoryAgent:
         cdc_summary: str = "",
         context_tags: list | None = None,
         output_type: str = "json",
+        parent: str | None = None,
         **_: object,
     ) -> dict:
         self._get_kg().register_agent(
@@ -177,6 +178,7 @@ class AtlasMemoryAgent:
             cdc_summary=cdc_summary,
             context_tags=context_tags or [],
             output_type=output_type,
+            parent=parent,
         )
         return {"registered": name}
 
