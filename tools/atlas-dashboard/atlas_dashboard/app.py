@@ -796,6 +796,7 @@ def _build_trend_points_from_scaffold(agent: str, runs: list[dict]) -> list[dict
                 "created_at": run.get("created_at", ""),
                 "avg_score": avg,
                 "cause": cause,
+                "source": "scaffold",
                 "criteria": crit_delta,
                 "feedback": judge_feedback,
                 "patches_applied": selected_patches,
@@ -885,6 +886,7 @@ def _build_trend_points_per_attempt(agent: str, runs: list[dict]) -> list[dict]:
                 "created_at": entry.get("timestamp") or run.get("created_at", ""),
                 "avg_score": avg,
                 "cause": cause,
+                "source": "scaffold",
                 "criteria": crit_delta,
                 "feedback": feedback,
                 "patches_applied": patches,
@@ -905,40 +907,36 @@ def _has_scores(points: list[dict]) -> bool:
 
 
 def _build_trend_points_from_test_runs(agent: str) -> list[dict]:
-    """Build trend points from test validation runs, one point per batch/session."""
-    import json as _json  # noqa: PLC0415
+    """Build trend points from KG score_history entries with source='test'."""
+    try:
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
 
-    if not _TEST_RUNS_DIR.exists():
+        kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+        node = kg._g.nodes.get(agent, {})
+        history = node.get("score_history", [])
+    except Exception:  # noqa: BLE001
         return []
-    test_runs = sorted(
-        [_json.loads(f.read_text(encoding="utf-8")) for f in _TEST_RUNS_DIR.glob("*.json")],
-        key=lambda r: r.get("created_at", ""),
-    )
-    # Group by batch_id or project+minute heuristic
-    from collections import defaultdict  # noqa: PLC0415
 
-    groups: dict[str, list[dict]] = defaultdict(list)
-    for run in test_runs:
-        v = run.get("validations", {}).get(agent, {})
-        if v.get("skipped") or "valid" not in v:
-            continue
-        key = run.get("batch_id") or f"{run.get('project','')}_{(run.get('created_at',''))[:16]}"
-        groups[key].append(run)
+    test_entries = sorted(
+        [h for h in history if h.get("source") == "test"],
+        key=lambda h: h.get("timestamp", ""),
+    )
+    if not test_entries:
+        return []
 
     points = []
     prev_score = None
-    for key in sorted(groups.keys()):
-        batch = groups[key]
-        valid = sum(1 for r in batch if r.get("validations", {}).get(agent, {}).get("valid"))
-        total = len(batch)
-        avg = round((valid / total) * 5.0, 2) if total else None
-        created_at = batch[0].get("created_at", "")
-        delta = round(avg - prev_score, 2) if avg is not None and prev_score is not None else None
+    for entry in test_entries:
+        avg = entry.get("score")
+        if avg is None:
+            continue
+        delta = round(avg - prev_score, 2) if prev_score is not None else None
         pt: dict = {
-            "run_id": key,
-            "created_at": created_at,
-            "avg_score": avg,
-            "cause": "test_validation",
+            "run_id": entry.get("run_id", ""),
+            "created_at": entry.get("timestamp", ""),
+            "avg_score": round(avg, 2),
+            "cause": "test_execution",
+            "source": "test",
             "criteria": [],
             "feedback": "",
             "patches_applied": [],
