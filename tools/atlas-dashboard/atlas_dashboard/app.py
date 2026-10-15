@@ -2855,6 +2855,89 @@ def api_run_test(run_id: str, agent_name: str, body: RunTestRequest):
     }
 
 
+class JudgeTestRequest(BaseModel):
+    agent_name: str
+    input: dict
+    output: str
+    run_id: str = ""
+
+
+@app.post("/api/runs/{run_id}/agents/{agent_name}/judge-test")
+def api_judge_test(run_id: str, agent_name: str, body: JudgeTestRequest):
+    """Judge the real output of an agent against its input. Stores score with source='test'."""
+    import json as _json  # noqa: PLC0415
+    import logging  # noqa: PLC0415
+
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if not body.output:
+        raise HTTPException(status_code=400, detail="output is required")
+
+    cdc_full = run.get("metadata", {}).get(
+        "cdc_full", run.get("metadata", {}).get("cdc_preview", "")
+    )
+    criteria = _get_agent_criteria(agent_name)
+
+    # Build context: input data + CDC excerpt so judge has full picture
+    input_str = _json.dumps(body.input, ensure_ascii=False, indent=2)
+    context = f"Input:\n{input_str}\n\nCDC (excerpt):\n{cdc_full[:1500]}"
+
+    try:
+        from atlas_judge.agent import AtlasJudgeAgent  # noqa: PLC0415
+        from atlas_memory.kg import KGStore  # noqa: PLC0415
+
+        llm_fn, llm_cfg = _llm_fn_for_dashboard()
+        judge = AtlasJudgeAgent(config={"llm": llm_cfg}, llm_fn=llm_fn)
+        events = list(
+            judge.run(
+                operation="pointwise",
+                output=body.output,
+                agent_name=agent_name,
+                context=context,
+                criteria=criteria or None,
+            )
+        )
+        summary = next((e for e in events if e.get("summary")), None)
+        if not summary:
+            raise HTTPException(status_code=500, detail="Judge returned no summary")
+
+        criteria_scores = summary.get("criteria_scores", [])
+        feedback = summary.get("feedback", "")
+        score_val = summary.get("score")
+        if score_val is None and criteria_scores:
+            scores = [
+                c.get("score", 0)
+                for c in criteria_scores
+                if isinstance(c.get("score"), int | float)
+            ]
+            score_val = round(sum(scores) / len(scores), 2) if scores else None
+
+        test_run_id = body.run_id or run_id
+        if score_val is not None:
+            kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
+            if agent_name in kg._g:
+                kg.update_agent_score(agent_name, score_val, run_id=test_run_id, source="test")
+
+        return {
+            "ok": True,
+            "agent": agent_name,
+            "judge_score": score_val,
+            "judge_criteria": criteria_scores,
+            "judge_feedback": feedback,
+            "source": "test",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "judge-test failed for %s: %s", agent_name, exc
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 # ── UI ─────────────────────────────────────────────────────────────────────────
 
 
