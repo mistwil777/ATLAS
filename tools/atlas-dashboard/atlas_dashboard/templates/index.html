@@ -430,7 +430,10 @@
       <input type="text" id="adv-custom-input" placeholder="Ajouter une action personnalisée…" class="adv-custom-field" oninput="updateValidateBtn()" />
     </div>
     <div id="adv-block-reason" style="display:none;font-size:11px;color:var(--yellow);padding:6px 0;line-height:1.5"></div>
-    <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Validate and launch scaffold</button>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Validate and launch scaffold</button>
+      <button id="adv-retest-btn" onclick="_advisorRunTest()" style="font-size:12px;padding:6px 16px;border:1px solid var(--blue);color:var(--blue);border-radius:4px;background:none;cursor:pointer;display:none">Relancer test</button>
+    </div>
   </div>
 </div>
 
@@ -2136,6 +2139,8 @@
   document.getElementById('trend-agent-select').addEventListener('change', function() {
     document.getElementById('btn-analyze').style.display = this.value ? '' : 'none';
     document.getElementById('advisor-panel').style.display = 'none';
+    const retestBtn = document.getElementById('adv-retest-btn');
+    if (retestBtn) retestBtn.style.display = 'none';
     _lastRunId = null;
   });
 
@@ -2210,6 +2215,10 @@
     }
 
     panel.dataset.actions = JSON.stringify(data.suggested_actions || []);
+
+    // Show "Relancer test" button — always available after analysis
+    const retestBtn = document.getElementById('adv-retest-btn');
+    if (retestBtn && _lastRunId) retestBtn.style.display = '';
   }
 
   function updateValidateBtn() {
@@ -2283,6 +2292,12 @@
       btn.textContent = 'Validate and launch scaffold';
       btn.disabled = false;
     }
+  }
+
+  function _advisorRunTest() {
+    const agent = document.getElementById('trend-agent-select').value;
+    if (!agent || !_lastRunId) { alert('Aucun run disponible pour tester cet agent.'); return; }
+    openTestAgentPanel(_lastRunId, agent);
   }
 
   // ── Tests tab ─────────────────────────────────────────────────────────────────
