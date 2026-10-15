@@ -2721,6 +2721,83 @@ def api_download_agent(run_id: str, agent_name: str):
     )
 
 
+# ── Test in-dashboard ──────────────────────────────────────────────────────────
+
+
+_TEST_INPUTS_PROMPT = """\
+You are helping test an AI agent. Given a CDC (cahier des charges) excerpt that describes \
+what this agent does, generate {n} realistic test input examples.
+
+Agent: {agent_name}
+CDC excerpt:
+{cdc_excerpt}
+
+Return ONLY a JSON array of {n} objects. Each object must represent one realistic input \
+that a caller would pass to this agent. Use field names that match the agent's expected \
+inputs as described in the CDC. No explanation, no markdown, just the JSON array.
+"""
+
+
+@app.get("/api/runs/{run_id}/agents/{agent_name}/test-inputs")
+def api_generate_test_inputs(run_id: str, agent_name: str, n: int = 2):
+    """Generate n realistic test input examples from the CDC for this agent."""
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    cdc_full = run.get("metadata", {}).get(
+        "cdc_full", run.get("metadata", {}).get("cdc_preview", "")
+    )
+    if not cdc_full:
+        raise HTTPException(status_code=400, detail="No CDC found for this run")
+
+    # Extract the bloc relevant to this agent if possible
+    blocs = run.get("blocs", [])
+    agent_bloc = next(
+        (b for b in blocs if b.get("name") == agent_name or b.get("agent") == agent_name),
+        None,
+    )
+    cdc_excerpt = (
+        agent_bloc.get("description", "") or agent_bloc.get("cdc_summary", "") or cdc_full[:2000]
+        if agent_bloc
+        else cdc_full[:2000]
+    )
+
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+    prompt = _TEST_INPUTS_PROMPT.format(
+        agent_name=agent_name,
+        cdc_excerpt=cdc_excerpt,
+        n=max(1, min(n, 5)),
+    )
+
+    import json as _json  # noqa: PLC0415
+    import logging  # noqa: PLC0415
+
+    raw = llm_fn(prompt, llm_cfg, 1024)
+    if not raw:
+        raise HTTPException(status_code=502, detail="LLM returned empty response")
+
+    # Strip markdown code fences if present
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[: cleaned.rfind("```")]
+
+    try:
+        examples = _json.loads(cleaned)
+        if not isinstance(examples, list):
+            examples = [examples]
+    except _json.JSONDecodeError as exc:
+        logging.getLogger("atlas_dashboard").warning(
+            "test-inputs JSON parse error for %s: %s — raw: %s", agent_name, exc, raw[:200]
+        )
+        raise HTTPException(status_code=502, detail=f"LLM returned invalid JSON: {exc}") from exc
+
+    return {"agent": agent_name, "inputs": examples}
+
+
 # ── UI ─────────────────────────────────────────────────────────────────────────
 
 
