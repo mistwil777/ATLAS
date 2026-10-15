@@ -2732,9 +2732,14 @@ Agent: {agent_name}
 CDC excerpt:
 {cdc_excerpt}
 
-Return ONLY a JSON array of {n} objects. Each object must represent one realistic input \
-that a caller would pass to this agent. Use field names that match the agent's expected \
-inputs as described in the CDC. No explanation, no markdown, just the JSON array.
+All ATLAS agents accept exactly two inputs:
+- "cdc_bloc": a string containing the realistic input data for this agent (e.g. a ticket, \
+a document excerpt, a structured text). This is the main payload.
+- "context": an optional string with additional context (can be empty string).
+
+Return ONLY a JSON array of {n} objects, each with keys "cdc_bloc" and "context". \
+The "cdc_bloc" value must be a realistic, domain-specific input string based on the CDC. \
+No explanation, no markdown, just the JSON array.
 """
 
 
@@ -2796,6 +2801,58 @@ def api_generate_test_inputs(run_id: str, agent_name: str, n: int = 2):
         raise HTTPException(status_code=502, detail=f"LLM returned invalid JSON: {exc}") from exc
 
     return {"agent": agent_name, "inputs": examples}
+
+
+class RunTestRequest(BaseModel):
+    inputs: dict
+    test_id: str = ""
+
+
+@app.post("/api/runs/{run_id}/agents/{agent_name}/run-test")
+def api_run_test(run_id: str, agent_name: str, body: RunTestRequest):
+    """Execute agent_name via atlas-bus with the given inputs. Returns the real output."""
+    import logging  # noqa: PLC0415
+
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    scaffolded = run.get("scaffolded", {}).get(agent_name)
+    if not scaffolded:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Agent '{agent_name}' not scaffolded yet. Run scaffold first.",
+        )
+
+    try:
+        from atlas_bus.bus import Bus  # noqa: PLC0415
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail="atlas-bus not installed") from exc
+
+    bus = Bus()
+    known = bus.list_agents()
+    if agent_name not in known:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Agent '{agent_name}' not found in atlas-bus. "
+                f"Run 'atlas install' first. Known agents: {sorted(known)}"
+            ),
+        )
+
+    log = logging.getLogger("atlas_dashboard")
+    log.info("run-test: executing %s with inputs %s", agent_name, list(body.inputs.keys()))
+
+    step = bus.run_agent(agent_name, body.inputs)
+
+    return {
+        "agent": agent_name,
+        "passed": step.passed,
+        "output": step.summary,
+        "logs": step.logs,
+        "error": step.error or None,
+    }
 
 
 # ── UI ─────────────────────────────────────────────────────────────────────────
