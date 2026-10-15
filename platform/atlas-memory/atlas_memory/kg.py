@@ -134,25 +134,30 @@ class KGStore:
         judge_score: float,
         run_id: str,
         source: str = "scaffold",
+        test_detail: dict | None = None,
     ) -> None:
         """Record a new judge score and update confidence = judge_score / 5.0.
 
         source: "scaffold" (code evaluated without execution) or "test" (real execution).
+        test_detail: for source="test", stores {input, output, feedback, criteria} for
+        the detail view. Multiple test_detail entries with the same run_id are grouped
+        into one session point in Trends.
         """
         if name not in self._g:
             return
         node = self._g.nodes[name]
         history: list[dict] = list(node.get("score_history", []))
-        history.append(
-            {
-                "score": judge_score,
-                "run_id": run_id,
-                "source": source,
-                "timestamp": __import__("datetime")
-                .datetime.now(__import__("datetime").timezone.utc)
-                .isoformat(),
-            }
-        )
+        entry: dict = {
+            "score": judge_score,
+            "run_id": run_id,
+            "source": source,
+            "timestamp": __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .isoformat(),
+        }
+        if test_detail is not None:
+            entry["test_detail"] = test_detail
+        history.append(entry)
         node["score_history"] = history
         node["judge_score"] = judge_score
         node["confidence"] = max(0.0, min(1.0, judge_score / 5.0))

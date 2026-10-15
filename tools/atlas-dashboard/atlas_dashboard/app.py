@@ -907,7 +907,13 @@ def _has_scores(points: list[dict]) -> bool:
 
 
 def _build_trend_points_from_test_runs(agent: str) -> list[dict]:
-    """Build trend points from KG score_history entries with source='test'."""
+    """Build trend points from KG score_history entries with source='test'.
+
+    Groups entries by run_id → one point per test session.
+    Each point embeds individual ticket details for the drill-down view.
+    """
+    from collections import defaultdict  # noqa: PLC0415
+
     try:
         from atlas_memory.kg import KGStore  # noqa: PLC0415
 
@@ -917,28 +923,47 @@ def _build_trend_points_from_test_runs(agent: str) -> list[dict]:
     except Exception:  # noqa: BLE001
         return []
 
-    test_entries = sorted(
-        [h for h in history if h.get("source") == "test"],
-        key=lambda h: h.get("timestamp", ""),
-    )
+    test_entries = [h for h in history if h.get("source") == "test" and h.get("score") is not None]
     if not test_entries:
         return []
 
+    # Group by run_id, preserving insertion order (chronological)
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for entry in test_entries:
+        groups[entry.get("run_id", "")].append(entry)
+
     points = []
     prev_score = None
-    for entry in test_entries:
-        avg = entry.get("score")
-        if avg is None:
-            continue
+    for run_id, entries in groups.items():
+        scores = [e["score"] for e in entries]
+        avg = round(sum(scores) / len(scores), 2)
+        created_at = min(e.get("timestamp", "") for e in entries)
         delta = round(avg - prev_score, 2) if prev_score is not None else None
+
+        tickets = [
+            {
+                "score": e["score"],
+                "passed": e["score"] >= 4,
+                "input": e.get("test_detail", {}).get("input", {}),
+                "output": e.get("test_detail", {}).get("output", ""),
+                "feedback": e.get("test_detail", {}).get("feedback", ""),
+                "criteria": e.get("test_detail", {}).get("criteria", []),
+                "timestamp": e.get("timestamp", ""),
+            }
+            for e in entries
+        ]
+
         pt: dict = {
-            "run_id": entry.get("run_id", ""),
-            "created_at": entry.get("timestamp", ""),
-            "avg_score": round(avg, 2),
+            "run_id": run_id,
+            "created_at": created_at,
+            "avg_score": avg,
             "cause": "test_execution",
             "source": "test",
+            "tickets": tickets,
+            "n_tickets": len(tickets),
+            "n_passed": sum(1 for t in tickets if t["passed"]),
             "criteria": [],
-            "feedback": "",
+            "feedback": f"{sum(1 for t in tickets if t['passed'])}/{len(tickets)} tickets passés",
             "patches_applied": [],
             "user_answers": [],
             "model_id": "",
@@ -2917,7 +2942,18 @@ def api_judge_test(run_id: str, agent_name: str, body: JudgeTestRequest):
         if score_val is not None:
             kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
             if agent_name in kg._g:
-                kg.update_agent_score(agent_name, score_val, run_id=test_run_id, source="test")
+                kg.update_agent_score(
+                    agent_name,
+                    score_val,
+                    run_id=test_run_id,
+                    source="test",
+                    test_detail={
+                        "input": body.input,
+                        "output": body.output,
+                        "feedback": feedback,
+                        "criteria": criteria_scores,
+                    },
+                )
 
         return {
             "ok": True,

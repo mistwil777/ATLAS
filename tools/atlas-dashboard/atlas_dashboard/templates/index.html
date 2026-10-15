@@ -2081,11 +2081,11 @@
     const prevStr = prev?.avg_score != null ? prev.avg_score.toFixed(2) + ' → ' : '';
     const deltaStr = p.delta != null ? (p.delta >= 0 ? `<span style="color:var(--aqua)">+${p.delta.toFixed(2)}</span>` : `<span style="color:var(--red)">${p.delta.toFixed(2)}</span>`) : '';
     const date = fmtDate(p.created_at);
-    const causeLabel = {initial_scaffold:'Initial scaffold', cr_retry:'CR retry', model_change:'Model change', test_validation:'Validation humaine'}[p.cause] || p.cause;
+    const causeLabel = {initial_scaffold:'Initial scaffold', cr_retry:'CR retry', model_change:'Model change', test_validation:'Validation humaine', test_execution:'Test réel'}[p.cause] || p.cause;
 
     let html = `<div class="trend-detail">
       <h3>${escHtml(_trendData.agent)} — Run ${idx+1}</h3>
-      <div class="trend-detail-meta">Score : ${prevStr}<strong>${scoreStr}/5</strong> ${deltaStr} &nbsp;·&nbsp; ${causeLabel} &nbsp;·&nbsp; ${date}</div>`;
+      <div class="trend-detail-meta">Score : ${prevStr}<strong>${scoreStr}/5</strong> ${deltaStr} &nbsp;·&nbsp; ${causeLabel} &nbsp;·&nbsp; ${date}${p.n_tickets ? ` &nbsp;·&nbsp; ${p.n_passed}/${p.n_tickets} tickets passés` : ''}</div>`;
 
     if (p.cause === 'model_change') {
       html += `<div class="trend-model-change">Modèle : ${escHtml(p.model_prev || '—')} → <strong>${escHtml(p.model_id || '—')}</strong></div>`;
@@ -2121,7 +2121,31 @@
       });
     }
 
-    if (p.feedback) {
+    // Test session detail — per-ticket breakdown
+    if (p.source === 'test' && p.tickets?.length) {
+      html += `<div class="trend-section-title">Détail par ticket (${p.n_passed}/${p.n_tickets} passés)</div>`;
+      p.tickets.forEach((t, ti) => {
+        const sc = t.score != null ? t.score.toFixed(1) : '—';
+        const col = t.score >= 4 ? 'var(--aqua)' : t.score >= 3 ? 'var(--yellow)' : 'var(--red)';
+        const inputPreview = t.input?.cdc_bloc
+          ? escHtml(t.input.cdc_bloc.slice(0, 120)) + (t.input.cdc_bloc.length > 120 ? '…' : '')
+          : '—';
+        const retestBtn = !t.passed && _lastRunId
+          ? `<button onclick="_retestTicket(${JSON.stringify(JSON.stringify(t.input))})" style="font-size:11px;padding:2px 10px;border:1px solid var(--yellow);color:var(--yellow);border-radius:3px;background:none;cursor:pointer;white-space:nowrap">Re-tester</button>`
+          : '';
+        html += `
+          <div style="background:#0d0d1a;border:1px solid ${t.passed ? '#1a2a1a' : '#2a1a1a'};border-radius:5px;padding:10px 12px;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:5px">
+              <span style="font-size:13px;font-weight:700;color:${col}">${sc}/5</span>
+              <span style="font-size:11px;padding:1px 7px;border-radius:3px;background:${t.passed ? '#0d2a1a' : '#2a0d0d'};color:${col}">${t.passed ? 'Passé' : 'Échoué'}</span>
+              <span style="font-size:10px;color:var(--ink-dim);flex:1">Ticket ${ti+1}</span>
+              ${retestBtn}
+            </div>
+            <div style="font-size:11px;color:var(--ink-dim);font-family:monospace;margin-bottom:4px">${inputPreview}</div>
+            ${t.feedback ? `<div style="font-size:11px;color:var(--ink);margin-top:4px;font-style:italic">${escHtml(t.feedback.slice(0, 180))}${t.feedback.length > 180 ? '…' : ''}</div>` : ''}
+          </div>`;
+      });
+    } else if (p.feedback) {
       html += `<div class="trend-feedback">${escHtml(p.feedback)}</div>`;
     }
 
@@ -2292,6 +2316,19 @@
       btn.textContent = 'Validate and launch scaffold';
       btn.disabled = false;
     }
+  }
+
+  function _retestTicket(inputJson) {
+    const agent = _trendData?.agent;
+    if (!agent || !_lastRunId) { alert('Aucun run disponible.'); return; }
+    let input;
+    try { input = JSON.parse(inputJson); } catch(_) { input = { cdc_bloc: inputJson, context: '' }; }
+    openTestAgentPanel(_lastRunId, agent);
+    // Pre-fill the first input card after the panel renders
+    requestAnimationFrame(() => {
+      _tapInputs = [{ cdc_bloc: input.cdc_bloc || '', context: input.context || '' }];
+      _tapRenderInputs();
+    });
   }
 
   function _advisorRunTest() {
