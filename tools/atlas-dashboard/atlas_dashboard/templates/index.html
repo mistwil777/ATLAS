@@ -2151,7 +2151,7 @@
 
         html += `
           <div style="background:#0d0d1a;border:1px solid ${t.passed ? '#1a2a1a' : '#2a1a1a'};border-radius:5px;margin-bottom:6px;overflow:hidden">
-            <div onclick="document.getElementById('${cardId}').style.display=document.getElementById('${cardId}').style.display==='none'?'block':'none'"
+            <div onclick="(function(el){el.style.display=el.style.display==='block'?'none':'block'})(document.getElementById('${cardId}'))"
                  style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer">
               <span style="font-size:13px;font-weight:700;color:${col}">${sc}/5</span>
               <span style="font-size:11px;padding:1px 7px;border-radius:3px;background:${t.passed ? '#0d2a1a' : '#2a0d0d'};color:${col}">${t.passed ? 'Passé' : 'Échoué'}</span>
