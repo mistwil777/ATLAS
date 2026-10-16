@@ -739,7 +739,8 @@
     const isResumed = run.status === 'resumed';
     const statusLabel = isWaiting ? 'Pending validation' : run.status;
     document.getElementById('detail').innerHTML = `
-      <h2>Run ${run.run_id}</h2>
+      <h2>${(() => { const p = (run.metadata||{}).cdc_preview||''; const t = p.split('\n').find(l=>l.trim()); return t ? t.replace(/^Titre\s*:\s*/i,'').slice(0,80) : 'Run'; })()}</h2>
+      <div style="font-size:11px;color:var(--ink-faint);font-family:'Space Mono',monospace;margin-bottom:4px">${run.run_id}</div>
       <div class="meta-row">
         <span class="badge badge-${run.status}">${statusLabel}</span>
         ${run.requires_review && !isWaiting ? '<span class="badge badge-review">requires review</span>' : ''}

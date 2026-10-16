@@ -22,7 +22,7 @@ def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 1024) -> str |
         from botocore.config import Config  # noqa: PLC0415  # type: ignore[import-untyped]
 
         model_id = llm_config.get("model_id", "us.amazon.nova-pro-v1:0")
-        temperature = float(llm_config.get("temperature", 0.1))
+        temperature = float(llm_config.get("temperature", 0.0))
         region = llm_config.get("region", "us-east-1")
         client = boto3.client(
             "bedrock-runtime",

@@ -95,6 +95,14 @@ You are an expert software architect. You have a list of functional blocs to cla
 **EXCLUSIVITY RULE**: a PascalCase name cannot be "ia" in one bloc and "tool" in another.
 If a name is ambiguous → choose "ia" if reasoning is required, "tool" otherwise.
 
+**NAMING STABILITY RULES** — apply in order:
+1. If the CDC output spec defines a field for this bloc's result, derive the name from that field.
+   Examples: field "categorie" → CategoryClassifier, field "priorite" → PriorityClassifier,
+   field "langue_detectee" → LanguageDetector, field "reponse_generee" → ResponseGenerator.
+2. If an ATLAS agent/tool already exists with a matching name (see lists below), reuse EXACT name.
+3. Otherwise use a stable, descriptive PascalCase name — DO NOT prefix with domain ("Email", "Ticket")
+   unless the bloc is strictly domain-specific and cannot be reused outside this pipeline.
+
 ## Available ATLAS agents (reuse exact name in agent_suggested if applicable)
 {kg_agents}
 
