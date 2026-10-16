@@ -133,6 +133,10 @@ class CdcRouterAgent:
             for name in routing["requires_creation"]:
                 yield self._info(f"Agent to create: {name} (will need agent-forge)")
 
+        if routing.get("requires_adaptation"):
+            for name in routing["requires_adaptation"]:
+                yield self._info(f"Agent to adapt: {name} (exists, needs update for new context)")
+
         if routing.get("requires_tools"):
             for name in routing["requires_tools"]:
                 yield self._info(f"Tool to build: {name} (will go to libs/)")
@@ -161,7 +165,9 @@ class CdcRouterAgent:
             "blocs": routing["blocs"],
             "pipeline": routing["pipeline"],
             "requires_creation": routing["requires_creation"],
+            "requires_adaptation": routing.get("requires_adaptation", []),
             "requires_tools": routing.get("requires_tools", []),
+            "requires_tools_adaptation": routing.get("requires_tools_adaptation", []),
             "atlas_agents_reused": routing["atlas_agents_reused"],
             "atlas_tools_reused": routing.get("atlas_tools_reused", []),
             "cdc_gaps": gaps,

@@ -32,7 +32,9 @@ class RunStore:
             "status": "pending",
             "requires_review": False,
             "requires_creation": [],
+            "requires_adaptation": [],
             "requires_tools": [],
+            "requires_tools_adaptation": [],
             "scaffolded": {},
             "tools_built": {},
             "blocs": [],
@@ -53,9 +55,19 @@ class RunStore:
         run["requires_creation"] = agents
         self._write(run_id, run)
 
+    def set_requires_adaptation(self, run_id: str, agents: list[str]) -> None:
+        run = self._read(run_id)
+        run["requires_adaptation"] = agents
+        self._write(run_id, run)
+
     def set_requires_tools(self, run_id: str, tools: list[str]) -> None:
         run = self._read(run_id)
         run["requires_tools"] = tools
+        self._write(run_id, run)
+
+    def set_requires_tools_adaptation(self, run_id: str, tools: list[str]) -> None:
+        run = self._read(run_id)
+        run["requires_tools_adaptation"] = tools
         self._write(run_id, run)
 
     def set_tool_installed(self, run_id: str, tool_name: str) -> None:

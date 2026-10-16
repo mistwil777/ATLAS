@@ -49,11 +49,14 @@ def orchestrate(
 
     blocs = routing_summary.get("blocs", [])
     requires_creation = routing_summary.get("requires_creation", [])
+    requires_adaptation = routing_summary.get("requires_adaptation", [])
     requires_tools = routing_summary.get("requires_tools", [])
+    requires_tools_adaptation = routing_summary.get("requires_tools_adaptation", [])
     _log.info(
-        "Routing complete — %d blocs, %d to create, %d tools to build",
+        "Routing complete — %d blocs, %d to create, %d to adapt, %d tools to build",
         len(blocs),
         len(requires_creation),
+        len(requires_adaptation),
         len(requires_tools),
     )
 
@@ -77,8 +80,12 @@ def orchestrate(
     )
     if run_store and run_id and requires_creation:
         run_store.set_requires_creation(run_id, requires_creation)
+    if run_store and run_id and requires_adaptation:
+        run_store.set_requires_adaptation(run_id, requires_adaptation)
     if run_store and run_id and requires_tools:
         run_store.set_requires_tools(run_id, requires_tools)
+    if run_store and run_id and requires_tools_adaptation:
+        run_store.set_requires_tools_adaptation(run_id, requires_tools_adaptation)
 
     # If high-impact CDC gaps found — suspend and ask client before scaffold
     if run_store and run_id and cdc_gaps:

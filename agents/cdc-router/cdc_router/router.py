@@ -65,7 +65,9 @@ def route(
     enriched_blocs = []
     pipeline = []
     requires_creation = []
+    requires_adaptation = []
     requires_tools = []
+    requires_tools_adaptation = []
     atlas_agents_reused = []
     atlas_tools_reused = []
     seen_names: set[str] = set()  # deduplicate blocs by (type, agent_name)
@@ -107,10 +109,16 @@ def route(
                         atlas_agents_reused.append(agent_name)
                     if agent_name not in pipeline:
                         pipeline.append(agent_name)
+                elif decision == "adapt":
+                    b["agent_exists"] = True  # exists, but needs update
+                    if agent_name not in requires_adaptation:
+                        requires_adaptation.append(agent_name)
+                    if agent_name not in pipeline:
+                        pipeline.append(agent_name)
                 else:
-                    # adapt or create → treat as new, suffix name if collision
+                    # create → truly new component
                     b["agent_exists"] = False
-                    new_name = agent_name if decision == "adapt" else f"{agent_name}_v2"
+                    new_name = f"{agent_name}_v2"
                     b["agent"] = new_name
                     if new_name not in requires_creation:
                         requires_creation.append(new_name)
@@ -142,9 +150,13 @@ def route(
                     b["agent_exists"] = True
                     if agent_name not in atlas_tools_reused:
                         atlas_tools_reused.append(agent_name)
+                elif decision == "adapt":
+                    b["agent_exists"] = True
+                    if agent_name not in requires_tools_adaptation:
+                        requires_tools_adaptation.append(agent_name)
                 else:
                     b["agent_exists"] = False
-                    new_name = agent_name if decision == "adapt" else f"{agent_name}_v2"
+                    new_name = f"{agent_name}_v2"
                     b["agent"] = new_name
                     if new_name not in requires_tools:
                         requires_tools.append(new_name)
@@ -161,7 +173,9 @@ def route(
         "blocs": enriched_blocs,
         "pipeline": pipeline,
         "requires_creation": requires_creation,
+        "requires_adaptation": requires_adaptation,
         "requires_tools": requires_tools,
+        "requires_tools_adaptation": requires_tools_adaptation,
         "atlas_agents_reused": atlas_agents_reused,
         "atlas_tools_reused": atlas_tools_reused,
     }

@@ -824,6 +824,7 @@
         }).join('');
       })()}
       ${buildCreatePanel(run)}
+      ${buildAdaptPanel(run)}
       ${buildToolsPanel(run)}
     `;
     _restoreCardState();
@@ -1274,6 +1275,20 @@
     }).join('');
 
     return `<div class="create-panel"><h3>Agents to Create (${agents.length})</h3>${rows}</div>`;
+  }
+
+  function buildAdaptPanel(run) {
+    const agents = run.requires_adaptation || [];
+    if (!agents.length) return '';
+    const rows = agents.map(agent => `
+      <div class="agent-row" id="agent-row-adapt-${agent}">
+        <div class="agent-row-header">
+          <span class="agent-row-name">${agent}</span>
+          <span style="font-size:10px;color:var(--aqua);border:1px solid var(--aqua);border-radius:3px;padding:1px 6px;margin-left:8px">adapt</span>
+          <span style="font-size:11px;color:var(--ink-dim);margin-left:8px">exists in KG — needs update for this context</span>
+        </div>
+      </div>`).join('');
+    return `<div class="create-panel" style="margin-top:16px"><h3 style="color:var(--aqua)">Agents to Adapt (${agents.length})</h3>${rows}</div>`;
   }
 
   // ── Diagnosis CR panel ───────────────────────────────────────────────────────
