@@ -22,11 +22,19 @@ def route(blocs: list[dict], kg_graph: dict) -> dict:
     requires_tools = []
     atlas_agents_reused = []
     atlas_tools_reused = []
+    seen_names: set[str] = set()  # deduplicate blocs by (type, agent_name)
 
     for bloc in blocs:
         b = dict(bloc)
         bloc_type = b.get("type")
         agent_name = b.get("agent_suggested")
+
+        # Skip duplicate blocs (same type + name already processed)
+        dedup_key = f"{bloc_type}:{agent_name}" if agent_name else None
+        if dedup_key and dedup_key in seen_names:
+            continue
+        if dedup_key:
+            seen_names.add(dedup_key)
 
         if bloc_type == "ia" and agent_name:
             exists = agent_name in known_agents

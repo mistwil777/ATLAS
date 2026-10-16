@@ -794,6 +794,16 @@
         }
         // Pending — each bloc collapsible (decision+criteria hidden by default)
         return blocs.map(b => {
+          // Code blocs (deterministic rules) — show as info-only, non-interactive
+          if (b.type === 'code') {
+            return `<div class="bloc-card" style="border-color:var(--border);opacity:0.6">
+              <div class="bloc-header" style="cursor:default">
+                <span class="bloc-agent" style="color:var(--ink-dim)">${escHtml(b.bloc || 'Code rule')}</span>
+                <span class="badge" style="background:#1a1a1a;color:var(--ink-faint);border:1px solid var(--border)">code</span>
+                <span style="font-size:11px;color:var(--ink-faint);margin-left:8px">${escHtml(b.justification || '')}</span>
+              </div>
+            </div>`;
+          }
           const bKey = `bloc-${b.agent||''}`;
           const bType = (b.type === 'agent' || b.type === 'ia') ? 'agent' : 'tool';
           return `<div class="bloc-card bloc-card-${bType} card-collapsible" data-card-key="${bKey}">
@@ -802,8 +812,7 @@
               <span class="bloc-agent">${b.agent || '—'}</span>
               <span class="badge badge-type-${bType}">${bType}</span>
               ${bType === 'agent' ? `<span style="font-size:10px;color:var(--ink-dim);border:1px solid var(--border);border-radius:3px;padding:1px 6px">to create</span>` : `<span style="font-size:10px;color:var(--ink-dim);border:1px solid var(--border);border-radius:3px;padding:1px 6px">reusable</span>`}
-              <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
-              ${b.requires_review && isPending ? `<button class="btn-scaffold" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="event.stopPropagation();improveBloc('${runId}','${escHtml(b.agent || '')}',this)">Improve</button>` : '<span class="toggle-chevron" style="margin-left:auto">▶</span>'}
+              ${bType === 'agent' && b.requires_review && isPending ? `<button class="btn-scaffold" style="margin-left:auto;padding:3px 10px;font-size:11px;border-color:var(--aqua);color:var(--aqua)" onclick="event.stopPropagation();openTestAgentPanel('${runId}','${escHtml(b.agent || '')}')">Test →</button>` : '<span class="toggle-chevron" style="margin-left:auto">▶</span>'}
             </div>
             <div class="card-body">
               <div class="bloc-preview">${(b.output_preview || b.bloc || '').slice(0, 400)}</div>
