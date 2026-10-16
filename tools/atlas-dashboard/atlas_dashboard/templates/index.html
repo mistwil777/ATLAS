@@ -935,11 +935,11 @@
           : `<div style="display:flex;gap:6px;margin-top:4px">
                <button type="button" onclick="document.getElementById('ans_${q.id}').value='';document.getElementById('ans_${q.id}').setAttribute('data-skipped','1');document.getElementById('ans_${q.id}').style.opacity='0.4'" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);color:var(--ink-dim);border-radius:3px;background:none;cursor:pointer">Skip</button>
              </div>`;
-        input = `<input type="text" class="waiting-q-text-input" id="ans_${q.id}" value="${escHtml(q.hint || '')}" placeholder="Your answer…" oninput="this.removeAttribute('data-skipped');this.style.opacity='1'" />
+        input = `<input type="text" class="waiting-q-text-input" id="ans_${q.id}" data-hint="${escHtml(q.hint||'')}" value="${escHtml(q.hint || '')}" placeholder="Your answer…" oninput="this.removeAttribute('data-skipped');this.style.opacity='1'" />
                  ${actions}`;
       }
       const suggestionHtml = q.hint
-        ? `<div style="font-size:11px;color:var(--aqua);margin-bottom:6px;line-height:1.4">💡 <strong>Suggestion :</strong> ${escHtml(q.hint)}</div>`
+        ? `<div style="font-size:11px;color:var(--aqua);margin-bottom:6px;line-height:1.4">💡 <strong>Suggestion:</strong> ${escHtml(q.hint)}</div>`
         : '';
       return `<div class="waiting-question">
         <div class="waiting-q-num">${num} ${escHtml(q.criterion || '')}</div>
@@ -953,8 +953,7 @@
       ? `<button type="button" onclick="(()=>{document.querySelectorAll('[id^=ans_]').forEach(el=>{const hint=el.getAttribute('data-hint');if(hint){el.value=hint;el.removeAttribute('data-skipped');el.style.opacity='1'}})})()" style="font-size:11px;padding:4px 12px;border:1px solid var(--aqua);color:var(--aqua);border-radius:var(--radius);background:none;cursor:pointer">Accept all suggestions</button>`
       : '';
 
-    // embed hint as data-hint on each input for accept-all
-    const panelHtml = `<div class="waiting-panel" id="waiting-panel-${run.run_id}">
+    return `<div class="waiting-panel" id="waiting-panel-${run.run_id}">
       ${header}
       ${questions}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -962,12 +961,6 @@
         <button class="btn-submit-answers" onclick="submitAnswers('${run.run_id}', this)">Submit and continue</button>
       </div>
     </div>`;
-
-    // inject data-hint after render via a trick: replace id values with data-hint
-    return panelHtml.replace(/id="ans_(q_\d+)" value="([^"]*)"/g, (m, id, val) => {
-      const q = qs.find(q => q.id === id);
-      return `id="ans_${id}" data-hint="${escHtml(q?.hint||'')}" value="${val}"`;
-    });
   }
 
   async function submitAnswers(runId, btn) {
@@ -1170,7 +1163,7 @@
       let controls = '';
       if (state === 'pending') {
         controls = `
-          <input type="text" id="ingest-text-${agent}" placeholder="Contexte additionnel…" oninput="onIngestTextInput('${agent}',this)" style="flex:1;min-width:0;max-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:4px 8px;outline:none">
+          <input type="text" id="ingest-text-${agent}" placeholder="Additional context…" oninput="onIngestTextInput('${agent}',this)" style="flex:1;min-width:0;max-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:4px 8px;outline:none">
           <label title="Joindre des documents (PDF, txt, md, html, images…)" style="cursor:pointer;padding:4px 8px;border:1px dashed var(--ink-dim);border-radius:var(--radius);font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px;white-space:nowrap">
             <span id="ingest-label-${agent}">📎</span>
             <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎 '+this.files.length:'📎'">
