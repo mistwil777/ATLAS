@@ -605,6 +605,28 @@
   </div>
   <div style="font-size:12px;color:var(--ink-dim);margin-bottom:20px" id="tap-subtitle"></div>
 
+  <!-- Battery section -->
+  <div id="tap-battery-section" style="display:none;margin-bottom:28px;border:1px solid var(--aqua);border-radius:var(--radius);padding:16px 20px;background:rgba(27,175,122,.04)">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:11px;font-weight:700;color:var(--aqua);text-transform:uppercase;letter-spacing:.06em">Battery test</span>
+      <span style="font-size:11px;color:var(--ink-dim)" id="tap-battery-count"></span>
+      <span style="font-size:11px;color:var(--ink-dim);margin-left:auto">feeds the progression curve</span>
+      <button onclick="_tapRegenerateBattery()" style="font-size:11px;padding:3px 10px;border:1px solid var(--ink-dim);color:var(--ink-dim);border-radius:var(--radius);background:none;cursor:pointer" title="Regenerate battery from CDC">Regenerate</button>
+    </div>
+    <div id="tap-battery-cases" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button id="tap-btn-battery" onclick="_tapRunBattery()" style="font-size:13px;padding:8px 22px;border:1px solid var(--aqua);color:var(--aqua);border-radius:20px;background:none;cursor:pointer;font-weight:500;letter-spacing:.02em">Run battery</button>
+      <span id="tap-battery-status" style="font-size:12px;color:var(--ink-dim)"></span>
+    </div>
+    <div id="tap-battery-results" style="display:none;margin-top:14px"></div>
+  </div>
+
+  <!-- Divider -->
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px" id="tap-free-label">
+    <span style="font-size:11px;font-weight:700;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em">Free test</span>
+    <span style="font-size:11px;color:var(--ink-dim)">debug only — not recorded in the curve</span>
+  </div>
+
   <!-- Step 1 — inputs -->
   <div id="tap-step-inputs">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -616,7 +638,7 @@
   </div>
 
   <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
-    <button id="tap-btn-run" onclick="_tapRunTest()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">Run test</button>
+    <button id="tap-btn-run" onclick="_tapRunTest()" style="font-size:13px;padding:8px 22px;border:1px solid var(--blue);color:var(--blue);border-radius:20px;background:none;cursor:pointer;font-weight:500;letter-spacing:.02em">Run test</button>
     <span id="tap-run-status" style="font-size:12px;color:var(--ink-dim)"></span>
   </div>
 
@@ -629,7 +651,7 @@
     <pre id="tap-output-box" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:12px;color:var(--ink);overflow-x:auto;white-space:pre-wrap;max-height:400px;overflow-y:auto"></pre>
 
     <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
-      <button id="tap-btn-judge" onclick="_tapJudge()" style="background:var(--aqua);color:#000;border-color:var(--aqua);font-weight:600">Evaluate (judge)</button>
+      <button id="tap-btn-judge" onclick="_tapJudge()" style="font-size:13px;padding:8px 22px;border:1px solid var(--aqua);color:var(--aqua);border-radius:20px;background:none;cursor:pointer;font-weight:500;letter-spacing:.02em">Evaluate (judge)</button>
       <span id="tap-judge-status" style="font-size:12px;color:var(--ink-dim)"></span>
     </div>
 
@@ -1265,39 +1287,44 @@
       let agentScore = null;
       let agentError = null;
       try {
-        const genRes = await fetch(`/api/runs/${runId}/agents/${agent}/test-inputs?n=1`).then(r => r.json()).catch(() => null);
-        const input = genRes?.inputs?.[0] || { cdc_bloc: '', context: '' };
-        const testRaw = await fetch(`/api/runs/${runId}/agents/${agent}/run-test`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ inputs: input }),
-        });
-        if (!testRaw.ok) {
-          const errBody = await testRaw.json().catch(() => ({}));
-          agentError = errBody.detail || `run-test HTTP ${testRaw.status}`;
-        } else {
-          const testRes = await testRaw.json().catch(() => null);
-          if (testRes?.output) {
-            const outputStr = typeof testRes.output === 'string' ? testRes.output : JSON.stringify(testRes.output);
-            const judgeRaw = await fetch(`/api/runs/${runId}/agents/${agent}/judge-test`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ agent_name: agent, input: input, output: outputStr, run_id: runId }),
-            });
-            if (judgeRaw.ok) {
-              const judgeRes = await judgeRaw.json().catch(() => null);
-              agentScore = judgeRes?.judge_score ?? null;
-              // Cache score in-memory so installed row can show it immediately
-              const key = _stateKey(runId, agent);
-              if (!_scaffoldState[key]) _scaffoldState[key] = { state: 'installed' };
-              _scaffoldState[key].testScore = agentScore;
-            } else {
-              const errBody = await judgeRaw.json().catch(() => ({}));
-              agentError = errBody.detail || `judge-test HTTP ${judgeRaw.status}`;
-            }
-          } else {
-            agentError = testRes?.error || 'run-test returned no output';
+        // Use battery if available (source=test_battery → feeds curve), else generate one input (test_free)
+        const batteryRes = await fetch(`/api/runs/${runId}/agents/${agent}/test-battery`).then(r => r.json()).catch(() => null);
+        const batteryCases = batteryRes?.cases || [];
+        const inputs = batteryCases.length
+          ? batteryCases
+          : [((await fetch(`/api/runs/${runId}/agents/${agent}/test-inputs?n=1`).then(r => r.json()).catch(() => null))?.inputs?.[0] || { cdc_bloc: '', context: '' })];
+        const judgeSource = batteryCases.length ? 'test_battery' : 'test_free';
+        const scores = [];
+        for (const input of inputs) {
+          const testRaw = await fetch(`/api/runs/${runId}/agents/${agent}/run-test`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ inputs: input }),
+          });
+          if (!testRaw.ok) {
+            const errBody = await testRaw.json().catch(() => ({}));
+            agentError = errBody.detail || `run-test HTTP ${testRaw.status}`;
+            break;
           }
+          const testRes = await testRaw.json().catch(() => null);
+          if (!testRes?.output) { agentError = testRes?.error || 'run-test returned no output'; break; }
+          const outputStr = typeof testRes.output === 'string' ? testRes.output : JSON.stringify(testRes.output);
+          const judgeRaw = await fetch(`/api/runs/${runId}/agents/${agent}/judge-test`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ agent_name: agent, input, output: outputStr, run_id: runId, source: judgeSource }),
+          });
+          if (!judgeRaw.ok) {
+            const errBody = await judgeRaw.json().catch(() => ({}));
+            agentError = errBody.detail || `judge-test HTTP ${judgeRaw.status}`;
+            break;
+          }
+          const judgeRes = await judgeRaw.json().catch(() => null);
+          if (judgeRes?.judge_score != null) scores.push(judgeRes.judge_score);
+        }
+        if (!agentError && scores.length) {
+          agentScore = Math.round(scores.reduce((a,b) => a+b, 0) / scores.length * 100) / 100;
+          const key = _stateKey(runId, agent);
+          if (!_scaffoldState[key]) _scaffoldState[key] = { state: 'installed' };
+          _scaffoldState[key].testScore = agentScore;
         }
       } catch(err) { agentError = err.message; }
       results.push({ agent, score: agentScore, error: agentError });
@@ -1383,9 +1410,11 @@
         const feedbackShort = judgeFeedback ? judgeFeedback.split('\n\nPATCH TARGET')[0].trim() : '';
         // Collapsible: header shows name + score + action buttons; body has detail
         const aKey = `agent-detail-${agent}`;
+        const aScoreCol = judgeScore === null ? 'var(--ink-dim)' : judgeScore >= 4 ? 'var(--aqua)' : judgeScore >= 2 ? 'var(--yellow)' : 'var(--red)';
         return `<div class="agent-row card-collapsible" id="agent-row-${agent}" data-card-key="${aKey}">
           <div class="agent-row-header card-toggle" onclick="toggleCard('${aKey}',event)" style="cursor:pointer">
             <span class="agent-row-name">${agent}</span>
+            ${judgeScore !== null ? `<span onclick="event.stopPropagation();_openAgentScores('${agent}')" style="font-size:11px;font-weight:700;color:${aScoreCol};border:1px solid ${aScoreCol};border-radius:var(--radius);padding:1px 7px;cursor:pointer" title="View in Agent Scores">${judgeScore.toFixed(1)}/5 ↗</span>` : ''}
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
               ${judgeScore !== null && judgeScore < 4
@@ -1394,7 +1423,7 @@
                 : ''
               }
               <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
-              <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Test</button>
+              <button disabled title="Install the agent first" style="font-size:12px;padding:5px 14px;border:1px solid var(--border);color:var(--ink-dim);border-radius:var(--radius);background:none;cursor:not-allowed;opacity:0.4">Test</button>
             </div>
           </div>
           <div class="card-body" style="width:100%">
@@ -2128,9 +2157,10 @@
 
   async function _openAgentScores(agentName) {
     showTabTrend();
-    await _populateTrendAgents();
+    await _populateTrendAgents(agentName);
     const sel = document.getElementById('trend-agent-select');
-    if (sel) { sel.value = agentName; loadTrend(agentName); }
+    if (sel && sel.value !== agentName) { sel.value = agentName; }
+    loadTrend(agentName);
   }
 
   let _visNetwork = null;
@@ -2504,7 +2534,7 @@
   // ── Trend tab ────────────────────────────────────────────────
   let _trendData = null;
 
-  async function _populateTrendAgents() {
+  async function _populateTrendAgents(forceAgent) {
     const [runs, kgRaw] = await Promise.all([
       fetch('/api/runs').then(r => r.json()),
       _kgData ? Promise.resolve(_kgData) : fetch('/api/kg').then(r => r.json()).catch(() => ({ nodes: [], edges: [] })),
@@ -2517,11 +2547,16 @@
       if (n.project) agentProject[n.id] = n.project;
     }
 
-    // Collect agents from runs
+    // Collect agents from runs (blocs + scaffolded)
     const agents = new Set();
-    for (const run of runs) for (const b of (run.blocs || [])) {
-      const name = b.agent || b.agent_suggested || '';
-      if (name) agents.add(name);
+    for (const run of runs) {
+      for (const b of (run.blocs || [])) {
+        const name = b.agent || b.agent_suggested || '';
+        if (name) agents.add(name);
+      }
+      for (const name of Object.keys(run.scaffolded || {})) {
+        if (name) agents.add(name);
+      }
     }
 
     // Group by project
@@ -2550,7 +2585,14 @@
       sel.innerHTML = '<option value="">— Choisir un agent —</option>' +
         [...agents].sort().map(a => `<option value="${escHtml(a)}"${a===current?' selected':''}>${escHtml(a)}</option>`).join('');
     }
-    if (current && agents.has(current)) loadTrend(current);
+    if (forceAgent) agents.add(forceAgent);
+    if (forceAgent) {
+      const opt = sel.querySelector(`option[value="${CSS.escape(forceAgent)}"]`);
+      if (!opt) sel.insertAdjacentHTML('beforeend', `<option value="${escHtml(forceAgent)}">${escHtml(forceAgent)}</option>`);
+      sel.value = forceAgent;
+    } else if (current && agents.has(current)) {
+      loadTrend(current);
+    }
   }
 
   async function loadTrend(agentName) {
@@ -4067,12 +4109,15 @@
   let _tapOutput = '';
   let _tapJudgeScore = null;
 
+  let _tapBatteryCases = [];
+
   function openTestAgentPanel(runId, agentName) {
     _tapRunId = runId;
     _tapAgentName = agentName;
     _tapInputs = [];
     _tapOutput = '';
     _tapJudgeScore = null;
+    _tapBatteryCases = [];
 
     _hideAllPanels();
     document.getElementById('btn-trend').classList.add('active');
@@ -4083,8 +4128,91 @@
     document.getElementById('tap-step-judge').style.display = 'none';
     document.getElementById('tap-run-status').textContent = '';
     document.getElementById('tap-judge-status').textContent = '';
+    document.getElementById('tap-battery-section').style.display = 'none';
+    document.getElementById('tap-battery-results').style.display = 'none';
 
+    _tapLoadBattery(runId, agentName);
     _tapAddInput();
+  }
+
+  async function _tapLoadBattery(runId, agentName) {
+    const res = await fetch(`/api/runs/${runId}/agents/${agentName}/test-battery`).then(r => r.json()).catch(() => null);
+    const cases = res?.cases || [];
+    _tapBatteryCases = cases;
+    const sec = document.getElementById('tap-battery-section');
+    if (!cases.length) { sec.style.display = 'none'; return; }
+    sec.style.display = 'block';
+    document.getElementById('tap-battery-count').textContent = `${cases.length} cases`;
+    const list = document.getElementById('tap-battery-cases');
+    list.innerHTML = cases.map((c, i) => `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--ink-dim);display:flex;align-items:center;gap:8px">
+        <span style="color:var(--aqua);font-weight:700;min-width:20px">${i+1}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.label || c.cdc_bloc || JSON.stringify(c))}</span>
+      </div>`).join('');
+  }
+
+  async function _tapRunBattery() {
+    if (!_tapBatteryCases.length) return;
+    const btn = document.getElementById('tap-btn-battery');
+    const status = document.getElementById('tap-battery-status');
+    const resultsDiv = document.getElementById('tap-battery-results');
+    btn.disabled = true;
+    status.textContent = 'Running…';
+    resultsDiv.style.display = 'none';
+
+    const results = [];
+    for (let i = 0; i < _tapBatteryCases.length; i++) {
+      const input = _tapBatteryCases[i];
+      status.textContent = `${i+1}/${_tapBatteryCases.length} — ${input.label || ''}`;
+      try {
+        const testRaw = await fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/run-test`, {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({inputs: input}),
+        });
+        if (!testRaw.ok) { results.push({input, score: null, error: `run-test HTTP ${testRaw.status}`}); continue; }
+        const testRes = await testRaw.json().catch(() => null);
+        if (!testRes?.output) { results.push({input, score: null, error: testRes?.error || 'no output'}); continue; }
+        const outputStr = typeof testRes.output === 'string' ? testRes.output : JSON.stringify(testRes.output);
+        const judgeRaw = await fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/judge-test`, {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({agent_name: _tapAgentName, input, output: outputStr, run_id: _tapRunId, source: 'test_battery'}),
+        });
+        if (!judgeRaw.ok) { results.push({input, score: null, error: `judge-test HTTP ${judgeRaw.status}`}); continue; }
+        const judgeRes = await judgeRaw.json().catch(() => null);
+        results.push({input, score: judgeRes?.judge_score ?? null, feedback: judgeRes?.judge_feedback || ''});
+      } catch(e) { results.push({input, score: null, error: e.message}); }
+    }
+
+    const scored = results.filter(r => r.score !== null);
+    const avg = scored.length ? (scored.reduce((s,r) => s + r.score, 0) / scored.length).toFixed(2) : '—';
+    const avgCol = scored.length === 0 ? 'var(--ink-dim)' : Number(avg) >= 4 ? 'var(--aqua)' : Number(avg) >= 2 ? 'var(--yellow)' : 'var(--red)';
+    status.textContent = '';
+    btn.disabled = false;
+
+    resultsDiv.innerHTML = `
+      <div style="margin-bottom:10px;font-size:13px;font-weight:600;color:${avgCol}">Average: ${avg}/5 — ${scored.length}/${results.length} scored</div>
+      ${results.map((r,i) => {
+        const col = r.score === null ? 'var(--ink-dim)' : r.score >= 4 ? 'var(--aqua)' : r.score >= 2 ? 'var(--yellow)' : 'var(--red)';
+        return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:4px">
+          <span style="color:${col};font-weight:700;min-width:40px">${r.score !== null ? r.score.toFixed(1)+'/5' : 'ERR'}</span>
+          <span style="color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${escHtml(r.input.label || r.input.cdc_bloc || '')}</span>
+        </div>`;
+      }).join('')}`;
+    resultsDiv.style.display = 'block';
+    showRun(_tapRunId);
+  }
+
+  async function _tapRegenerateBattery() {
+    const btn = document.querySelector('#tap-battery-section button[onclick="_tapRegenerateBattery()"]');
+    if (btn) btn.disabled = true;
+    document.getElementById('tap-battery-status').textContent = 'Regenerating…';
+    const res = await fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/test-battery/regenerate`, {method:'POST'}).then(r => r.json()).catch(() => null);
+    if (btn) btn.disabled = false;
+    document.getElementById('tap-battery-status').textContent = '';
+    if (res?.cases?.length) {
+      _tapBatteryCases = res.cases;
+      await _tapLoadBattery(_tapRunId, _tapAgentName);
+    }
   }
 
   function _closeTestAgentPanel() {
@@ -4181,17 +4309,24 @@
     }
 
     status.textContent = '';
-    _tapOutput = res.output?.output || JSON.stringify(res.output, null, 2);
+    _tapOutput = res.output?.output || (res.output && typeof res.output === 'object' ? JSON.stringify(res.output, null, 2) : String(res.output || ''));
 
     document.getElementById('tap-step-result').style.display = 'block';
     document.getElementById('tap-step-judge').style.display = 'none';
+    document.getElementById('tap-diagnostic-card').style.display = 'none';
     document.getElementById('tap-judge-status').textContent = '';
 
     const badge = document.getElementById('tap-passed-badge');
-    badge.textContent = res.passed ? 'OK' : 'Erreur';
+    badge.textContent = res.passed ? 'OK' : 'Failed';
     badge.style.background = res.passed ? '#0d2a1a' : '#3a1515';
     badge.style.color = res.passed ? 'var(--aqua)' : 'var(--red)';
-    document.getElementById('tap-output-box').textContent = _tapOutput;
+    document.getElementById('tap-output-box').textContent = _tapOutput || '(empty output)';
+
+    // Auto-diagnose on any failure (passed=false), even without a traceback
+    if (!res.passed) {
+      const errorText = res.error || (_tapOutput && _tapOutput !== '{}' ? `Output: ${_tapOutput}` : 'Agent returned empty output with passed=false');
+      _tapAutoDiagnose(inputs[0], errorText);
+    }
   }
 
   async function _tapJudge() {
@@ -4299,6 +4434,12 @@
     if (ctxInput && _tapDiagRegenCtx) ctxInput.value = _tapDiagRegenCtx;
     _closeTestAgentPanel();
     showTabRuns();
+    // Show guidance: after scaffold completes, install before testing
+    const statusEl = document.getElementById('page-subtitle');
+    if (statusEl) {
+      statusEl.textContent = `Regenerating ${_tapAgentName}… After generation, click Install & Register, then Test.`;
+      setTimeout(() => { if (statusEl.textContent.startsWith('Regenerating')) statusEl.textContent = ''; }, 12000);
+    }
     scaffold(_tapRunId, _tapAgentName);
   }
 

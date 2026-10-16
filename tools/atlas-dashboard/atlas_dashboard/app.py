@@ -909,11 +909,9 @@ def _has_scores(points: list[dict]) -> bool:
 def _build_trend_points_from_test_runs(agent: str) -> list[dict]:
     """Build trend points from KG score_history entries with source='test'.
 
-    Groups entries by run_id → one point per test session.
-    Each point embeds individual ticket details for the drill-down view.
+    One point per individual test execution, ordered chronologically.
+    This lets the curve show actual progression across successive tests.
     """
-    from collections import defaultdict  # noqa: PLC0415
-
     try:
         from atlas_memory.kg import KGStore  # noqa: PLC0415
 
@@ -923,47 +921,38 @@ def _build_trend_points_from_test_runs(agent: str) -> list[dict]:
     except Exception:  # noqa: BLE001
         return []
 
-    test_entries = [h for h in history if h.get("source") == "test" and h.get("score") is not None]
+    test_entries = [h for h in history if h.get("source") == "test_battery" and h.get("score") is not None]
     if not test_entries:
         return []
 
-    # Group by run_id, preserving insertion order (chronological)
-    groups: dict[str, list[dict]] = defaultdict(list)
-    for entry in test_entries:
-        groups[entry.get("run_id", "")].append(entry)
+    # Sort chronologically
+    test_entries.sort(key=lambda e: e.get("timestamp", ""))
 
     points = []
     prev_score = None
-    for run_id, entries in groups.items():
-        scores = [e["score"] for e in entries]
-        avg = round(sum(scores) / len(scores), 2)
-        created_at = min(e.get("timestamp", "") for e in entries)
-        delta = round(avg - prev_score, 2) if prev_score is not None else None
-
-        tickets = [
-            {
-                "score": e["score"],
-                "passed": e["score"] >= 4,
-                "input": e.get("test_detail", {}).get("input", {}),
-                "output": e.get("test_detail", {}).get("output", ""),
-                "feedback": e.get("test_detail", {}).get("feedback", ""),
-                "criteria": e.get("test_detail", {}).get("criteria", []),
-                "timestamp": e.get("timestamp", ""),
-            }
-            for e in entries
-        ]
-
+    for entry in test_entries:
+        score = entry["score"]
+        delta = round(score - prev_score, 2) if prev_score is not None else None
+        ticket = {
+            "score": score,
+            "passed": score >= 4,
+            "input": entry.get("test_detail", {}).get("input", {}),
+            "output": entry.get("test_detail", {}).get("output", ""),
+            "feedback": entry.get("test_detail", {}).get("feedback", ""),
+            "criteria": entry.get("test_detail", {}).get("criteria", []),
+            "timestamp": entry.get("timestamp", ""),
+        }
         pt: dict = {
-            "run_id": run_id,
-            "created_at": created_at,
-            "avg_score": avg,
+            "run_id": entry.get("run_id", ""),
+            "created_at": entry.get("timestamp", ""),
+            "avg_score": score,
             "cause": "test_execution",
             "source": "test",
-            "tickets": tickets,
-            "n_tickets": len(tickets),
-            "n_passed": sum(1 for t in tickets if t["passed"]),
-            "criteria": [],
-            "feedback": f"{sum(1 for t in tickets if t['passed'])}/{len(tickets)} tickets passés",
+            "tickets": [ticket],
+            "n_tickets": 1,
+            "n_passed": 1 if score >= 4 else 0,
+            "criteria": entry.get("test_detail", {}).get("criteria", []),
+            "feedback": entry.get("test_detail", {}).get("feedback", ""),
             "patches_applied": [],
             "user_answers": [],
             "model_id": "",
@@ -971,7 +960,7 @@ def _build_trend_points_from_test_runs(agent: str) -> list[dict]:
         if delta is not None:
             pt["delta"] = delta
         points.append(pt)
-        prev_score = avg
+        prev_score = score
     return points
 
 
@@ -1528,6 +1517,21 @@ def _do_scaffold(run_id: str, agent_name: str, body: ScaffoldRequest) -> None:
         _log.getLogger("atlas_dashboard").warning(
             "_do_scaffold DONE %s result=%s", agent_name, str(result)[:200]
         )
+        # Generate fixed test battery for this agent
+        try:
+            run = store.get_run(run_id)
+            cdc_text = (run or {}).get("metadata", {}).get("cdc_full", "")
+            criteria = _get_agent_criteria(agent_name)
+            battery = _generate_test_battery(agent_name, cdc_text, criteria, n=3)
+            if battery:
+                store.set_test_battery(run_id, agent_name, battery)
+                _log.getLogger("atlas_dashboard").warning(
+                    "_do_scaffold: battery generated for %s (%d cases)", agent_name, len(battery)
+                )
+        except Exception as _exc:  # noqa: BLE001
+            _log.getLogger("atlas_dashboard").warning(
+                "_do_scaffold: battery generation failed for %s: %s", agent_name, _exc
+            )
     except Exception as exc:  # noqa: BLE001
         store.set_scaffold_status(run_id, agent_name, "error")
         _bg_jobs[job_key] = {"status": "error", "error": str(exc)}
@@ -2846,6 +2850,43 @@ class RunTestRequest(BaseModel):
     test_id: str = ""
 
 
+@app.get("/api/runs/{run_id}/agents/{agent_name}/test-battery")
+def api_get_test_battery(run_id: str, agent_name: str):
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    cases = store.get_test_battery(run_id, agent_name)
+    return {"agent": agent_name, "cases": cases}
+
+
+@app.put("/api/runs/{run_id}/agents/{agent_name}/test-battery")
+def api_put_test_battery(run_id: str, agent_name: str, body: dict):
+    """Replace the test battery with user-provided cases."""
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    cases = body.get("cases", [])
+    store.set_test_battery(run_id, agent_name, cases)
+    return {"ok": True, "n": len(cases)}
+
+
+@app.post("/api/runs/{run_id}/agents/{agent_name}/test-battery/regenerate")
+def api_regenerate_test_battery(run_id: str, agent_name: str):
+    """Regenerate the battery from scratch using the current CDC."""
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    cdc_text = run.get("metadata", {}).get("cdc_full", "")
+    criteria = _get_agent_criteria(agent_name)
+    battery = _generate_test_battery(agent_name, cdc_text, criteria, n=3)
+    if battery:
+        store.set_test_battery(run_id, agent_name, battery)
+    return {"ok": True, "cases": battery}
+
+
 @app.post("/api/runs/{run_id}/agents/{agent_name}/run-test")
 def api_run_test(run_id: str, agent_name: str, body: RunTestRequest):
     """Execute agent_name via atlas-bus with the given inputs. Returns the real output."""
@@ -2898,6 +2939,7 @@ class JudgeTestRequest(BaseModel):
     input: dict
     output: str
     run_id: str = ""
+    source: str = "test_free"  # "test_battery" feeds the curve; "test_free" does not
 
 
 @app.post("/api/runs/{run_id}/agents/{agent_name}/judge-test")
@@ -2954,6 +2996,7 @@ def api_judge_test(run_id: str, agent_name: str, body: JudgeTestRequest):
             score_val = round(sum(scores) / len(scores), 2) if scores else None
 
         test_run_id = body.run_id or run_id
+        kg_source = body.source  # "test_battery" feeds curve; "test_free" does not
         if score_val is not None:
             kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
             # Register agent in KG if not already present so score is always tracked
@@ -2970,11 +3013,13 @@ def api_judge_test(run_id: str, agent_name: str, body: JudgeTestRequest):
                     cdc_summary=cdc_summary,
                     context_tags=context_tags,
                 )
+                # Reload KG so update_agent_score sees the newly registered agent
+                kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
             kg.update_agent_score(
                 agent_name,
                 score_val,
                 run_id=test_run_id,
-                source="test",
+                source=kg_source,
                 test_detail={
                     "input": body.input,
                     "output": body.output,
@@ -3006,6 +3051,66 @@ class DiagnoseErrorRequest(BaseModel):
     error: str
     output: str = ""
     input: dict = {}
+
+
+_BATTERY_PROMPT = """\
+You are an ATLAS quality engineer. Generate {n} representative test inputs for agent "{agent_name}".
+
+CDC (excerpt):
+{cdc_text}
+
+Evaluation criteria:
+{criteria}
+
+Rules:
+- Each case must be realistic and representative of the CDC requirements
+- Cases must cover different scenarios (happy path, edge case, ambiguous input)
+- Each input is a JSON object with the fields the agent expects (typically: cdc_bloc, context)
+- Vary the difficulty and content — do not repeat the same case
+
+Return ONLY a valid JSON array, no markdown:
+[
+  {{"cdc_bloc": "...", "context": "...", "label": "<short description of this case>"}},
+  ...
+]
+"""
+
+
+def _generate_test_battery(
+    agent_name: str,
+    cdc_text: str,
+    criteria: list[str],
+    n: int = 3,
+) -> list[dict]:
+    """Call LLM to generate n fixed test cases for an agent. Returns list of input dicts."""
+    import json as _json  # noqa: PLC0415
+    import logging  # noqa: PLC0415
+
+    try:
+        llm_fn, llm_cfg = _llm_fn_for_dashboard()
+        criteria_str = "\n".join(f"- {c}" for c in criteria) if criteria else "— (use CDC context)"
+        prompt = _BATTERY_PROMPT.format(
+            n=n,
+            agent_name=agent_name,
+            cdc_text=cdc_text[:2000],
+            criteria=criteria_str,
+        )
+        raw = llm_fn(prompt, llm_cfg, 1200)
+        if not raw:
+            return []
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        cases = _json.loads(raw)
+        if isinstance(cases, list):
+            return cases[:n]
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("atlas_dashboard").warning(
+            "Battery generation failed for %s: %s", agent_name, exc
+        )
+    return []
 
 
 _DIAGNOSE_PROMPT = """\

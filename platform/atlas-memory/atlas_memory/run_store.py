@@ -193,6 +193,22 @@ class RunStore:
         run.setdefault("scaffolded", {}).setdefault(agent_name, {})["installed"] = True
         self._write(run_id, run)
 
+    def set_test_battery(
+        self,
+        run_id: str,
+        agent_name: str,
+        cases: list[dict[str, Any]],
+    ) -> None:
+        """Store fixed test battery cases for an agent."""
+        run = self._read(run_id)
+        run.setdefault("test_battery", {})[agent_name] = cases
+        self._write(run_id, run)
+
+    def get_test_battery(self, run_id: str, agent_name: str) -> list[dict[str, Any]]:
+        """Return the fixed test battery for an agent, or empty list if none."""
+        run = self._read(run_id)
+        return run.get("test_battery", {}).get(agent_name, [])
+
     def set_test_diagnostic(
         self,
         run_id: str,
