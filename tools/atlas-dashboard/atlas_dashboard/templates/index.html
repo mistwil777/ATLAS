@@ -4,31 +4,47 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ATLAS Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0e0e14;
-      --surface: #1a1a24;
-      --border: #2a2a3a;
-      --blue: #3987e5;
+      /* Argos / Capgemini palette — dark mode */
+      --bg: #0D1320;
+      --surface: #141B27;
+      --surface-2: #1C2435;
+      --border: #2C3A50;
+      --border-hover: #3D506A;
+      --blue: #0BA8E0;
+      --blue-cap: #0070AD;
       --aqua: #1baf7a;
       --red: #e66767;
       --yellow: #e8a600;
       --violet: #9085e9;
-      --ink: #c8c0d8;
-      --ink-dim: #7a748a;
+      --ink: #EEF2F7;
+      --ink-dim: #899AB0;
+      --ink-faint: #5C6E82;
+      --radius: 0.5rem;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--ink); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; color-scheme: dark; }
+    body { background: var(--bg); color: var(--ink); font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 13px; color-scheme: dark; }
+    code, pre, .code-block, #code-modal-pre, .code-viewer pre { font-family: 'Space Mono', monospace; }
 
-    header { padding: 14px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
-    header h1 { font-size: 16px; color: var(--blue); letter-spacing: 0.08em; }
-    header .tag { font-size: 11px; color: var(--ink-dim); background: var(--surface); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 3px; height: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 99px; }
+
+    header { padding: 14px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; background: var(--surface); }
+    header h1 { font-size: 16px; font-weight: 700; color: var(--blue); letter-spacing: 0.04em; }
+    header .tag { font-size: 11px; color: var(--ink-dim); background: var(--bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: var(--radius); }
 
     /* ── KPI bar ── */
-    .kpi-bar { display: flex; gap: 12px; padding: 14px 32px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-    .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 18px; min-width: 120px; }
-    .kpi .kpi-label { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-    .kpi .kpi-value { font-size: 20px; font-weight: bold; }
+    .kpi-bar { display: flex; gap: 12px; padding: 14px 32px; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg); }
+    .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 18px; min-width: 120px; transition: border-color .15s; }
+    .kpi:hover { border-color: var(--border-hover); }
+    .kpi .kpi-label { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; margin-bottom: 4px; }
+    .kpi .kpi-value { font-size: 20px; font-weight: 700; }
     .kpi.blue  .kpi-value { color: var(--blue); }
     .kpi.aqua  .kpi-value { color: var(--aqua); }
     .kpi.red   .kpi-value { color: var(--red); }
@@ -43,22 +59,22 @@
     td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
     .rate-bar { display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle; margin-left: 6px; }
 
-    /* ── Toolbar ── */
-    .toolbar { padding: 10px 32px; display: flex; gap: 10px; border-bottom: 1px solid var(--border); }
-    .toolbar button { padding: 5px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 12px; transition: border-color .15s; }
-    .toolbar button:hover { border-color: var(--blue); color: var(--blue); }
-    .toolbar button.active { border-color: var(--blue); color: var(--blue); }
+    /* ── Toolbar (tab nav) ── */
+    .toolbar { padding: 0 32px; display: flex; gap: 2px; border-bottom: 1px solid var(--border); background: var(--surface); }
+    .toolbar button { padding: 10px 16px; border-radius: 0; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--ink-dim); cursor: pointer; font-size: 13px; font-family: 'Space Grotesk', sans-serif; font-weight: 500; transition: color .15s, border-color .15s; }
+    .toolbar button:hover { color: var(--ink); border-bottom-color: var(--border-hover); }
+    .toolbar button.active { color: var(--blue); border-bottom-color: var(--blue); }
 
     /* ── Layout ── */
     .layout { display: flex; height: calc(100vh - 210px); }
-    .run-list { width: 260px; min-width: 200px; border-right: 1px solid var(--border); overflow-y: auto; }
-    .run-item { padding: 12px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; }
-    .run-item:hover { background: var(--surface); }
-    .run-item.selected { background: var(--surface); border-left: 2px solid var(--blue); }
-    .run-item .run-id { font-size: 11px; color: var(--ink-dim); margin-bottom: 4px; }
+    .run-list { width: 260px; min-width: 200px; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+    .run-item { padding: 12px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
+    .run-item:hover { background: var(--surface-2); }
+    .run-item.selected { background: var(--surface-2); border-left: 2px solid var(--blue); }
+    .run-item .run-id { font-size: 11px; color: var(--ink-faint); margin-bottom: 4px; font-family: 'Space Mono', monospace; }
     .run-item .run-meta { display: flex; gap: 8px; align-items: center; }
 
-    .badge { font-size: 10px; padding: 2px 7px; border-radius: 3px; font-weight: bold; }
+    .badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 600; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.03em; }
     .badge-pending           { background: #2a2a14; color: var(--yellow); border: 1px solid var(--yellow); }
     .badge-approved          { background: #0d2a1a; color: var(--aqua);   border: 1px solid var(--aqua); }
     .badge-rejected          { background: #2a0d0d; color: var(--red);    border: 1px solid var(--red); }
@@ -75,7 +91,7 @@
     .badge-resumed           { background: #141a14; color: #6a9f6a;       border: 1px solid #6a9f6a; opacity: 0.6; }
 
     /* ── Waiting panel ── */
-    .waiting-panel { background: #0d1220; border: 1px solid var(--blue); border-radius: 6px; padding: 16px 20px; margin-bottom: 18px; }
+    .waiting-panel { background: var(--surface); border: 1px solid var(--blue); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 18px; }
     .waiting-panel .waiting-title { font-size: 12px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
     .waiting-panel .waiting-intro { font-size: 12px; color: var(--ink-dim); margin-bottom: 16px; }
     .waiting-question { margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 14px; }
@@ -83,12 +99,12 @@
     .waiting-q-num { font-size: 10px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
     .waiting-q-text { font-size: 12px; color: var(--ink); margin-bottom: 6px; }
     .waiting-q-hint { font-size: 10px; color: var(--ink-dim); margin-bottom: 8px; font-style: italic; }
-    .waiting-q-text-input { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 12px; font-family: inherit; }
+    .waiting-q-text-input { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; font-size: 12px; font-family: 'Space Grotesk', sans-serif; }
     .waiting-q-text-input:focus { outline: none; border-color: var(--blue); }
     .waiting-q-options { display: flex; flex-direction: column; gap: 6px; }
     .waiting-q-option { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink); cursor: pointer; }
     .waiting-q-option input { accent-color: var(--blue); }
-    .btn-submit-answers { margin-top: 14px; padding: 8px 22px; background: var(--blue); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
+    .btn-submit-answers { margin-top: 14px; padding: 8px 22px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; font-weight: 700; font-size: 12px; font-family: 'Space Grotesk', sans-serif; }
     .btn-submit-answers:hover { opacity: .85; }
     .btn-submit-answers:disabled { opacity: .4; cursor: default; }
 
@@ -98,14 +114,16 @@
     .cause-code_error   { background: #1a1800; color: var(--yellow); border: 1px solid var(--yellow); }
     .cause-missing_spec { background: #0d1220; color: var(--blue);   border: 1px solid var(--blue); }
 
-    .detail { flex: 1; overflow-y: auto; padding: 22px 32px; }
+    .detail { flex: 1; overflow-y: auto; padding: 22px 32px; background: var(--bg); }
     .detail-empty { color: var(--ink-dim); margin-top: 40px; text-align: center; }
-    .detail h2 { font-size: 14px; color: var(--blue); margin-bottom: 14px; }
+    .detail h2 { font-size: 14px; font-weight: 600; color: var(--blue); margin-bottom: 14px; }
     .actions { display: flex; gap: 10px; margin-bottom: 18px; }
-    .btn-approve { padding: 7px 18px; background: var(--aqua); color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
-    .btn-reject  { padding: 7px 18px; background: var(--red);  color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
+    .btn-approve { padding: 7px 18px; background: var(--aqua); color: #000; border: none; border-radius: var(--radius); cursor: pointer; font-weight: 700; font-size: 12px; font-family: 'Space Grotesk', sans-serif; transition: opacity .15s; }
+    .btn-reject  { padding: 7px 18px; background: var(--red);  color: #fff; border: none; border-radius: var(--radius); cursor: pointer; font-weight: 700; font-size: 12px; font-family: 'Space Grotesk', sans-serif; transition: opacity .15s; }
+    .btn-approve:hover, .btn-reject:hover { opacity: 0.85; }
     .btn-approve:disabled, .btn-reject:disabled { opacity: .4; cursor: default; }
-    .bloc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+    .bloc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 10px; transition: border-color .15s; }
+    .bloc-card:hover { border-color: var(--border-hover); }
     .bloc-card .bloc-header { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
     .bloc-card .bloc-agent { color: var(--blue); font-size: 12px; }
     .bloc-card .bloc-score { font-size: 11px; color: var(--ink-dim); }
@@ -181,20 +199,20 @@
     .btn-rejudge { padding: 3px 10px; background: transparent; border: 1px solid var(--ink-dim); color: var(--ink-dim); border-radius: 3px; cursor: pointer; font-size: 11px; }
     .btn-rejudge:hover { border-color: var(--blue); color: var(--blue); }
     .scaffold-panel { display: flex; flex-direction: column; gap: 0; width: 100%; }
-    .scaffold-section { padding: 12px 16px; border-bottom: 1px solid #1e2535; width: 100%; box-sizing: border-box; overflow: hidden; }
-    .scaffold-judge { background: #0d1117; }
+    .scaffold-section { padding: 12px 16px; border-bottom: 1px solid var(--border); width: 100%; box-sizing: border-box; overflow: hidden; }
+    .scaffold-judge { background: var(--bg); }
     .scaffold-actions { display: flex; gap: 8px; padding: 12px 16px; align-items: center; }
-    .file-select { flex: 1; background: #0d1117; color: var(--ink); border: 1px solid #1e2535; border-radius: 3px; padding: 4px 8px; font-family: monospace; font-size: 12px; appearance: none; -webkit-appearance: none; color-scheme: dark; }
+    .file-select { flex: 1; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 8px; font-family: 'Space Mono', monospace; font-size: 12px; appearance: none; -webkit-appearance: none; color-scheme: dark; }
     .file-select-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
     .btn-expand { background: transparent; border: 1px solid #1e2535; color: var(--ink-dim); border-radius: 3px; cursor: pointer; padding: 3px 7px; font-size: 13px; line-height: 1; }
     .btn-expand:hover { border-color: var(--blue); color: var(--blue); }
-    .code-block { background: #0a0e17; color: var(--ink); font-family: monospace; font-size: 12px; line-height: 1.5; padding: 12px; border-radius: 4px; overflow-x: auto; max-height: 320px; overflow-y: auto; white-space: pre; margin: 0; }
+    .code-block { background: var(--bg); color: var(--ink); font-family: 'Space Mono', monospace; font-size: 12px; line-height: 1.5; padding: 12px; border-radius: var(--radius); overflow-x: auto; max-height: 320px; overflow-y: auto; white-space: pre; margin: 0; border: 1px solid var(--border); }
     #code-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:9999; padding:32px; box-sizing:border-box; flex-direction:column; gap:10px; }
     #code-modal-overlay.open { display:flex; }
     #code-modal-bar { display:flex; justify-content:space-between; align-items:center; }
-    #code-modal-select { background:#0d1117; color:var(--ink); border:1px solid #1e2535; border-radius:3px; padding:4px 10px; font-family:monospace; font-size:13px; }
-    #code-modal-close { background:transparent; border:1px solid #1e2535; color:var(--ink-dim); border-radius:3px; cursor:pointer; padding:4px 10px; font-size:16px; }
-    #code-modal-pre { flex:1; background:#0a0e17; color:var(--ink); font-family:monospace; font-size:13px; line-height:1.6; padding:16px; border-radius:4px; overflow:auto; white-space:pre; margin:0; }
+    #code-modal-select { background:var(--surface); color:var(--ink); border:1px solid var(--border); border-radius:var(--radius); padding:4px 10px; font-family:'Space Mono', monospace; font-size:13px; }
+    #code-modal-close { background:transparent; border:1px solid var(--border); color:var(--ink-dim); border-radius:var(--radius); cursor:pointer; padding:4px 10px; font-size:16px; }
+    #code-modal-pre { flex:1; background:var(--bg); color:var(--ink); font-family:'Space Mono', monospace; font-size:13px; line-height:1.6; padding:16px; border-radius:var(--radius); overflow:auto; white-space:pre; margin:0; }
     .btn-rerun:hover { opacity: .85; }
     .code-viewer { margin-top: 8px; width: 100%; }
     .code-viewer select { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 4px; font-size: 11px; margin-bottom: 6px; }
@@ -230,9 +248,9 @@
     .kg-count.agents { color: var(--violet); border-color: var(--violet); }
     .kg-count.tools  { color: var(--yellow); border-color: var(--yellow); }
     .kg-count.edges  { color: var(--ink-dim); }
-    #kg-graph { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 6px; background: #0d0d14; }
-    .kg-empty { color: var(--ink-dim); text-align: center; padding: 40px; }
-    .btn-refresh-kg { padding: 5px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 12px; }
+    #kg-graph { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: var(--radius); background: #080e1a; }
+    .kg-empty { color: var(--ink-dim); text-align: center; padding: 40px; font-family: 'Space Grotesk', sans-serif; }
+    .btn-refresh-kg { padding: 5px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--ink-dim); cursor: pointer; font-size: 12px; font-family: 'Space Grotesk', sans-serif; font-weight: 500; transition: border-color .15s, color .15s; }
     .btn-refresh-kg:hover { border-color: var(--blue); color: var(--blue); }
     .kg-tooltip { position: fixed; background: #1a1a2e; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: 11px; color: var(--ink); pointer-events: none; z-index: 999; max-width: 260px; display: none; }
     .kg-tooltip-title { font-weight: bold; font-size: 12px; margin-bottom: 6px; }
@@ -266,9 +284,9 @@
     #trend-panel { display: none; padding: 22px 32px; }
     .trend-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
     .trend-toolbar h2 { font-size: 14px; color: var(--blue); flex: 1; }
-    .trend-select { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; font-size: 12px; font-family: inherit; cursor: pointer; min-width: 220px; }
+    .trend-select { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius); padding: 5px 10px; font-size: 12px; font-family: 'Space Grotesk', sans-serif; cursor: pointer; min-width: 220px; }
     .trend-select:focus { outline: none; border-color: var(--blue); }
-    .trend-chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 18px; overflow-x: auto; }
+    .trend-chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 18px; overflow-x: auto; }
     .trend-empty { color: var(--ink-dim); text-align: center; padding: 40px; }
     .trend-point-dot { cursor: pointer; transition: r .1s; }
     .trend-point-dot:hover { r: 7; }
@@ -276,7 +294,7 @@
     .badge-model { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #0d1a2a; color: var(--blue);   border: 1px solid var(--blue);   cursor: pointer; }
     .badge-init  { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: var(--surface); color: var(--ink-dim); border: 1px solid var(--border); }
     /* detail panel */
-    .trend-detail { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; }
+    .trend-detail { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; }
     .trend-detail h3 { font-size: 13px; color: var(--blue); margin-bottom: 4px; }
     .trend-detail-meta { font-size: 11px; color: var(--ink-dim); margin-bottom: 12px; }
     .trend-section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--violet); margin: 10px 0 6px; }
@@ -298,7 +316,7 @@
 
 <!-- ── Pipeline toast (persistent, survives navigation) ──────────────────── -->
 <div id="pipeline-toast" style="display:none;position:fixed;bottom:24px;right:24px;z-index:2000;
-     background:#1a1a2e;border:1px solid var(--blue);border-radius:10px;padding:16px 20px;
+     background:var(--surface);border:1px solid var(--blue);border-radius:10px;padding:16px 20px;
      min-width:260px;max-width:340px;box-shadow:0 4px 24px rgba(0,0,0,.5);cursor:default">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
     <span style="font-size:12px;font-weight:600;color:var(--blue);text-transform:uppercase;letter-spacing:.06em">Pipeline</span>
@@ -337,18 +355,16 @@
 </details>
 
 <div class="toolbar">
-  <button id="btn-all" onclick="showTabRuns(); loadRuns(false)">All runs</button>
+  <button id="btn-all" onclick="showTabRuns(); loadRuns(false)">Runs</button>
   <button id="btn-tests" onclick="showTabTests()">Tests</button>
-  <button id="btn-folders" onclick="showTabFolders()">Folders</button>
-  <button id="btn-kg" onclick="showTabKG()">Knowledge Graph</button>
-  <button id="btn-trend" onclick="showTabTrend()">Trends</button>
+  <button id="btn-trend" onclick="showTabTrend()">Agent Scores</button>
+  <button id="btn-projects" onclick="showTabProjects()">Projects</button>
   <button onclick="openNewCdcModal()" style="margin-left:auto;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">+ New CDC</button>
-  <button onclick="bulkDeleteSkipped()" style="border-color:var(--red);color:var(--red)" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
 </div>
 
 <!-- ── Modale Nouveau CDC ───────────────────────────────────────────────── -->
 <div id="cdc-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:none;align-items:center;justify-content:center">
-  <div style="background:#1a1a2e;border:1px solid var(--blue);border-radius:12px;padding:32px;width:480px;max-width:90vw">
+  <div style="background:var(--surface);border:1px solid var(--blue);border-radius:12px;padding:32px;width:480px;max-width:90vw">
     <h3 style="margin:0 0 20px;color:var(--blue)">New CDC</h3>
 
     <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--ink-dim)">CDC FILE (txt, md, pdf, docx)</label>
@@ -362,7 +378,7 @@
     <input type="file" id="cdc-file-input" accept=".txt,.md,.pdf,.docx" style="display:none" onchange="onCdcFileSelected(this)">
 
     <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--ink-dim)">PROJECT NAME (optional)</label>
-    <input type="text" id="cdc-project-name" placeholder="ex: crm-support-2026" style="width:100%;box-sizing:border-box;background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:8px 12px;color:#fff;font-size:13px;margin-bottom:20px">
+    <input type="text" id="cdc-project-name" placeholder="ex: crm-support-2026" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid #333;border-radius:var(--radius);padding:8px 12px;color:#fff;font-size:13px;margin-bottom:20px">
 
     <div id="cdc-modal-error" style="color:var(--red);font-size:12px;margin-bottom:12px;display:none"></div>
 
@@ -382,6 +398,9 @@
 <div class="layout">
   <div class="run-list" id="run-list">
     <div style="padding:20px; color: var(--ink-dim);">Loading…</div>
+  </div>
+  <div style="padding:4px 12px;text-align:right;border-top:1px solid #1a1a2e">
+    <button onclick="bulkDeleteSkipped()" style="font-size:10px;padding:3px 8px;border:1px solid #333;color:#444;border-radius:3px;background:none;cursor:pointer" title="Delete all runs where every bloc is skipped">Delete debug runs</button>
   </div>
   <div class="detail" id="detail">
     <div class="detail-empty">Select a run to inspect it.</div>
@@ -409,7 +428,7 @@
 
 <div id="trend-panel">
   <div class="trend-toolbar">
-    <h2>Trends — agent progression <span style="display:inline-block;position:relative;cursor:default" onmouseenter="document.getElementById('trends-info').style.display='block'" onmouseleave="document.getElementById('trends-info').style.display='none'"><span style="font-size:11px;color:var(--ink-dim);border:1px solid var(--border);border-radius:50%;padding:1px 5px;vertical-align:middle">?</span><div id="trends-info" style="display:none;position:absolute;top:24px;left:0;z-index:99;background:#1a1a2e;border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:11px;color:var(--ink);width:280px;line-height:1.6;font-weight:normal"><strong>Score affiché (axe Y)</strong> : score donné par le <em>juge LLM</em> après chaque tentative de scaffold (0–5).<br><strong>R1, R2…</strong> : chaque point = une tentative de scaffold ou re-scaffold.<br><strong>CR</strong> : tentative suite à un correctif manuel (CR retry).<br><strong>Ligne pointillée</strong> : seuil de qualité à 4/5.<br><br>Ce score est distinct du score de validation humaine affiché dans le Knowledge Graph.</div></span></h2>
+    <h2>Agent Scores — progression <span style="display:inline-block;position:relative;cursor:default" onmouseenter="document.getElementById('trends-info').style.display='block'" onmouseleave="document.getElementById('trends-info').style.display='none'"><span style="font-size:11px;color:var(--ink-dim);border:1px solid var(--border);border-radius:50%;padding:1px 5px;vertical-align:middle">?</span><div id="trends-info" style="display:none;position:absolute;top:24px;left:0;z-index:99;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;font-size:11px;color:var(--ink);width:280px;line-height:1.6;font-weight:normal"><strong>Score affiché (axe Y)</strong> : score donné par le <em>juge LLM</em> lors d'un test réel sur ticket (0–5).<br><strong>T1, T2…</strong> : chaque point = un test réel exécuté sur l'agent.<br><strong>CR</strong> : tentative suite à un correctif manuel (CR retry).<br><strong>Ligne pointillée</strong> : seuil de qualité à 4/5.<br><br>Ce score est distinct du score de validation humaine affiché dans Projects.</div></span></h2>
     <select class="trend-select" id="trend-agent-select" onchange="loadTrend(this.value)">
       <option value="">— Choisir un agent —</option>
     </select>
@@ -431,22 +450,23 @@
     </div>
     <div id="adv-block-reason" style="display:none;font-size:11px;color:var(--yellow);padding:6px 0;line-height:1.5"></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Validate and launch scaffold</button>
-      <button id="adv-retest-btn" onclick="_advisorRunTest()" style="font-size:12px;padding:6px 16px;border:1px solid var(--blue);color:var(--blue);border-radius:4px;background:none;cursor:pointer;display:none">Relancer test</button>
+      <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Validate and generate</button>
+      <button id="adv-retest-btn" onclick="_advisorRunTest()" style="font-size:12px;padding:6px 16px;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);background:none;cursor:pointer;display:none">Relancer test</button>
     </div>
   </div>
 </div>
 
 <div id="tests-panel" style="display:none;padding:24px;max-width:900px;margin:0 auto">
-  <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px">
     <h2 style="margin:0">Tests — run pipeline on real tickets</h2>
     <button class="btn-refresh-kg" onclick="_loadTestHistory()">Refresh history</button>
   </div>
+  <p style="margin:0 0 16px;font-size:12px;color:var(--ink-dim)">Full pipeline tests on a real ticket. For single-agent tests, see <button onclick="showTabTrend()" style="background:none;border:none;color:var(--violet);cursor:pointer;font-size:12px;padding:0;text-decoration:underline">Agent Scores →</button></p>
 
   <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
     <div style="flex:1;min-width:220px">
       <label style="display:block;font-size:12px;color:var(--ink-dim);margin-bottom:6px">PROJECT</label>
-      <select id="test-project-select" style="width:100%;background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:8px 12px;color:#fff;font-size:13px" onchange="_onTestProjectChange()">
+      <select id="test-project-select" style="width:100%;background:var(--bg);border:1px solid #333;border-radius:var(--radius);padding:8px 12px;color:#fff;font-size:13px" onchange="_onTestProjectChange()">
         <option value="">— select a project —</option>
       </select>
     </div>
@@ -460,21 +480,21 @@
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <label id="test-input-label" style="font-size:12px;color:var(--ink-dim)">INPUT</label>
       <div style="display:flex;gap:8px;align-items:center">
-        <label id="test-file-label" style="cursor:pointer;font-size:12px;padding:4px 10px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111;white-space:nowrap" title="Accepted: .txt, .md, .pdf">
+        <label id="test-file-label" style="cursor:pointer;font-size:12px;padding:4px 10px;border:1px solid #444;border-radius:var(--radius);color:var(--ink-dim);background:#111;white-space:nowrap" title="Accepted: .txt, .md, .pdf">
           Attach file
           <input id="test-file-input" type="file" accept=".txt,.md,.pdf" style="display:none" onchange="handleTicketFile(this)">
         </label>
-        <input id="test-generate-prompt" type="text" placeholder="Describe the case to generate…" style="font-size:12px;padding:4px 10px;border:1px solid #444;border-radius:4px;color:#fff;background:#111;width:220px" onkeydown="if(event.key==='Enter')generateTicket()">
-        <button id="test-generate-btn" onclick="generateTicket()" style="font-size:12px;padding:4px 10px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111;white-space:nowrap;cursor:pointer">Generate</button>
+        <input id="test-generate-prompt" type="text" placeholder="Describe the case to generate…" style="font-size:12px;padding:4px 10px;border:1px solid #444;border-radius:var(--radius);color:#fff;background:#111;width:220px" onkeydown="if(event.key==='Enter')generateTicket()">
+        <button id="test-generate-btn" onclick="generateTicket()" style="font-size:12px;padding:4px 10px;border:1px solid #444;border-radius:var(--radius);color:var(--ink-dim);background:#111;white-space:nowrap;cursor:pointer">Generate</button>
       </div>
     </div>
-    <textarea id="test-ticket-input" rows="5" style="width:100%;box-sizing:border-box;background:#0d0d1a;border:1px solid #333;border-radius:6px;padding:10px 12px;color:#fff;font-size:13px;resize:vertical" placeholder="Paste an example here, attach a file, or generate one…"></textarea>
+    <textarea id="test-ticket-input" rows="5" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid #333;border-radius:var(--radius);padding:10px 12px;color:#fff;font-size:13px;resize:vertical" placeholder="Paste an example here, attach a file, or generate one…"></textarea>
     <div id="test-file-status" style="font-size:11px;color:var(--ink-dim);margin-top:4px;min-height:14px"></div>
   </div>
 
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
     <button id="test-run-btn" onclick="runTest()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600" disabled>Run pipeline</button>
-    <button id="test-batch-btn" onclick="showBatchPanel()" style="border:1px solid var(--violet);color:var(--violet);background:#111;font-weight:600;padding:6px 14px;border-radius:4px;cursor:pointer" disabled>Generate batch</button>
+    <button id="test-batch-btn" onclick="showBatchPanel()" style="border:1px solid var(--violet);color:var(--violet);background:#111;font-weight:600;padding:6px 14px;border-radius:var(--radius);cursor:pointer" disabled>Generate batch</button>
   </div>
 
   <!-- Batch panel: step 1 review, step 2 results -->
@@ -485,7 +505,7 @@
     </div>
     <div id="batch-cases-list"></div>
     <div id="batch-run-bar" style="display:none;margin-top:12px">
-      <button id="run-batch-btn" onclick="runBatch()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;padding:7px 18px;border-radius:4px;cursor:pointer">Run batch</button>
+      <button id="run-batch-btn" onclick="runBatch()" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;padding:7px 18px;border-radius:var(--radius);cursor:pointer">Run batch</button>
       <span id="batch-progress" style="margin-left:12px;font-size:12px;color:var(--ink-dim)"></span>
     </div>
   </div>
@@ -510,10 +530,10 @@
   <div id="tap-step-inputs">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <span style="font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Inputs</span>
-      <button id="tap-btn-generate" onclick="_tapGenerateInputs()" style="font-size:12px;padding:4px 12px;border:1px solid var(--blue);color:var(--blue);border-radius:4px;background:none;cursor:pointer">Générer depuis CDC</button>
+      <button id="tap-btn-generate" onclick="_tapGenerateInputs()" style="font-size:12px;padding:4px 12px;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);background:none;cursor:pointer">Générer depuis CDC</button>
     </div>
     <div id="tap-inputs-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
-    <button onclick="_tapAddInput()" style="font-size:12px;padding:4px 12px;border:1px dashed #444;color:var(--ink-dim);border-radius:4px;background:none;cursor:pointer">+ Ajouter un input</button>
+    <button onclick="_tapAddInput()" style="font-size:12px;padding:4px 12px;border:1px dashed #444;color:var(--ink-dim);border-radius:var(--radius);background:none;cursor:pointer">+ Ajouter un input</button>
   </div>
 
   <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
@@ -527,10 +547,10 @@
       <span style="font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Output</span>
       <span id="tap-passed-badge" style="font-size:11px;padding:2px 8px;border-radius:3px"></span>
     </div>
-    <pre id="tap-output-box" style="background:#0d0d1a;border:1px solid #1a1a2e;border-radius:6px;padding:14px;font-size:12px;color:var(--ink);overflow-x:auto;white-space:pre-wrap;max-height:260px;overflow-y:auto"></pre>
+    <pre id="tap-output-box" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:12px;color:var(--ink);overflow-x:auto;white-space:pre-wrap;max-height:260px;overflow-y:auto"></pre>
 
     <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
-      <button id="tap-btn-judge" onclick="_tapJudge()" style="background:var(--aqua);color:#0d0d1a;border-color:var(--aqua);font-weight:600">Évaluer (juge)</button>
+      <button id="tap-btn-judge" onclick="_tapJudge()" style="background:var(--aqua);color:#000;border-color:var(--aqua);font-weight:600">Évaluer (juge)</button>
       <span id="tap-judge-status" style="font-size:12px;color:var(--ink-dim)"></span>
     </div>
 
@@ -540,12 +560,13 @@
         <span style="font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Score post-test</span>
         <span id="tap-score-badge" style="font-size:20px;font-weight:700"></span>
       </div>
-      <div id="tap-feedback-box" style="font-size:12px;color:var(--ink);background:#0d0d1a;border:1px solid #1a1a2e;border-radius:6px;padding:12px;margin-bottom:12px;line-height:1.6"></div>
+      <div id="tap-feedback-box" style="font-size:12px;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px;line-height:1.6"></div>
       <div id="tap-criteria-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px"></div>
-      <div id="tap-action-bar" style="display:none;padding:12px 16px;background:#12121f;border:1px solid #252535;border-radius:6px;display:flex;align-items:center;gap:12px">
+      <div id="tap-action-bar" style="display:none;padding:12px 16px;background:#12121f;border:1px solid #252535;border-radius:var(--radius);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--ink-dim);flex:1" id="tap-action-hint"></span>
-        <button id="tap-btn-rescaffold" onclick="_tapReScaffold()" style="font-size:12px;padding:5px 14px;border:1px solid var(--yellow);color:var(--yellow);border-radius:4px;background:none;cursor:pointer">Re-scaffold</button>
-        <button onclick="_tapRunTest()" style="font-size:12px;padding:5px 14px;border:1px solid var(--blue);color:var(--blue);border-radius:4px;background:none;cursor:pointer">Relancer test</button>
+        <button id="tap-btn-rescaffold" style="display:none;font-size:12px;padding:5px 14px;border:1px solid var(--yellow);color:var(--yellow);border-radius:var(--radius);background:none;cursor:pointer" onclick="_tapReScaffold()">Regenerate</button>
+        <button id="tap-btn-rerun" style="display:none;font-size:12px;padding:5px 14px;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);background:none;cursor:pointer" onclick="_tapRunTest()">Relancer test</button>
+        <button onclick="_tapGoToTrends()" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Voir dans Agent Scores →</button>
       </div>
     </div>
   </div>
@@ -722,7 +743,7 @@
             <div class="card-body" style="margin-top:10px;width:100%" onclick="event.stopPropagation()">
               ${blocs.map(b => {
                 const bType = (b.type === 'agent' || b.type === 'ia') ? 'agent' : 'tool';
-                const bAction = bType === 'agent' ? `<span style="font-size:10px;color:var(--ink-dim);border:1px solid #2a3040;border-radius:3px;padding:1px 6px">to create</span>` : `<span style="font-size:10px;color:var(--ink-dim);border:1px solid #2a3040;border-radius:3px;padding:1px 6px">reusable</span>`;
+                const bAction = bType === 'agent' ? `<span style="font-size:10px;color:var(--ink-dim);border:1px solid var(--border);border-radius:3px;padding:1px 6px">to create</span>` : `<span style="font-size:10px;color:var(--ink-dim);border:1px solid var(--border);border-radius:3px;padding:1px 6px">reusable</span>`;
                 return `<div class="bloc-card bloc-card-${bType}" style="margin-bottom:6px">
                 <div class="bloc-header">
                   <span class="bloc-agent">${b.agent || '—'}</span>
@@ -745,7 +766,7 @@
               ${b.requires_review && isPending ? `<input type="checkbox" class="bloc-select" data-agent="${escHtml(b.agent || '')}" checked style="accent-color:var(--violet);margin-right:4px" onclick="event.stopPropagation()">` : ''}
               <span class="bloc-agent">${b.agent || '—'}</span>
               <span class="badge badge-type-${bType}">${bType}</span>
-              ${bType === 'agent' ? `<span style="font-size:10px;color:var(--ink-dim);border:1px solid #2a3040;border-radius:3px;padding:1px 6px">to create</span>` : `<span style="font-size:10px;color:var(--ink-dim);border:1px solid #2a3040;border-radius:3px;padding:1px 6px">reusable</span>`}
+              ${bType === 'agent' ? `<span style="font-size:10px;color:var(--ink-dim);border:1px solid var(--border);border-radius:3px;padding:1px 6px">to create</span>` : `<span style="font-size:10px;color:var(--ink-dim);border:1px solid var(--border);border-radius:3px;padding:1px 6px">reusable</span>`}
               <span class="bloc-score">${b.judge_score != null ? 'score: ' + b.judge_score.toFixed(2) : ''}</span>
               ${b.requires_review && isPending ? `<button class="btn-scaffold" style="margin-left:auto;padding:3px 10px;font-size:11px" onclick="event.stopPropagation();improveBloc('${runId}','${escHtml(b.agent || '')}',this)">Improve</button>` : '<span class="toggle-chevron" style="margin-left:auto">▶</span>'}
             </div>
@@ -805,7 +826,7 @@
 
     const steps = [
       { label: 'Routing',   done: routingDone },
-      { label: 'Scaffold',  done: scaffoldDone },
+      { label: 'Generate',  done: scaffoldDone },
       { label: 'Install',   done: installDone },
       { label: 'Validated', done: valideDone },
     ];
@@ -816,7 +837,7 @@
 
     const hints = [
       null,
-      'Scaffold the missing agents',
+      'Generate the missing agents',
       'Install the generated agents',
       'Relancez le pipeline',
       'Approve the run',
@@ -898,7 +919,7 @@
       return;
     }
     btn.disabled = true;
-    btn.textContent = 'Reprise du scaffold…';
+    btn.textContent = 'Resuming generation…';
     const panel = document.getElementById(`waiting-panel-${runId}`);
     if (panel) panel.style.opacity = '0.5';
     try {
@@ -1080,14 +1101,14 @@
       let controls = '';
       if (state === 'pending') {
         controls = `
-          <input type="text" id="ingest-text-${agent}" placeholder="Contexte additionnel…" oninput="onIngestTextInput('${agent}',this)" style="flex:1;min-width:0;max-width:260px;background:#0d1117;border:1px solid #2a3040;border-radius:4px;color:var(--ink);font-size:11px;padding:4px 8px;outline:none">
-          <label title="Joindre des documents (PDF, txt, md, html, images…)" style="cursor:pointer;padding:4px 8px;border:1px dashed var(--ink-dim);border-radius:4px;font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px;white-space:nowrap">
+          <input type="text" id="ingest-text-${agent}" placeholder="Contexte additionnel…" oninput="onIngestTextInput('${agent}',this)" style="flex:1;min-width:0;max-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:4px 8px;outline:none">
+          <label title="Joindre des documents (PDF, txt, md, html, images…)" style="cursor:pointer;padding:4px 8px;border:1px dashed var(--ink-dim);border-radius:var(--radius);font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px;white-space:nowrap">
             <span id="ingest-label-${agent}">📎</span>
             <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎 '+this.files.length:'📎'">
           </label>
-          <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')">Scaffold</button>`;
+          <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')">Generate</button>`;
       } else if (state === 'scaffolding') {
-        controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Scaffolding…</span>`;
+        controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Generating…</span>`;
       } else if (state === 'scaffolded') {
         const files = _scaffoldState[key]?.files || sc?.files || {};
         _agentFiles[agent] = files;
@@ -1119,12 +1140,12 @@
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
               ${judgeScore !== null && judgeScore < 5
-                ? `<input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:#0d1117;border:1px solid #2a3040;border-radius:4px;color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
-                  <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--yellow);color:var(--yellow)">Re-scaffold</button>`
+                ? `<input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
+                  <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--yellow);color:var(--yellow)">Regenerate</button>`
                 : ''
               }
               <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
-              <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:4px;background:none;cursor:pointer">Test</button>
+              <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Test</button>
             </div>
           </div>
           <div class="card-body" style="width:100%">
@@ -1172,9 +1193,9 @@
             <span class="badge badge-approved">installed</span>
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
-              <input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:#0d1117;border:1px solid #2a3040;border-radius:4px;color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
-              <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--ink-dim);color:var(--ink-dim);font-size:11px">Re-scaffold</button>
-              <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:11px;padding:3px 10px;border:1px solid var(--violet);color:var(--violet);border-radius:4px;background:none;cursor:pointer">Test</button>
+              <input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
+              <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--ink-dim);color:var(--ink-dim);font-size:11px">Regenerate</button>
+              <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:11px;padding:3px 10px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Test</button>
             </div>
           </div>
           ${iAllFiles.length ? `<div class="card-body" style="width:100%">
@@ -1254,7 +1275,7 @@
       ${patchesHtml}
       <button class="btn-apply-retry"
         onclick="applyAndRetry('${runId}','${agent}',${questions.length},${patches.length})">
-        Apply &amp; Retry Scaffold
+        Apply &amp; Regenerate
       </button>
     </div>`;
   }
@@ -1616,7 +1637,9 @@
     document.getElementById('tests-panel').style.display = 'none';
     document.getElementById('folders-panel').style.display = 'none';
     document.getElementById('test-agent-panel').style.display = 'none';
-    ['btn-all', 'btn-kg', 'btn-trend', 'btn-tests', 'btn-folders'].forEach(id => {
+    const projectsPanel = document.getElementById('projects-panel');
+    if (projectsPanel) projectsPanel.style.display = 'none';
+    ['btn-all', 'btn-kg', 'btn-trend', 'btn-tests', 'btn-folders', 'btn-projects'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('active');
     });
@@ -1639,22 +1662,22 @@
       return;
     }
     el.innerHTML = data.projects.map(p => `
-      <div style="margin-bottom:24px;border:1px solid #1a1a2e;border-radius:8px;overflow:hidden">
-        <div style="background:#0d0d1a;padding:12px 16px;display:flex;align-items:center;gap:12px">
+      <div style="margin-bottom:24px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <div style="background:var(--bg);padding:12px 16px;display:flex;align-items:center;gap:12px">
           <span style="font-weight:600;font-size:14px;color:var(--blue);flex:1">${escHtml(p.name)}</span>
           <span style="font-size:11px;color:var(--ink-dim)">${p.agents.length} agent${p.agents.length > 1 ? 's' : ''} · ${p.tools.length} tool${p.tools.length !== 1 ? 's' : ''}</span>
-          <button onclick="_copyMcpConfig('${escHtml(p.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--aqua);color:var(--aqua);border-radius:4px;cursor:pointer">Copier config MCP</button>
+          <button onclick="_copyMcpConfig('${escHtml(p.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--aqua);color:var(--aqua);border-radius:var(--radius);cursor:pointer">Copier config MCP</button>
         </div>
         <div style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px">
           ${[...p.agents, ...p.tools].map(n => `
-            <div style="background:#12121f;border:1px solid #222;border-radius:6px;padding:8px 12px;min-width:180px;flex:1;max-width:280px">
+            <div style="background:#12121f;border:1px solid #222;border-radius:var(--radius);padding:8px 12px;min-width:180px;flex:1;max-width:280px">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
                 <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:${n.node_type === 'tool' ? '#2a1f00' : '#1e1540'};color:${n.node_type === 'tool' ? 'var(--yellow)' : 'var(--violet)'}">${n.node_type}</span>
                 <span style="font-size:12px;font-weight:600;color:var(--ink)">${escHtml(n.name)}</span>
                 ${n.parent ? `<span style="font-size:10px;color:var(--aqua)" title="Fork de ${escHtml(n.parent)}">fork</span>` : ''}
               </div>
               <div style="font-size:11px;color:var(--ink-dim);margin-bottom:6px">${n.human_score != null ? `H: ${n.human_score.toFixed(1)}/5` : n.judge_score != null ? `J: ${n.judge_score.toFixed(1)}/5` : '—'}</div>
-              <button onclick="_downloadAgentZip('${escHtml(p.name)}','${escHtml(n.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--blue);color:var(--blue);border-radius:4px;cursor:pointer;width:100%">Télécharger zip</button>
+              <button onclick="_downloadAgentZip('${escHtml(p.name)}','${escHtml(n.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);cursor:pointer;width:100%">Télécharger zip</button>
             </div>
           `).join('')}
         </div>
@@ -1701,6 +1724,74 @@
     _saveTab('kg');
   }
 
+  function showTabProjects() {
+    _hideAllPanels();
+    let panel = document.getElementById('projects-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'projects-panel';
+      panel.style.cssText = 'padding:24px;max-width:1100px;margin:0 auto';
+      panel.innerHTML = `
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+          <h2 style="margin:0">Projects</h2>
+          <button class="btn-refresh-kg" onclick="loadFolders();loadKG()">Refresh</button>
+        </div>
+        <div id="projects-folders-area"><div style="color:var(--ink-dim);font-size:13px">Loading…</div></div>
+        <details id="projects-kg-details" style="margin-top:28px">
+          <summary style="cursor:pointer;font-size:14px;font-weight:600;color:var(--ink-dim);padding:8px 0;border-top:1px solid #1a1a2e;list-style:none;display:flex;align-items:center;gap:8px" onclick="setTimeout(()=>loadKG(),50)">
+            <span>▶ Knowledge Graph</span>
+            <span id="projects-kg-counts" style="font-size:11px;font-weight:400;color:var(--ink-dim)"></span>
+          </summary>
+          <div style="margin-top:16px">
+            <div class="kg-filter" style="margin-bottom:12px">
+              <label><input type="radio" name="kg-filter" value="all" checked onchange="renderKG()"> All</label>
+              <label><input type="radio" name="kg-filter" value="agent" onchange="renderKG()"> Agents</label>
+              <label><input type="radio" name="kg-filter" value="tool" onchange="renderKG()"> Tools</label>
+            </div>
+            <div id="kg-graph-projects" style="width:100%;height:520px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"><div class="kg-empty" style="padding-top:80px">Cliquez sur ▶ pour charger le graphe</div></div>
+            <div class="kg-tooltip" id="kg-tooltip-projects"></div>
+          </div>
+        </details>`;
+      document.querySelector('.toolbar').after(panel);
+    }
+    panel.style.display = 'block';
+    document.getElementById('btn-projects').classList.add('active');
+    // Load folders into the projects-folders-area
+    (async () => {
+      const el = document.getElementById('projects-folders-area');
+      el.innerHTML = '<div style="color:var(--ink-dim);font-size:13px">Loading…</div>';
+      const data = await fetch('/api/folders').then(r => r.json()).catch(() => ({ projects: [] }));
+      if (!data.projects || data.projects.length === 0) {
+        el.innerHTML = '<div style="color:var(--ink-dim);font-size:13px">No projects found. Run atlas with a CDC to create one.</div>';
+        return;
+      }
+      el.innerHTML = data.projects.map(p => `
+        <div style="margin-bottom:24px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <div style="background:var(--bg);padding:12px 16px;display:flex;align-items:center;gap:12px">
+            <span style="font-weight:600;font-size:14px;color:var(--blue);flex:1">${escHtml(p.name)}</span>
+            <span style="font-size:11px;color:var(--ink-dim)">${p.agents.length} agent${p.agents.length > 1 ? 's' : ''} · ${p.tools.length} tool${p.tools.length !== 1 ? 's' : ''}</span>
+            <button onclick="_copyMcpConfig('${escHtml(p.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--aqua);color:var(--aqua);border-radius:var(--radius);cursor:pointer">Copy MCP config</button>
+          </div>
+          <div style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px">
+            ${[...p.agents, ...p.tools].map(n => `
+              <div style="background:#12121f;border:1px solid #222;border-radius:var(--radius);padding:8px 12px;min-width:180px;flex:1;max-width:280px">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                  <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:${n.node_type === 'tool' ? '#2a1f00' : '#1e1540'};color:${n.node_type === 'tool' ? 'var(--yellow)' : 'var(--violet)'}">${n.node_type}</span>
+                  <span style="font-size:12px;font-weight:600;color:var(--ink)">${escHtml(n.name)}</span>
+                  ${n.parent ? `<span style="font-size:10px;color:var(--aqua)" title="Fork of ${escHtml(n.parent)}">fork</span>` : ''}
+                </div>
+                <div style="font-size:11px;color:var(--ink-dim);margin-bottom:6px">${n.human_score != null ? `H: ${n.human_score.toFixed(1)}/5` : n.judge_score != null ? `J: ${n.judge_score.toFixed(1)}/5` : '—'}</div>
+                <button onclick="_downloadAgentZip('${escHtml(p.name)}','${escHtml(n.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);cursor:pointer;width:100%">Download zip</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    })();
+    // KG loads on demand when user expands the details section
+    _saveTab('projects');
+  }
+
   function showTabTrend() {
     _hideAllPanels();
     document.getElementById('trend-panel').style.display = 'block';
@@ -1711,8 +1802,14 @@
 
   let _visNetwork = null;
 
+  function _kgContainer() {
+    const proj = document.getElementById('kg-graph-projects');
+    if (proj && proj.offsetParent !== null) return proj;
+    return document.getElementById('kg-graph');
+  }
+
   async function loadKG() {
-    document.getElementById('kg-graph').innerHTML = '<div class="kg-empty" style="padding-top:160px">Chargement…</div>';
+    _kgContainer().innerHTML = '<div class="kg-empty" style="padding-top:160px">Chargement…</div>';
     try {
       const r = await fetch('/api/kg');
       _kgData = await r.json();
@@ -1726,24 +1823,29 @@
     const filter = document.querySelector('input[name="kg-filter"]:checked')?.value || 'all';
     const nAgents = _kgData.nodes.filter(n => n.node_type === 'agent').length;
     const nTools  = _kgData.nodes.filter(n => n.node_type === 'tool').length;
-    document.getElementById('kg-count-agents').textContent = `agents ${nAgents}`;
-    document.getElementById('kg-count-tools').textContent  = `tools ${nTools}`;
-    document.getElementById('kg-count-edges').textContent  = `edges ${(_kgData.edges || []).length}`;
+    const nEdges  = (_kgData.edges || []).length;
+    // Update counts — both in main panel and projects panel
+    const setCount = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setCount('kg-count-agents', `agents ${nAgents}`);
+    setCount('kg-count-tools',  `tools ${nTools}`);
+    setCount('kg-count-edges',  `edges ${nEdges}`);
+    const projCounts = document.getElementById('projects-kg-counts');
+    if (projCounts) projCounts.textContent = `${nAgents} agents · ${nTools} tools · ${nEdges} edges`;
 
     const filteredNodes = filter === 'all' ? _kgData.nodes : _kgData.nodes.filter(n => n.node_type === filter);
     const filteredIds = new Set(filteredNodes.map(n => n.id));
 
     if (!filteredNodes.length) {
-      document.getElementById('kg-graph').innerHTML = '<div class="kg-empty" style="padding-top:160px">Aucun nœud enregistré dans le KG.</div>';
+      _kgContainer().innerHTML = '<div class="kg-empty" style="padding-top:160px">Aucun nœud enregistré dans le KG.</div>';
       return;
     }
 
     if (typeof vis === 'undefined') {
-      document.getElementById('kg-graph').innerHTML = '<div class="kg-empty" style="padding-top:160px">vis-network non chargé (vérifier la connexion).</div>';
+      _kgContainer().innerHTML = '<div class="kg-empty" style="padding-top:160px">vis-network non chargé (vérifier la connexion).</div>';
       return;
     }
 
-    const container = document.getElementById('kg-graph');
+    const container = _kgContainer();
     container.innerHTML = '';
 
     // Compute degree (nb of edges) per node to scale node size
@@ -1755,35 +1857,37 @@
     }
 
     const visNodes = filteredNodes.map(n => {
-      const isTool     = n.node_type === 'tool';
-      const degree     = degreeMap[n.id] || 0;
-      const size       = (isTool ? 22 : 30) + degree * 4;
-      const conf       = n.confidence ?? 1.0;
-      const borderWidth = 2 + Math.round(conf * 2);
+      const isTool  = n.node_type === 'tool';
+      const conf    = n.confidence ?? 1.0;
       const displayScore = n.human_score != null ? n.human_score : n.judge_score;
-      const scoreLabel = displayScore != null ? `\n${displayScore.toFixed(1)}/5` : '';
-      // Use solid visible colors — node fill must contrast the #0d0d14 canvas
-      const bgColor  = isTool ? '#2a1f00' : '#1e1540';
-      const bdColor  = isTool ? '#e8a600' : '#9085e9';
+      const scoreLabel = displayScore != null ? `  ${displayScore.toFixed(1)}/5` : '';
+      const bgColor = isTool ? '#1c1400' : '#100d2a';
+      const bdColor = isTool ? '#e8a600' : '#9085e9';
+      const fontColor = isTool ? '#f5d060' : '#d0c8ff';
+      const label = scoreLabel ? `${n.id}\n${scoreLabel}` : n.id;
       return {
         id:    n.id,
-        label: n.id + scoreLabel,
-        shape: 'dot',
-        size,
+        label,
+        shape: 'box',
+        margin: { top: 12, right: 18, bottom: 12, left: 18 },
+        widthConstraint: { minimum: 150, maximum: 240 },
         font: {
-          color: isTool ? '#e8a600' : '#c0b0ff',
-          size: 13,
+          color: fontColor,
+          size: 14,
           face: 'monospace',
-          strokeWidth: 3,
-          strokeColor: '#06060f',
+          multi: false,
+          strokeWidth: 2,
+          strokeColor: '#00000080',
         },
         color: {
           background: bgColor,
           border:     bdColor,
-          highlight:  { background: isTool ? '#3a2c00' : '#2a1a60', border: isTool ? '#ffc800' : '#c8b0ff' },
-          hover:      { background: isTool ? '#332500' : '#241550', border: bdColor },
+          highlight:  { background: isTool ? '#2e2200' : '#1a1450', border: isTool ? '#ffcc00' : '#b8aaff' },
+          hover:      { background: isTool ? '#241a00' : '#14103a', border: isTool ? '#ffcc00' : '#b8aaff' },
         },
-        borderWidth,
+        borderWidth: 2,
+        borderWidthSelected: 3,
+        shadow: { enabled: true, color: isTool ? '#e8a60050' : '#9085e950', size: 12, x: 0, y: 3 },
       };
     });
 
@@ -1791,7 +1895,7 @@
       .filter(e => filteredIds.has(e.from) && filteredIds.has(e.to))
       .map(e => {
         const el = document.createElement('div');
-        el.style.cssText = 'background:#13131f;border:1px solid #2a2a4a;border-radius:5px;padding:6px 10px;font-size:11px;color:#c8c0d8;font-family:monospace';
+        el.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:11px;color:#c8c0d8;font-family:monospace';
         el.textContent = `${e.from}  →  ${e.to}\n${e.relation || ''}`;
         el.style.whiteSpace = 'pre';
         const isPipeline = e.relation === 'PIPELINE_MEMBER';
@@ -1814,22 +1918,31 @@
       });
 
     const data = { nodes: new vis.DataSet(visNodes), edges: new vis.DataSet(visEdges) };
+    // Use hierarchical layout when pipeline edges exist — cleaner topology
+    const hasPipeline = (_kgData.edges || []).some(e => e.relation === 'PIPELINE_MEMBER');
     const options = {
-      physics: {
+      physics: hasPipeline ? { enabled: false } : {
         enabled: true,
         solver: 'forceAtlas2Based',
         forceAtlas2Based: {
-          gravitationalConstant: -80,
+          gravitationalConstant: -300,
           centralGravity: 0.01,
-          springLength: 200,
-          springConstant: 0.06,
-          damping: 0.5,
+          springLength: 320,
+          springConstant: 0.05,
+          damping: 0.7,
           avoidOverlap: 1.0,
         },
-        stabilization: { iterations: 200, updateInterval: 20 },
+        stabilization: { iterations: 400, updateInterval: 20 },
       },
-      interaction: { hover: true, tooltipDelay: 99999, zoomView: true, dragView: true, dragNodes: true },
-      edges: { selectionWidth: 3 },
+      layout: hasPipeline
+        ? { hierarchical: { enabled: true, direction: 'LR', sortMethod: 'directed', levelSeparation: 280, nodeSpacing: 160 } }
+        : { improvedLayout: true, randomSeed: 42 },
+      interaction: { hover: true, tooltipDelay: 99999, zoomView: true, dragView: true, dragNodes: true, navigationButtons: false },
+      edges: {
+        selectionWidth: 3,
+        smooth: hasPipeline ? { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 } : { type: 'dynamic' },
+      },
+      nodes: { borderWidthSelected: 3 },
     };
 
     if (_visNetwork) { _visNetwork.destroy(); }
@@ -1867,7 +1980,7 @@
     el.style.pointerEvents = 'all';
     el.style.boxShadow = '0 4px 24px #00000080';
     // Position relative to the KG panel container
-    const container = document.getElementById('kg-graph');
+    const container = _kgContainer();
     const rect = container.getBoundingClientRect();
     let left = cx + 16;
     let top  = cy - 20;
@@ -1898,7 +2011,7 @@
       : '—';
 
     const el = document.createElement('div');
-    el.style.cssText = 'background:#13131f;border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;font-size:11px;color:#c8c0d8;line-height:1.7;display:inline-block';
+    el.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;font-size:11px;color:#c8c0d8;line-height:1.7;display:inline-block';
 
     const typeColor = isTool ? '#e8a600' : '#9085e9';
     const scoreColor = n.judge_score >= 4 ? '#1baf7a' : n.judge_score >= 2.5 ? '#e8a600' : '#e66767';
@@ -1940,7 +2053,7 @@
 
   function _propagateButtonHtml(n) {
     if (!n.parent) return '';
-    return `<button onclick="_propagateToParent('${escHtml(n.id)}')" style="font-size:11px;padding:4px 12px;background:#0d2a1f;color:#1baf7a;border:1px solid #1baf7a;border-radius:4px;cursor:pointer;width:100%;margin-top:6px">↑ Propager les améliorations vers ${escHtml(n.parent)}</button>`;
+    return `<button onclick="_propagateToParent('${escHtml(n.id)}')" style="font-size:11px;padding:4px 12px;background:#0d2a1f;color:#1baf7a;border:1px solid #1baf7a;border-radius:var(--radius);cursor:pointer;width:100%;margin-top:6px">↑ Propager les améliorations vers ${escHtml(n.parent)}</button>`;
   }
 
   async function _propagateToParent(agentName) {
@@ -1987,9 +2100,12 @@
   }
 
   function renderTrendChart(data) {
-    const pts = data.points || [];
+    const allPts = data.points || [];
+    // Agent Scores only shows test points (source === 'test')
+    const pts = allPts.filter(p => p.source === 'test');
     if (!pts.length) {
-      document.getElementById('trend-chart-area').innerHTML = '<div class="trend-empty">Aucune donnée pour cet agent.</div>';
+      const hasScaffoldOnly = allPts.length > 0;
+      document.getElementById('trend-chart-area').innerHTML = `<div class="trend-empty">${hasScaffoldOnly ? 'No test scores yet for this agent. Run a test from the panel below.' : 'No data for this agent.'}</div>`;
       return;
     }
     const W = 700, H = 200, PAD = { t: 20, r: 20, b: 50, l: 50 };
@@ -2018,23 +2134,15 @@
     }).join(' ');
     svg += `<polyline points="${lineCoords}" fill="none" stroke="var(--ink-dim)" stroke-width="1.5"/>`;
 
-    // points
+    // points (all test points — diamond shape)
     pts.forEach((p, i) => {
       const x = PAD.l + i * xStep;
       const y = PAD.t + (p.avg_score != null ? yScale(p.avg_score) : chartH / 2);
       const score = p.avg_score;
-      const isTest = p.source === 'test';
       const color = score >= 4 ? 'var(--aqua)' : score >= 3 ? 'var(--yellow)' : 'var(--red)';
-      const title = `${isTest ? 'TEST' : 'scaffold'} R${i+1}: ${score != null ? score.toFixed(2) : '—'}/5`;
-
-      if (isTest) {
-        // Test point: larger diamond shape to distinguish from scaffold
-        const d = 7;
-        svg += `<polygon class="trend-point-dot" points="${x},${y-d} ${x+d},${y} ${x},${y+d} ${x-d},${y}" fill="${color}" stroke="#0d0d1a" stroke-width="1.5" onclick="showTrendDetail(${i})" style="cursor:pointer"><title>${title}</title></polygon>`;
-      } else {
-        // Scaffold point: hollow circle
-        svg += `<circle class="trend-point-dot" cx="${x}" cy="${y}" r="5" fill="#0d0d1a" stroke="${color}" stroke-width="2" onclick="showTrendDetail(${i})" style="cursor:pointer"><title>${title}</title></circle>`;
-      }
+      const title = `Test T${i+1}: ${score != null ? score.toFixed(2) : '—'}/5`;
+      const d = 7;
+      svg += `<polygon class="trend-point-dot" points="${x},${y-d} ${x+d},${y} ${x},${y+d} ${x-d},${y}" fill="${color}" stroke="#0d0d1a" stroke-width="1.5" onclick="showTrendDetail(${i})" style="cursor:pointer"><title>${title}</title></polygon>`;
 
       // cause badge below x-axis
       const bx = x, by = PAD.t + chartH + 18;
@@ -2046,7 +2154,7 @@
         svg += `<text x="${bx}" y="${by}" text-anchor="middle" font-size="9" fill="${bcolor}" font-weight="600" style="cursor:pointer" onclick="showTrendDetail(${i})">${label}</text>`;
       }
       // run index
-      svg += `<text x="${bx}" y="${PAD.t+chartH+32}" text-anchor="middle" font-size="9" fill="var(--ink-dim)">R${i+1}</text>`;
+      svg += `<text x="${bx}" y="${PAD.t+chartH+32}" text-anchor="middle" font-size="9" fill="var(--ink-dim)">T${i+1}</text>`;
     });
 
     // axes
@@ -2056,12 +2164,10 @@
 
     // legend
     svg += `<div style="font-size:10px;color:var(--ink-dim);margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;">
-      <span><svg width="12" height="12" style="vertical-align:middle"><circle cx="6" cy="6" r="5" fill="#0d0d1a" stroke="var(--aqua)" stroke-width="2"/></svg> Scaffold passé (≥4)</span>
-      <span><svg width="12" height="12" style="vertical-align:middle"><circle cx="6" cy="6" r="5" fill="#0d0d1a" stroke="var(--yellow)" stroke-width="2"/></svg> Scaffold borderline</span>
-      <span><svg width="14" height="14" style="vertical-align:middle"><polygon points="7,1 13,7 7,13 1,7" fill="var(--aqua)"/></svg> Test réel passé</span>
-      <span><svg width="14" height="14" style="vertical-align:middle"><polygon points="7,1 13,7 7,13 1,7" fill="var(--yellow)"/></svg> Test réel borderline</span>
+      <span><svg width="14" height="14" style="vertical-align:middle"><polygon points="7,1 13,7 7,13 1,7" fill="var(--aqua)"/></svg> Score ≥ 4 — passed</span>
+      <span><svg width="14" height="14" style="vertical-align:middle"><polygon points="7,1 13,7 7,13 1,7" fill="var(--yellow)"/></svg> Score 3–4 — borderline</span>
+      <span><svg width="14" height="14" style="vertical-align:middle"><polygon points="7,1 13,7 7,13 1,7" fill="var(--red)"/></svg> Score &lt; 3 — failed</span>
       <span><span style="color:var(--violet)">CR</span> = correctif</span>
-      <span><span style="color:var(--aqua)">TEST</span> = exécution réelle</span>
     </div>`;
 
     document.getElementById('trend-chart-area').innerHTML = `<div class="trend-chart-wrap">${svg}</div>`;
@@ -2072,7 +2178,7 @@
   function showTrendDetail(idx) {
     if (!_trendData) return;
     _lastTrendDetailIdx = idx;
-    const pts = _trendData.points;
+    const pts = (_trendData.points || []).filter(p => p.source === 'test');
     const p = pts[idx];
     const prev = idx > 0 ? pts[idx - 1] : null;
     if (!p) return;
@@ -2123,6 +2229,11 @@
 
     // Test session detail — per-ticket breakdown
     if (p.source === 'test' && p.tickets?.length) {
+      // Store inputs in a global map to avoid JSON-in-HTML quoting issues
+      window._trendTicketInputs = window._trendTicketInputs || {};
+      p.tickets.forEach((t, ti) => {
+        window._trendTicketInputs[`${idx}-${ti}`] = t.input;
+      });
       html += `<div class="trend-section-title">Détail par ticket (${p.n_passed}/${p.n_tickets} passés)</div>`;
       p.tickets.forEach((t, ti) => {
         const sc = t.score != null ? t.score.toFixed(1) : '—';
@@ -2146,12 +2257,13 @@
         }).join('');
 
         const tRetestRunId = p.run_id || _lastRunId;
-        const retestBtn = t.input && tRetestRunId
-          ? `<button onclick="event.stopPropagation();_retestTicketFrom('${tRetestRunId}',${JSON.stringify(JSON.stringify(t.input))})" style="font-size:11px;padding:4px 12px;border:1px solid ${t.passed ? 'var(--blue)' : 'var(--yellow)'};color:${t.passed ? 'var(--blue)' : 'var(--yellow)'};border-radius:3px;background:none;cursor:pointer;white-space:nowrap">${t.passed ? 'Re-tester' : 'Re-tester (échec)'}</button>`
+        const hasInput = t.input && Object.keys(t.input).length > 0;
+        const retestBtn = hasInput && tRetestRunId
+          ? `<button onclick="event.stopPropagation();_retestTicketFrom('${tRetestRunId}','${idx}-${ti}')" style="font-size:11px;padding:4px 12px;border:1px solid ${t.passed ? 'var(--blue)' : 'var(--yellow)'};color:${t.passed ? 'var(--blue)' : 'var(--yellow)'};border-radius:3px;background:none;cursor:pointer;white-space:nowrap">${t.passed ? 'Re-tester' : 'Re-tester (échec)'}</button>`
           : '';
 
         html += `
-          <div style="background:#0d0d1a;border:1px solid ${t.passed ? '#1a2a1a' : '#2a1a1a'};border-radius:5px;margin-bottom:6px;overflow:hidden">
+          <div style="background:var(--bg);border:1px solid ${t.passed ? '#1a2a1a' : '#2a1a1a'};border-radius:5px;margin-bottom:6px;overflow:hidden">
             <div onclick="(function(el){el.style.display=el.style.display==='block'?'none':'block'})(document.getElementById('${cardId}'))"
                  style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer">
               <span style="font-size:13px;font-weight:700;color:${col}">${sc}/5</span>
@@ -2161,9 +2273,9 @@
             </div>
             <div id="${cardId}" style="display:none;padding:0 12px 12px;border-top:1px solid #1a1a2e">
               <div style="font-size:11px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px">Input</div>
-              <pre style="font-size:11px;color:var(--ink);background:#12121f;border-radius:4px;padding:8px;max-height:120px;overflow-y:auto;white-space:pre-wrap;margin:0 0 8px">${escHtml(t.input?.cdc_bloc || '—')}</pre>
+              <pre style="font-size:11px;color:var(--ink);background:#12121f;border-radius:var(--radius);padding:8px;max-height:120px;overflow-y:auto;white-space:pre-wrap;margin:0 0 8px">${escHtml(t.input?.cdc_bloc || '—')}</pre>
               <div style="font-size:11px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Output</div>
-              <pre style="font-size:11px;color:var(--ink);background:#12121f;border-radius:4px;padding:8px;max-height:120px;overflow-y:auto;white-space:pre-wrap;margin:0 0 8px">${escHtml(t.output || '—')}</pre>
+              <pre style="font-size:11px;color:var(--ink);background:#12121f;border-radius:var(--radius);padding:8px;max-height:120px;overflow-y:auto;white-space:pre-wrap;margin:0 0 8px">${escHtml(t.output || '—')}</pre>
               ${t.feedback ? `<div style="font-size:11px;color:var(--ink);font-style:italic;margin-bottom:8px">${escHtml(t.feedback)}</div>` : ''}
               ${criteriaHtml ? `<div style="margin-bottom:10px">${criteriaHtml}</div>` : ''}
               <div style="margin-top:8px">${retestBtn}</div>
@@ -2279,8 +2391,8 @@
     const isLowConfidence = tier.includes('none');
 
     let reason = '';
-    if (isTestValidation) reason = 'Analyse basée sur une validation humaine — pas un run scaffold. Re-scaffolder ici serait hors contexte.';
-    else if (isLowConfidence) reason = 'Confiance insuffisante (N=1) — pas assez de données pour lancer un re-scaffold fiable.';
+    if (isTestValidation) reason = 'Analyse basée sur une validation humaine — pas un run de génération. Régénérer ici serait hors contexte.';
+    else if (isLowConfidence) reason = 'Confiance insuffisante (N=1) — pas assez de données pour lancer une régénération fiable.';
 
     const reasonEl = document.getElementById('adv-block-reason');
     if (reason) {
@@ -2343,11 +2455,16 @@
     }
   }
 
-  function _retestTicketFrom(runId, inputJson) {
+  function _retestTicketFrom(runId, inputKey) {
     const agent = _trendData?.agent;
     if (!agent || !runId) { alert('Aucun run disponible.'); return; }
-    let input;
-    try { input = JSON.parse(inputJson); } catch(_) { input = { cdc_bloc: inputJson, context: '' }; }
+    const input = (window._trendTicketInputs || {})[inputKey] || {};
+    // Pre-select the project so the Tests history is populated when closing the panel
+    const kgNode = (_kgData?.nodes || []).find(n => n.id === agent);
+    if (kgNode?.project) {
+      const sel = document.getElementById('test-project-select');
+      if (sel) { sel.value = kgNode.project; _onTestProjectChange(); }
+    }
     openTestAgentPanel(runId, agent);
     requestAnimationFrame(() => {
       _tapInputs = [{ cdc_bloc: input.cdc_bloc || '', context: input.context || '' }];
@@ -2358,6 +2475,11 @@
   function _advisorRunTest() {
     const agent = document.getElementById('trend-agent-select').value;
     if (!agent || !_lastRunId) { alert('Aucun run disponible pour tester cet agent.'); return; }
+    const kgNode = (_kgData?.nodes || []).find(n => n.id === agent);
+    if (kgNode?.project) {
+      const sel = document.getElementById('test-project-select');
+      if (sel) { sel.value = kgNode.project; _onTestProjectChange(); }
+    }
     openTestAgentPanel(_lastRunId, agent);
   }
 
@@ -2417,7 +2539,7 @@
     const batchBtn = document.getElementById('test-batch-btn');
     if (agents.length) {
       document.getElementById('test-pipeline-info').innerHTML =
-        agents.map(a => `<span style="display:inline-block;background:#1e1540;border:1px solid var(--violet);border-radius:4px;padding:2px 8px;margin:2px 4px 2px 0;font-size:11px;color:var(--violet)">${escHtml(a)}</span>`).join('→');
+        agents.map(a => `<span style="display:inline-block;background:#1e1540;border:1px solid var(--violet);border-radius:var(--radius);padding:2px 8px;margin:2px 4px 2px 0;font-size:11px;color:var(--violet)">${escHtml(a)}</span>`).join('→');
       btn.disabled = false;
       genBtn.disabled = false;
       batchBtn.disabled = false;
@@ -2471,9 +2593,9 @@
     const icon = icons[alert.level] || '⚠';
     const fixKey = alert.fixKey; // e.g. 'format_anomaly'
     const fixBtn = fixKey && _SUGGEST_FIX_PATCHES[fixKey]
-      ? `<button onclick="_openSuggestFix(this,'${escHtml(alert.agentName||'')}','${fixKey}')" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid ${c};border-radius:4px;color:${c};background:transparent;cursor:pointer">Suggest Fix</button>`
+      ? `<button onclick="_openSuggestFix(this,'${escHtml(alert.agentName||'')}','${fixKey}')" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid ${c};border-radius:var(--radius);color:${c};background:transparent;cursor:pointer">Suggest Fix</button>`
       : '';
-    return `<div style="background:${bg};border:1px solid ${c};border-radius:6px;padding:10px 12px;margin-bottom:10px">
+    return `<div style="background:${bg};border:1px solid ${c};border-radius:var(--radius);padding:10px 12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div style="display:flex;align-items:center;gap:6px">
           <span style="color:${c};font-size:12px">${icon}</span>
@@ -2559,9 +2681,9 @@
     const header = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <span style="font-size:11px;color:var(--ink-dim)">Test ID: ${tid} — edit ticket above and re-run</span>
       <div style="display:flex;gap:8px">
-        <button onclick="document.getElementById('test-ticket-input').scrollIntoView({behavior:'smooth'});document.getElementById('test-ticket-input').focus()" style="font-size:11px;padding:3px 8px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111">Edit ↑</button>
-        <button onclick="runTest()" style="font-size:11px;padding:3px 8px;border:1px solid var(--blue);border-radius:4px;color:var(--blue);background:#111">Re-run ▶</button>
-        <button onclick="_deleteTestRun('${tid}')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);border-radius:4px;color:var(--red);background:#111">Delete run</button>
+        <button onclick="document.getElementById('test-ticket-input').scrollIntoView({behavior:'smooth'});document.getElementById('test-ticket-input').focus()" style="font-size:11px;padding:3px 8px;border:1px solid #444;border-radius:var(--radius);color:var(--ink-dim);background:#111">Edit ↑</button>
+        <button onclick="runTest()" style="font-size:11px;padding:3px 8px;border:1px solid var(--blue);border-radius:var(--radius);color:var(--blue);background:#111">Re-run ▶</button>
+        <button onclick="_deleteTestRun('${tid}')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);border-radius:var(--radius);color:var(--red);background:#111">Delete run</button>
       </div>
     </div>`;
     const cards = allResults.map(r => {
@@ -2573,9 +2695,9 @@
           invalid: active==='invalid' ? 'background:var(--red);color:#fff;border-color:var(--red)' : 'background:#111;color:var(--red);border-color:var(--red);opacity:.5',
           skip: active==='skip' ? 'background:#333;color:#fff;border-color:#555' : 'background:#111;color:var(--ink-dim);border-color:#444;opacity:.5',
         };
-        return `<button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',true)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${styles.valid}">✓ Valid</button>
-                <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',false)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${styles.invalid}">✗ Invalid</button>
-                <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',null,true)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid;${styles.skip}">– Skip</button>`;
+        return `<button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',true)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:var(--radius);border:1px solid;${styles.valid}">✓ Valid</button>
+                <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',false)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:var(--radius);border:1px solid;${styles.invalid}">✗ Invalid</button>
+                <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',null,true)" style="font-size:11px;padding:3px 8px;border-radius:var(--radius);border:1px solid;${styles.skip}">– Skip</button>`;
       };
       if (v) {
         const active = v.skipped ? 'skip' : (v.valid ? 'valid' : 'invalid');
@@ -2601,7 +2723,7 @@
             .map(k => `<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid #1a1a2e"><span style="font-size:11px;color:var(--ink-dim);min-width:90px">${k}</span><span style="font-size:12px;color:#fff">${escHtml(String(parsed[k]))}</span></div>`).join('');
           outputHtml = `<div style="margin-top:8px">${badges}</div>`;
         } else {
-          outputHtml = `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#ccc;background:#0d0d1a;padding:10px;border-radius:4px">${escHtml(clean)}</pre>`;
+          outputHtml = `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#ccc;background:var(--bg);padding:10px;border-radius:var(--radius)">${escHtml(clean)}</pre>`;
         }
       }
       return `<div style="background:#12121f;border:1px solid #252535;border-radius:8px;padding:16px;margin-bottom:12px">
@@ -2655,7 +2777,7 @@
           }
         }
       }
-      return `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:4px;border:1px solid #1a1a2e;margin-bottom:4px;background:#0d0d14">
+      return `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:4px;background:var(--bg)">
         <span style="font-weight:600;color:var(--violet);font-size:12px;min-width:180px">${escHtml(r.agent)}</span>
         <span style="flex:1;font-size:11px;color:var(--ink-dim)">${escHtml(meta)}</span>
         ${deltaHtml}
@@ -2671,9 +2793,9 @@
           <span style="font-size:12px;color:var(--ink-dim)">${judged}/${allResults.length} agents validated${skippedCount ? ` · ${skippedCount} skipped` : ''}</span>
         </div>
         <div style="display:flex;gap:8px">
-          <button onclick="document.getElementById('test-ticket-input').scrollIntoView({behavior:'smooth'});document.getElementById('test-ticket-input').focus()" style="font-size:11px;padding:3px 8px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111">Edit ↑</button>
-          <button onclick="runTest()" style="font-size:11px;padding:3px 8px;border:1px solid var(--blue);border-radius:4px;color:var(--blue);background:#111">Re-run ▶</button>
-          <button onclick="_deleteTestRun('${tid}')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);border-radius:4px;color:var(--red);background:#111">Delete run</button>
+          <button onclick="document.getElementById('test-ticket-input').scrollIntoView({behavior:'smooth'});document.getElementById('test-ticket-input').focus()" style="font-size:11px;padding:3px 8px;border:1px solid #444;border-radius:var(--radius);color:var(--ink-dim);background:#111">Edit ↑</button>
+          <button onclick="runTest()" style="font-size:11px;padding:3px 8px;border:1px solid var(--blue);border-radius:var(--radius);color:var(--blue);background:#111">Re-run ▶</button>
+          <button onclick="_deleteTestRun('${tid}')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);border-radius:var(--radius);color:var(--red);background:#111">Delete run</button>
         </div>
       </div>
       ${rows}`;
@@ -2697,7 +2819,7 @@
     const tid = escHtml(testRun.test_id);
     const allResults = testRun.results || [];
     const _kg = _kgData ? _kgData.nodes : [];
-    const backBtn = `<button onclick="_loadAndRenderSummary('${testRun.test_id}')" style="font-size:11px;padding:3px 8px;border:1px solid #444;border-radius:4px;color:var(--ink-dim);background:#111;margin-bottom:12px">← Back to summary</button>`;
+    const backBtn = `<button onclick="_loadAndRenderSummary('${testRun.test_id}')" style="font-size:11px;padding:3px 8px;border:1px solid #444;border-radius:var(--radius);color:var(--ink-dim);background:#111;margin-bottom:12px">← Back to summary</button>`;
     const cards = allResults.map(r => {
       const v = validations[r.agent];
       const active = v ? (v.skipped ? 'skip' : (v.valid ? 'valid' : 'invalid')) : null;
@@ -2713,7 +2835,7 @@
         if (parsed && typeof parsed === 'object') {
           outputHtml = `<div style="margin-top:8px">${['priority','category','confidence','justification'].filter(k=>parsed[k]!=null).map(k=>`<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid #1a1a2e"><span style="font-size:11px;color:var(--ink-dim);min-width:90px">${k}</span><span style="font-size:12px;color:#fff">${escHtml(String(parsed[k]))}</span></div>`).join('')}</div>`;
         } else {
-          outputHtml = `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#ccc;background:#0d0d1a;padding:10px;border-radius:4px">${escHtml(clean)}</pre>`;
+          outputHtml = `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#ccc;background:var(--bg);padding:10px;border-radius:var(--radius)">${escHtml(clean)}</pre>`;
         }
       }
       return `<div data-run-id="${tid}" data-agent="${escHtml(r.agent)}" style="background:#12121f;border:1px solid #252535;border-radius:8px;padding:16px;margin-bottom:12px">
@@ -2830,13 +2952,13 @@
 
     list.innerHTML = cases.map(c => {
       const color = _BADGE_COLORS[c.type] || 'var(--ink-dim)';
-      return `<div class="batch-case" data-id="${c.id}" style="background:#0d0d1a;border:1px solid #1a1a2e;border-radius:6px;padding:12px;margin-bottom:8px">
+      return `<div class="batch-case" data-id="${c.id}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
           <span style="font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid ${color};color:${color};text-transform:uppercase;letter-spacing:.06em">${escHtml(c.type)}</span>
           <span style="font-size:12px;color:var(--ink-dim)">${escHtml(c.description)}</span>
           <button onclick="this.closest('.batch-case').remove();_updateBatchCount()" style="margin-left:auto;background:transparent;border:none;color:var(--ink-dim);cursor:pointer;font-size:16px;line-height:1" title="Remove">✕</button>
         </div>
-        <textarea class="batch-case-input" style="width:100%;box-sizing:border-box;background:#111;border:1px solid #333;border-radius:4px;padding:8px;color:#fff;font-size:12px;resize:vertical" rows="3">${escHtml(c.input)}</textarea>
+        <textarea class="batch-case-input" style="width:100%;box-sizing:border-box;background:#111;border:1px solid #333;border-radius:var(--radius);padding:8px;color:#fff;font-size:12px;resize:vertical" rows="3">${escHtml(c.input)}</textarea>
       </div>`;
     }).join('');
   }
@@ -2921,9 +3043,9 @@
             invalid: a==='invalid' ? 'background:var(--red);color:#fff;border-color:var(--red)' : 'background:#111;color:var(--red);border-color:var(--red);opacity:.5',
             skip: a==='skip' ? 'background:#333;color:#fff;border-color:#555' : 'background:#111;color:var(--ink-dim);border-color:#444;opacity:.5',
           };
-          return `<button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',true)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${s.valid}">✓ Valid</button>
-                  <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',false)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${s.invalid}">✗ Invalid</button>
-                  <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',null,true)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid;${s.skip}">– Skip</button>`;
+          return `<button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',true)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:var(--radius);border:1px solid;${s.valid}">✓ Valid</button>
+                  <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',false)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:var(--radius);border:1px solid;${s.invalid}">✗ Invalid</button>
+                  <button onclick="validateTestResult('${tid}','${escHtml(r.agent)}',null,true)" style="font-size:11px;padding:3px 8px;border-radius:var(--radius);border:1px solid;${s.skip}">– Skip</button>`;
         };
         const raw = r.output || r.output_raw || '';
         const clean = raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'').trim();
@@ -2937,16 +3059,16 @@
           if (parsed && typeof parsed === 'object') {
             outputHtml = `<div style="margin-top:8px">${['priority','category','confidence','justification'].filter(k=>parsed[k]!=null).map(k=>`<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid #1a1a2e"><span style="font-size:11px;color:var(--ink-dim);min-width:90px">${k}</span><span style="font-size:12px;color:#fff">${escHtml(String(parsed[k]))}</span></div>`).join('')}</div>`;
           } else {
-            outputHtml = `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#ccc;background:#0d0d1a;padding:10px;border-radius:4px">${escHtml(clean)}</pre>`;
+            outputHtml = `<pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#ccc;background:var(--bg);padding:10px;border-radius:var(--radius)">${escHtml(clean)}</pre>`;
           }
         }
-        return `<div data-run-id="${tid}" data-agent="${escHtml(r.agent)}" style="background:#12121f;border:1px solid #252535;border-radius:6px;padding:12px;margin-bottom:8px">
+        return `<div data-run-id="${tid}" data-agent="${escHtml(r.agent)}" style="background:#12121f;border:1px solid #252535;border-radius:var(--radius);padding:12px;margin-bottom:8px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <span style="font-weight:600;color:var(--violet);font-size:13px">${escHtml(r.agent)}</span>
             <div class="vbtn-area">${_vB(active)}</div>
           </div>${anomalyHtml}${outputHtml}</div>`;
       }).join('');
-      return `<div style="background:#0d0d14;border:1px solid #1a1a2e;border-radius:8px;padding:16px;margin-bottom:16px">
+      return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px">
         <div style="font-size:11px;color:var(--ink-dim);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #1a1a2e">
           <span style="color:#fff">Case ${idx + 1}</span> — ${escHtml(br.ticket.substring(0, 120))}${br.ticket.length > 120 ? '…' : ''}
         </div>
@@ -3010,24 +3132,24 @@
         <span>PROPOSED FIX — edit before applying</span>
         <button onclick="this.closest('.suggest-fix-panel').remove()" style="background:transparent;border:none;color:var(--ink-dim);cursor:pointer;font-size:14px">✕</button>
       </div>
-      <textarea class="fix-textarea" style="width:100%;height:160px;background:#0d0d1a;color:#ccc;border:1px solid #333;border-radius:4px;padding:8px;font-size:11px;font-family:monospace;resize:vertical;box-sizing:border-box">${escHtml(proposed)}</textarea>
+      <textarea class="fix-textarea" style="width:100%;height:160px;background:var(--bg);color:#ccc;border:1px solid #333;border-radius:var(--radius);padding:8px;font-size:11px;font-family:monospace;resize:vertical;box-sizing:border-box">${escHtml(proposed)}</textarea>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <button onclick="_applyFix(this,'${escHtml(agentName)}','${escHtml(runId)}')" style="font-size:11px;padding:4px 14px;background:var(--blue);color:#fff;border:none;border-radius:4px;cursor:pointer">Apply & Re-run ▶</button>
+        <button onclick="_applyFix(this,'${escHtml(agentName)}','${escHtml(runId)}')" style="font-size:11px;padding:4px 14px;background:var(--blue);color:#fff;border:none;border-radius:var(--radius);cursor:pointer">Apply & Re-run ▶</button>
         <span class="fix-status" style="font-size:11px;color:var(--ink-dim);align-self:center"></span>
       </div>
       <div class="fix-comparison" style="display:none;margin-top:12px;grid-template-columns:1fr 1fr;gap:12px">
         <div>
           <div style="font-size:10px;color:var(--ink-dim);margin-bottom:4px;text-transform:uppercase">Before</div>
-          <div class="fix-before" style="background:#0d0d1a;border:1px solid #252535;border-radius:4px;padding:8px;font-size:11px;font-family:monospace;white-space:pre-wrap;color:#999;max-height:200px;overflow:auto"></div>
+          <div class="fix-before" style="background:var(--bg);border:1px solid #252535;border-radius:var(--radius);padding:8px;font-size:11px;font-family:monospace;white-space:pre-wrap;color:#999;max-height:200px;overflow:auto"></div>
         </div>
         <div>
           <div style="font-size:10px;color:var(--ink-dim);margin-bottom:4px;text-transform:uppercase">After</div>
-          <div class="fix-after" style="background:#0d0d1a;border:1px solid #252535;border-radius:4px;padding:8px;font-size:11px;font-family:monospace;white-space:pre-wrap;color:#ccc;max-height:200px;overflow:auto">…</div>
+          <div class="fix-after" style="background:var(--bg);border:1px solid #252535;border-radius:var(--radius);padding:8px;font-size:11px;font-family:monospace;white-space:pre-wrap;color:#ccc;max-height:200px;overflow:auto">…</div>
         </div>
       </div>
       <div class="fix-verdict" style="display:none;margin-top:8px;gap:8px">
-        <button onclick="_keepFix('${escHtml(agentName)}')" style="font-size:11px;padding:4px 14px;background:var(--aqua);color:#000;border:none;border-radius:4px;cursor:pointer">✓ Keep fix</button>
-        <button onclick="_discardFix('${escHtml(agentName)}')" style="font-size:11px;padding:4px 14px;background:#111;color:var(--red);border:1px solid var(--red);border-radius:4px;cursor:pointer">✗ Discard</button>
+        <button onclick="_keepFix('${escHtml(agentName)}')" style="font-size:11px;padding:4px 14px;background:var(--aqua);color:#000;border:none;border-radius:var(--radius);cursor:pointer">✓ Keep fix</button>
+        <button onclick="_discardFix('${escHtml(agentName)}')" style="font-size:11px;padding:4px 14px;background:#111;color:var(--red);border:1px solid var(--red);border-radius:var(--radius);cursor:pointer">✗ Discard</button>
       </div>`;
     card.appendChild(panel);
   }
@@ -3133,9 +3255,9 @@
       invalid: active==='invalid' ? 'background:var(--red);color:#fff;border-color:var(--red)' : 'background:#111;color:var(--red);border-color:var(--red);opacity:.5',
       skip: active==='skip' ? 'background:#333;color:#fff;border-color:#555' : 'background:#111;color:var(--ink-dim);border-color:#444;opacity:.5',
     };
-    return `<button onclick="validateTestResult('${tid}','${esc(agentName)}',true)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${styles.valid}">✓ Valid</button>
-            <button onclick="validateTestResult('${tid}','${esc(agentName)}',false)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:4px;border:1px solid;${styles.invalid}">✗ Invalid</button>
-            <button onclick="validateTestResult('${tid}','${esc(agentName)}',null,true)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid;${styles.skip}">– Skip</button>`;
+    return `<button onclick="validateTestResult('${tid}','${esc(agentName)}',true)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:var(--radius);border:1px solid;${styles.valid}">✓ Valid</button>
+            <button onclick="validateTestResult('${tid}','${esc(agentName)}',false)" style="font-size:11px;padding:3px 8px;margin-right:4px;border-radius:var(--radius);border:1px solid;${styles.invalid}">✗ Invalid</button>
+            <button onclick="validateTestResult('${tid}','${esc(agentName)}',null,true)" style="font-size:11px;padding:3px 8px;border-radius:var(--radius);border:1px solid;${styles.skip}">– Skip</button>`;
   }
 
   function _confirmDialog(title, body, okLabel, okStyle, onConfirm) {
@@ -3192,7 +3314,7 @@
         const judged = validCount + invalidCount;
         const pctV = judged ? Math.round(validCount/judged*100) : 0;
         const pctLabel = judged ? `${pctV}% (${judged}/${totalAgents})` : '—';
-        return `<tr style="cursor:pointer;background:#0d0d1a" onclick="_restoreBatchResults('${escHtml(g.batchId)}')">
+        return `<tr style="cursor:pointer;background:var(--bg)" onclick="_restoreBatchResults('${escHtml(g.batchId)}')">
           <td style="color:var(--ink-dim);font-size:11px;padding:6px 8px">${fmtDate(g.created_at)}</td>
           <td style="color:var(--blue);padding:6px 8px">${escHtml(g.project)}</td>
           <td style="color:var(--violet);font-size:12px;padding:6px 8px">Batch — ${g.runs.length} cases</td>
@@ -3276,7 +3398,7 @@
       const statusColor = pctV === 100 && judged ? 'var(--aqua)' : judged > 0 ? 'var(--yellow)' : 'var(--ink-dim)';
       const statusLabel = judged ? `${pctV}% (${judged}/${total})` : '—';
       const tid = escHtml(r.test_id);
-      return `<div onclick="_expandBatchCase('${tid}')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:6px;border:1px solid #1a1a2e;margin-bottom:6px;cursor:pointer;background:#12121f" onmouseover="this.style.borderColor='#333'" onmouseout="this.style.borderColor='#1a1a2e'">
+      return `<div onclick="_expandBatchCase('${tid}')" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:6px;cursor:pointer;background:#12121f" onmouseover="this.style.borderColor='#333'" onmouseout="this.style.borderColor='#1a1a2e'">
         <span style="font-size:11px;color:var(--ink-dim);min-width:52px">Case ${idx + 1}</span>
         <span style="flex:1;font-size:12px;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml((r.ticket||'').substring(0,100))}</span>
         <span style="font-size:11px;color:${statusColor};min-width:80px;text-align:right">${statusLabel}</span>
@@ -3489,7 +3611,7 @@
     _tapJudgeScore = null;
 
     _hideAllPanels();
-    document.getElementById('btn-tests').classList.add('active');
+    document.getElementById('btn-trend').classList.add('active');
     document.getElementById('test-agent-panel').style.display = 'block';
     document.getElementById('tap-title').textContent = `Test — ${agentName}`;
     document.getElementById('tap-subtitle').textContent = `run ${runId}`;
@@ -3503,23 +3625,23 @@
 
   function _closeTestAgentPanel() {
     _hideAllPanels();
-    document.getElementById('btn-tests').classList.add('active');
-    document.getElementById('tests-panel').style.display = 'block';
+    document.getElementById('btn-trend').classList.add('active');
+    document.getElementById('trend-panel').style.display = 'block';
   }
 
   function _tapInputCard(idx, value) {
     const cdc = (value && value.cdc_bloc) ? escHtml(value.cdc_bloc) : '';
     const ctx = (value && value.context) ? escHtml(value.context) : '';
     return `
-      <div style="background:#0d0d1a;border:1px solid #1a1a2e;border-radius:6px;padding:12px;position:relative" id="tap-input-card-${idx}">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;position:relative" id="tap-input-card-${idx}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
           <span style="font-size:11px;color:var(--ink-dim)">Cas ${idx + 1}</span>
           ${_tapInputs.length > 1 ? `<button onclick="_tapRemoveInput(${idx})" style="background:none;border:none;color:var(--ink-dim);cursor:pointer;font-size:14px;padding:0">×</button>` : ''}
         </div>
         <label style="font-size:11px;color:var(--ink-dim);display:block;margin-bottom:3px">cdc_bloc</label>
-        <textarea id="tap-cdc-${idx}" rows="4" style="width:100%;box-sizing:border-box;background:#12121f;border:1px solid #252535;border-radius:4px;padding:8px;color:#fff;font-size:12px;resize:vertical;font-family:monospace">${cdc}</textarea>
+        <textarea id="tap-cdc-${idx}" rows="4" style="width:100%;box-sizing:border-box;background:#12121f;border:1px solid #252535;border-radius:var(--radius);padding:8px;color:#fff;font-size:12px;resize:vertical;font-family:monospace">${cdc}</textarea>
         <label style="font-size:11px;color:var(--ink-dim);display:block;margin-top:6px;margin-bottom:3px">context (optionnel)</label>
-        <input id="tap-ctx-${idx}" type="text" value="${ctx}" placeholder="" style="width:100%;box-sizing:border-box;background:#12121f;border:1px solid #252535;border-radius:4px;padding:6px 8px;color:#fff;font-size:12px">
+        <input id="tap-ctx-${idx}" type="text" value="${ctx}" placeholder="" style="width:100%;box-sizing:border-box;background:#12121f;border:1px solid #252535;border-radius:var(--radius);padding:6px 8px;color:#fff;font-size:12px">
       </div>`;
   }
 
@@ -3634,7 +3756,7 @@
 
     const cList = document.getElementById('tap-criteria-list');
     cList.innerHTML = (res.judge_criteria || []).map(c => `
-      <div style="display:flex;gap:10px;align-items:flex-start;padding:6px 10px;background:#0d0d1a;border-radius:4px;border:1px solid #1a1a2e">
+      <div style="display:flex;gap:10px;align-items:flex-start;padding:6px 10px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border)">
         <span style="font-size:13px;font-weight:700;min-width:20px;color:${c.score >= 4 ? 'var(--aqua)' : c.score >= 3 ? 'var(--yellow)' : 'var(--red)'}">${c.score}</span>
         <div>
           <div style="font-size:11px;font-weight:600;color:var(--ink)">${escHtml(c.criterion)}</div>
@@ -3644,18 +3766,25 @@
 
     document.getElementById('tap-step-judge').style.display = 'block';
 
-    // Action bar: show if score < 4
+    // Action bar: always show after judge
     const actionBar = document.getElementById('tap-action-bar');
+    const btnRescaffold = document.getElementById('tap-btn-rescaffold');
+    const btnRerun = document.getElementById('tap-btn-rerun');
+    actionBar.style.display = 'flex';
     if (score != null && score < 4) {
-      actionBar.style.display = 'flex';
+      btnRescaffold.style.display = '';
+      btnRerun.style.display = '';
       document.getElementById('tap-action-hint').textContent =
         score < 3
-          ? `Score ${score.toFixed(1)}/5 — qualité insuffisante. Re-scaffold recommandé.`
-          : `Score ${score.toFixed(1)}/5 — améliorations possibles. Re-scaffold ou relancer le test.`;
-      document.getElementById('tap-btn-rescaffold').setAttribute('data-run', _tapRunId);
-      document.getElementById('tap-btn-rescaffold').setAttribute('data-agent', _tapAgentName);
+          ? `Score ${score.toFixed(1)}/5 — qualité insuffisante. Regenerate recommandé.`
+          : `Score ${score.toFixed(1)}/5 — améliorations possibles.`;
+      btnRescaffold.setAttribute('data-run', _tapRunId);
+      btnRescaffold.setAttribute('data-agent', _tapAgentName);
     } else {
-      actionBar.style.display = 'none';
+      btnRescaffold.style.display = 'none';
+      btnRerun.style.display = 'none';
+      document.getElementById('tap-action-hint').textContent =
+        score != null ? `Score ${score.toFixed(1)}/5 — résultat enregistré dans Agent Scores.` : '';
     }
   }
 
@@ -3665,6 +3794,17 @@
     showTabRuns();
   }
 
+  function _tapGoToTrends() {
+    _closeTestAgentPanel();
+    document.getElementById('btn-trend').click();
+    if (_tapAgentName) {
+      requestAnimationFrame(() => {
+        const sel = document.getElementById('trend-agent-select');
+        if (sel) { sel.value = _tapAgentName; sel.dispatchEvent(new Event('change')); }
+      });
+    }
+  }
+
   // ── Init ────────────────────────────────────────────────────────────────────
 
   (function() {
@@ -3672,7 +3812,8 @@
     if (tab === 'kg') { showTabKG(); }
     else if (tab === 'trend') { showTabTrend(); }
     else if (tab === 'runs') { loadRuns(false); }
-    else if (tab === 'folders') { showTabFolders(); }
+    else if (tab === 'folders') { showTabProjects(); }
+    else if (tab === 'projects') { showTabProjects(); }
     else { showTabTests(); }
   })();
 </script>
@@ -3683,8 +3824,8 @@
     <div id="confirm-title" style="font-size:15px;font-weight:600;color:#fff;margin-bottom:10px"></div>
     <div id="confirm-body" style="font-size:13px;color:var(--ink-dim);margin-bottom:24px;line-height:1.5"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button id="confirm-cancel" style="padding:7px 18px;border:1px solid #444;border-radius:6px;background:#111;color:var(--ink-dim);font-size:13px;cursor:pointer">Cancel</button>
-      <button id="confirm-ok" style="padding:7px 18px;border:1px solid var(--red);border-radius:6px;background:var(--red);color:#fff;font-size:13px;font-weight:600;cursor:pointer">Delete</button>
+      <button id="confirm-cancel" style="padding:7px 18px;border:1px solid #444;border-radius:var(--radius);background:#111;color:var(--ink-dim);font-size:13px;cursor:pointer">Cancel</button>
+      <button id="confirm-ok" style="padding:7px 18px;border:1px solid var(--red);border-radius:var(--radius);background:var(--red);color:#fff;font-size:13px;font-weight:600;cursor:pointer">Delete</button>
     </div>
   </div>
 </div>
