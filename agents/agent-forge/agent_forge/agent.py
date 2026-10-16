@@ -19,7 +19,12 @@ import time
 from collections.abc import Callable, Generator
 from pathlib import Path
 
-from agent_forge.prompts import INTERACTIVE_QUESTIONS, PROMPT_GENERATION, SPEC_EXTRACTION
+from agent_forge.prompts import (
+    INTERACTIVE_QUESTIONS,
+    PROMPT_GENERATION,
+    SPEC_EXTRACTION,
+    TOOL_RESOLUTION,
+)
 
 
 def _default_llm(prompt: str, llm_config: dict, max_tokens: int = 1024) -> str | None:
@@ -94,6 +99,15 @@ class AgentForgeAgent:
 
         yield self._info(f"Agent name: {spec_dict.get('agent_name', '?')}")
 
+        # Resolve tools required by this agent
+        required_tools = spec_dict.get("required_tools") or []
+        if required_tools:
+            yield self._info(f"Resolving {len(required_tools)} required tool(s)...")
+            resolved_tools = yield from self._resolve_tools(required_tools)
+            spec_dict["resolved_tools"] = resolved_tools
+        else:
+            spec_dict["resolved_tools"] = []
+
         output_path = yield from self._generate_scaffolding(spec_dict)
         if output_path is None:
             yield self._error("Scaffolding generation failed — aborting")
@@ -116,6 +130,7 @@ class AgentForgeAgent:
             "component_type": spec_dict.get("component_type", "agent"),
             "contract_passed": contract_passed,
             "violations": violations,
+            "resolved_tools": spec_dict.get("resolved_tools", []),
         }
 
     # ── CDC mode ───────────────────────────────────────────────────────────────
@@ -305,6 +320,150 @@ class AgentForgeAgent:
                     yield self._warn(f"ruff: LLM returned no fix for {p.name}")
             except Exception as exc:  # noqa: BLE001
                 yield self._warn(f"ruff: LLM fix failed for {fpath}: {exc}")
+
+    # ── Tool resolution ────────────────────────────────────────────────────────
+
+    def _resolve_tools(self, required_tools: list[dict]) -> Generator[dict, None, list[dict]]:
+        """Resolve each required tool via: catalogue → open-source → generate."""
+        resolved: list[dict] = []
+        catalogue = self._load_tool_catalogue()
+
+        for tool_spec in required_tools:
+            name = tool_spec.get("name", "unknown")
+            description = tool_spec.get("description", "")
+
+            # Case 1 — catalogue
+            match = self._find_in_catalogue(name, description, catalogue)
+            if match:
+                yield self._info(f"Tool '{name}': found in catalogue → reuse '{match}'")
+                resolved.append({**tool_spec, "resolution": "catalogue", "ref": match})
+                continue
+
+            # Case 2 — open-source recommendation
+            oss = self._find_open_source(name, description)
+            if oss:
+                yield self._info(
+                    f"Tool '{name}': open-source recommendation → {oss['library']} "
+                    f"({oss['reason']})"
+                )
+                resolved.append({**tool_spec, "resolution": "open_source", **oss})
+                continue
+
+            # Case 3 — generate with tool-forge + register in KG
+            yield self._info(f"Tool '{name}': no existing solution — generating with tool-forge...")
+            generated_name = yield from self._generate_and_register_tool(name, description)
+            if generated_name:
+                resolved.append({**tool_spec, "resolution": "generated", "ref": generated_name})
+            else:
+                yield self._warn(f"Tool '{name}': generation failed — skipping")
+
+        return resolved
+
+    def _load_tool_catalogue(self) -> list[dict]:
+        """Load tool nodes from atlas-memory KG. Returns [] if unavailable."""
+        try:
+            from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+            mem = AtlasMemoryAgent()
+            graph = next(
+                (e for e in mem.run(operation="get_graph") if e.get("summary")),
+                None,
+            )
+            if not graph:
+                return []
+            result = graph.get("result", {})
+            nodes = result.get("nodes", [])
+            return [n for n in nodes if n.get("node_type") == "tool"]
+        except Exception as exc:  # noqa: BLE001
+            self._log("warning", f"Could not load tool catalogue: {exc}")
+            return []
+
+    def _find_in_catalogue(self, name: str, description: str, catalogue: list[dict]) -> str | None:
+        """Return the catalogue tool name if a match is found, else None."""
+        name_lower = name.lower().replace("-", "_")
+        for node in catalogue:
+            node_id: str = node.get("id", "")
+            node_caps: list[str] = node.get("capabilities", [])
+            node_summary: str = node.get("cdc_summary", "")
+            # Exact name match
+            if node_id.lower().replace("-", "_") == name_lower:
+                return node_id
+            # Capability keyword overlap
+            desc_words = set(description.lower().split())
+            caps_text = " ".join(node_caps + [node_summary]).lower()
+            overlap = sum(1 for w in desc_words if len(w) > 4 and w in caps_text)
+            if overlap >= 3:
+                return node_id
+        return None
+
+    def _find_open_source(self, name: str, description: str) -> dict | None:
+        """Ask LLM whether a known open-source library covers this tool need."""
+        prompt = TOOL_RESOLUTION.format(tool_name=name, tool_description=description)
+        raw = self._llm(prompt, self.llm_cfg, 256)
+        if not raw:
+            return None
+        try:
+            import json as _json  # noqa: PLC0415
+
+            raw = raw.strip()
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            data = _json.loads(raw[start:end])
+            if data.get("has_oss") and data.get("library"):
+                return {
+                    "library": data["library"],
+                    "install": data.get("install"),
+                    "reason": data.get("reason", ""),
+                }
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    def _generate_and_register_tool(
+        self, name: str, description: str
+    ) -> Generator[dict, None, str | None]:
+        """Generate tool via tool-forge and register it in the KG."""
+        try:
+            from tool_forge.agent import ToolForgeAgent  # noqa: PLC0415
+        except ImportError:
+            yield self._warn("tool-forge not installed — cannot generate tool")
+            return None
+
+        libs_dir = Path(self.output_dir).parent / "libs"
+        forge = ToolForgeAgent(output_dir=libs_dir, config=self.config, llm_fn=self._llm)
+
+        spec_text = f"Tool name: {name}\nDescription: {description}\n"
+        result = None
+        for event in forge.run(spec_text=spec_text):
+            if event.get("summary"):
+                result = event
+            else:
+                yield event  # bubble up tool-forge logs
+
+        if not result:
+            return None
+
+        module_name: str = result.get("module_name", name)
+
+        # Register in KG
+        try:
+            from atlas_memory.agent import AtlasMemoryAgent  # noqa: PLC0415
+
+            mem = AtlasMemoryAgent()
+            list(
+                mem.run(
+                    operation="register_tool",
+                    name=module_name,
+                    capabilities=[description],
+                    cdc_summary=description,
+                    tags=["generated"],
+                )
+            )
+            yield self._info(f"Tool '{module_name}' registered in catalogue")
+        except Exception as exc:  # noqa: BLE001
+            yield self._warn(f"Could not register tool in KG: {exc}")
+
+        return module_name
 
     # ── Contract validation ────────────────────────────────────────────────────
 

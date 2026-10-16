@@ -35,12 +35,10 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 99px; }
 
-    header { padding: 14px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; background: var(--surface); }
-    header h1 { font-size: 16px; font-weight: 700; color: var(--blue); letter-spacing: 0.04em; }
-    header .tag { font-size: 11px; color: var(--ink-dim); background: var(--bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: var(--radius); }
+    header { display: none; }
 
-    /* ── KPI bar ── */
-    .kpi-bar { display: flex; gap: 12px; padding: 14px 32px; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg); }
+    /* ── KPI bar (kept for reference, hidden) ── */
+    .kpi-bar { display: none; }
     .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 18px; min-width: 120px; transition: border-color .15s; }
     .kpi:hover { border-color: var(--border-hover); }
     .kpi .kpi-label { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; margin-bottom: 4px; }
@@ -59,14 +57,39 @@
     td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
     .rate-bar { display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle; margin-left: 6px; }
 
-    /* ── Toolbar (tab nav) ── */
-    .toolbar { padding: 0 32px; display: flex; gap: 2px; border-bottom: 1px solid var(--border); background: var(--surface); }
-    .toolbar button { padding: 10px 16px; border-radius: 0; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--ink-dim); cursor: pointer; font-size: 13px; font-family: 'Space Grotesk', sans-serif; font-weight: 500; transition: color .15s, border-color .15s; }
-    .toolbar button:hover { color: var(--ink); border-bottom-color: var(--border-hover); }
-    .toolbar button.active { color: var(--blue); border-bottom-color: var(--blue); }
+    /* ── Toolbar (hidden — buttons kept for JS IDs) ── */
+    .toolbar { display: none; }
+
+    /* ── App shell — sidebar layout ── */
+    .app-shell { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar { width: 210px; min-width: 210px; height: 100vh; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); flex-shrink: 0; }
+    .sidebar-logo { padding: 20px 16px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+    .sidebar-logo-icon { width: 32px; height: 32px; border-radius: 8px; background: rgba(11,168,224,0.15); border: 1px solid rgba(11,168,224,0.3); display: flex; align-items: center; justify-content: center; color: var(--blue); font-size: 14px; flex-shrink: 0; }
+    .sidebar-logo-name { font-size: 15px; font-weight: 700; color: var(--blue); letter-spacing: 0.05em; line-height: 1.1; }
+    .sidebar-logo-sub { font-size: 9px; color: var(--ink-faint); letter-spacing: 0.12em; font-family: 'Space Mono', monospace; text-transform: uppercase; margin-top: 2px; }
+    .sidebar-nav { flex: 1; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+    .sidebar-nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius); cursor: pointer; color: var(--ink-dim); font-size: 13px; font-weight: 500; border-left: 3px solid transparent; transition: background .15s, color .15s, border-color .15s; user-select: none; }
+    .sidebar-nav-item:hover { background: rgba(255,255,255,0.04); color: var(--ink); }
+    .sidebar-nav-item.active { background: rgba(11,168,224,0.12); color: var(--blue); border-left-color: var(--blue); }
+    .sidebar-nav-item svg { flex-shrink: 0; opacity: 0.7; }
+    .sidebar-nav-item.active svg { opacity: 1; }
+    .sidebar-bottom { padding: 12px 12px 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+    .sidebar-new-cdc { width: 100%; padding: 9px 12px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Space Grotesk', sans-serif; transition: opacity .15s; }
+    .sidebar-new-cdc:hover { opacity: 0.85; }
+    .sidebar-powered { font-size: 10px; color: var(--ink-faint); text-align: center; letter-spacing: 0.04em; font-family: 'Space Mono', monospace; }
+    .sidebar-signout { font-size: 11px; color: var(--ink-faint); text-align: center; text-decoration: none; cursor: pointer; transition: color .15s; background: none; border: none; font-family: inherit; width: 100%; }
+    .sidebar-signout:hover { color: var(--red); }
+
+    /* ── Main area ── */
+    .main-area { flex: 1; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; min-width: 0; min-height: 0; }
+    .page-header { padding: 12px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 12px; background: var(--surface); flex-shrink: 0; }
+    .page-header-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+    .page-header-sub { font-size: 11px; color: var(--ink-faint); font-family: 'Space Mono', monospace; }
 
     /* ── Layout ── */
-    .layout { display: flex; height: calc(100vh - 210px); }
+    .layout { display: flex; height: calc(100vh - 48px); flex-shrink: 0; }
     .run-list { width: 260px; min-width: 200px; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
     .run-item { padding: 12px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
     .run-item:hover { background: var(--surface-2); }
@@ -331,35 +354,76 @@
   <div id="pipeline-toast-error" style="display:none;margin-top:8px;font-size:11px;color:var(--red)"></div>
 </div>
 
-<header>
-  <h1>ATLAS Dashboard</h1>
-  <span class="tag">HITL Review</span>
-  <a href="/logout" style="margin-left:auto;font-size:11px;color:var(--ink-dim);text-decoration:none;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--ink-dim)'">Sign out</a>
-</header>
+<div class="app-shell">
 
-<div class="kpi-bar" id="kpi-bar">
-  <div class="kpi blue"><div class="kpi-label">Total runs</div><div class="kpi-value" id="kpi-total">—</div></div>
-  <div class="kpi yellow"><div class="kpi-label">Pending</div><div class="kpi-value" id="kpi-pending">—</div></div>
-  <div class="kpi aqua"><div class="kpi-label">Approved</div><div class="kpi-value" id="kpi-approved">—</div></div>
-  <div class="kpi red"><div class="kpi-label">Rejected</div><div class="kpi-value" id="kpi-rejected">—</div></div>
-  <div class="kpi violet"><div class="kpi-label">Review rate</div><div class="kpi-value" id="kpi-review-rate">—</div></div>
-  <div class="kpi aqua"><div class="kpi-label">Judge pass rate</div><div class="kpi-value" id="kpi-judge-rate">—</div></div>
-</div>
+<!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <polygon points="8,1 15,13 1,13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        <line x1="8" y1="5" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="8" cy="12" r="0.8" fill="currentColor"/>
+      </svg>
+    </div>
+    <div>
+      <div class="sidebar-logo-name">ATLAS</div>
+      <div class="sidebar-logo-sub">Agent Platform</div>
+    </div>
+  </div>
 
-<details class="agent-table-wrap" id="agent-table-wrap">
-  <summary>Judge pass rate by agent ▸</summary>
-  <table id="agent-table">
-    <thead><tr><th>Agent</th><th>Blocs</th><th>Pass rate</th><th>Avg score</th></tr></thead>
-    <tbody id="agent-tbody"></tbody>
-  </table>
-</details>
+  <nav class="sidebar-nav">
+    <div class="sidebar-nav-item active" data-tab="runs" onclick="showTabRuns();loadRuns(false)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="2" width="14" height="3" rx="0.5"/>
+        <rect x="1" y="7" width="14" height="3" rx="0.5"/>
+        <rect x="1" y="12" width="8" height="2" rx="0.5"/>
+      </svg>
+      <span>Runs</span>
+    </div>
+    <div class="sidebar-nav-item" data-tab="tests" onclick="showTabTests()">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 1v5L2 13a1 1 0 0 0 .9 1.4h10.2A1 1 0 0 0 14 13L10 6V1"/>
+        <line x1="5" y1="1" x2="11" y2="1"/>
+        <circle cx="8" cy="10" r="1" fill="currentColor" stroke="none"/>
+      </svg>
+      <span>Tests</span>
+    </div>
+    <div class="sidebar-nav-item" data-tab="trend" onclick="showTabTrend()">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="1,12 5,7 9,9 15,3"/>
+        <line x1="1" y1="15" x2="15" y2="15"/>
+      </svg>
+      <span>Agent Scores</span>
+    </div>
+    <div class="sidebar-nav-item" data-tab="projects" onclick="showTabProjects()">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 4a1 1 0 0 1 1-1h4l2 2h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4z"/>
+      </svg>
+      <span>Projects</span>
+    </div>
+  </nav>
 
-<div class="toolbar">
+  <div class="sidebar-bottom">
+    <button onclick="openNewCdcModal()" class="sidebar-new-cdc">+ New CDC</button>
+    <a href="/logout" class="sidebar-signout">Sign out</a>
+    <div class="sidebar-powered">Powered by Capgemini</div>
+  </div>
+</aside>
+
+<!-- ── Hidden toolbar (JS depends on btn IDs) ──────────────────────────── -->
+<div class="toolbar" aria-hidden="true">
   <button id="btn-all" onclick="showTabRuns(); loadRuns(false)">Runs</button>
   <button id="btn-tests" onclick="showTabTests()">Tests</button>
   <button id="btn-trend" onclick="showTabTrend()">Agent Scores</button>
   <button id="btn-projects" onclick="showTabProjects()">Projects</button>
-  <button onclick="openNewCdcModal()" style="margin-left:auto;background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600">+ New CDC</button>
+</div>
+
+<!-- ── Main area ────────────────────────────────────────────────────────── -->
+<div class="main-area">
+<div class="page-header">
+  <span class="page-header-title" id="page-title">Runs</span>
+  <span class="page-header-sub" id="page-subtitle">Build history and agent generation runs</span>
 </div>
 
 <!-- ── Modale Nouveau CDC ───────────────────────────────────────────────── -->
@@ -603,36 +667,7 @@
     return 'var(--red)';
   }
 
-  async function loadStats() {
-    const s = await fetch('/api/stats').then(r => r.json());
-    document.getElementById('kpi-total').textContent = s.total_runs;
-    document.getElementById('kpi-pending').textContent = s.pending;
-    document.getElementById('kpi-approved').textContent = s.approved;
-    document.getElementById('kpi-rejected').textContent = s.rejected;
-    document.getElementById('kpi-review-rate').textContent = pct(s.review_rate);
-    document.getElementById('kpi-judge-rate').textContent = pct(s.judge_pass_rate);
-
-    const tbody = document.getElementById('agent-tbody');
-    const agents = Object.entries(s.by_agent || {});
-    if (!agents.length) {
-      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--ink-dim)">No agent data yet.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = agents.map(([agent, d]) => {
-      const rate = d.judge_pass_rate;
-      const barW = rate != null ? Math.round(rate * 80) : 0;
-      const col = rateColor(rate);
-      return `<tr>
-        <td style="color:var(--blue)">${agent}</td>
-        <td>${d.total_blocs}</td>
-        <td>
-          <span style="color:${col}">${pct(rate)}</span>
-          <span class="rate-bar" style="width:${barW}px;background:${col}"></span>
-        </td>
-        <td style="color:var(--ink-dim)">${score(d.avg_score)}</td>
-      </tr>`;
-    }).join('');
-  }
+  async function loadStats() { /* KPI bar removed — stats no longer displayed globally */ }
 
   async function loadRuns(reviewOnly) {
     currentFilter = reviewOnly;
@@ -1710,10 +1745,23 @@
 
   function _saveTab(name) { try { localStorage.setItem('atlas_tab', name); } catch(_) {} }
 
+  function _setSidebarActive(tabKey) {
+    document.querySelectorAll('.sidebar-nav-item').forEach(el => el.classList.remove('active'));
+    const el = document.querySelector(`.sidebar-nav-item[data-tab="${tabKey}"]`);
+    if (el) el.classList.add('active');
+    const titles = { runs: 'Runs', tests: 'Tests', trend: 'Agent Scores', projects: 'Projects' };
+    const subs = { runs: 'Build history and agent generation runs', tests: 'Full pipeline tests on real tickets', trend: 'Per-agent score progression over time', projects: 'Knowledge graph and deployed agents' };
+    const t = document.getElementById('page-title');
+    const s = document.getElementById('page-subtitle');
+    if (t) t.textContent = titles[tabKey] || tabKey;
+    if (s) s.textContent = subs[tabKey] || '';
+  }
+
   function showTabRuns() {
     _hideAllPanels();
     document.querySelector('.layout').style.display = '';
     _saveTab('runs');
+    _setSidebarActive('runs');
   }
 
   function showTabKG() {
@@ -1738,17 +1786,18 @@
         </div>
         <div id="projects-folders-area"><div style="color:var(--ink-dim);font-size:13px">Loading…</div></div>
         <details id="projects-kg-details" style="margin-top:28px">
-          <summary style="cursor:pointer;font-size:14px;font-weight:600;color:var(--ink-dim);padding:8px 0;border-top:1px solid #1a1a2e;list-style:none;display:flex;align-items:center;gap:8px" onclick="setTimeout(()=>loadKG(),50)">
+          <summary style="cursor:pointer;font-size:14px;font-weight:600;color:var(--ink-dim);padding:8px 0;border-top:1px solid #1a1a2e;list-style:none;display:flex;align-items:center;gap:8px" onclick="_onKgDetailsToggle()">
             <span>▶ Knowledge Graph</span>
             <span id="projects-kg-counts" style="font-size:11px;font-weight:400;color:var(--ink-dim)"></span>
           </summary>
           <div style="margin-top:16px">
+            <div id="kg-project-filter"></div>
             <div class="kg-filter" style="margin-bottom:12px">
               <label><input type="radio" name="kg-filter" value="all" checked onchange="renderKG()"> All</label>
               <label><input type="radio" name="kg-filter" value="agent" onchange="renderKG()"> Agents</label>
               <label><input type="radio" name="kg-filter" value="tool" onchange="renderKG()"> Tools</label>
             </div>
-            <div id="kg-graph-projects" style="width:100%;height:520px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"><div class="kg-empty" style="padding-top:80px">Cliquez sur ▶ pour charger le graphe</div></div>
+            <div id="kg-graph-projects" style="width:100%;height:500px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"><div class="kg-empty" style="padding-top:80px">Cliquez sur ▶ pour charger le graphe</div></div>
             <div class="kg-tooltip" id="kg-tooltip-projects"></div>
           </div>
         </details>`;
@@ -1770,6 +1819,7 @@
           <div style="background:var(--bg);padding:12px 16px;display:flex;align-items:center;gap:12px">
             <span style="font-weight:600;font-size:14px;color:var(--blue);flex:1">${escHtml(p.name)}</span>
             <span style="font-size:11px;color:var(--ink-dim)">${p.agents.length} agent${p.agents.length > 1 ? 's' : ''} · ${p.tools.length} tool${p.tools.length !== 1 ? 's' : ''}</span>
+            <button onclick="_focusProjectInKg('${escHtml(p.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--border);color:var(--ink-dim);border-radius:var(--radius);cursor:pointer">View in KG →</button>
             <button onclick="_copyMcpConfig('${escHtml(p.name)}')" style="font-size:11px;padding:3px 10px;background:none;border:1px solid var(--aqua);color:var(--aqua);border-radius:var(--radius);cursor:pointer">Copy MCP config</button>
           </div>
           <div style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px">
@@ -1790,6 +1840,7 @@
     })();
     // KG loads on demand when user expands the details section
     _saveTab('projects');
+    _setSidebarActive('projects');
   }
 
   function showTabTrend() {
@@ -1798,9 +1849,31 @@
     document.getElementById('btn-trend').classList.add('active');
     _populateTrendAgents();
     _saveTab('trend');
+    _setSidebarActive('trend');
   }
 
   let _visNetwork = null;
+
+  function _onKgDetailsToggle() {
+    const container = document.getElementById('kg-graph-projects');
+    if (!container) return;
+    // Set container height to fill remaining viewport — prevents scroll capture by vis.js
+    const setFitHeight = () => {
+      const rect = container.getBoundingClientRect();
+      if (rect.top > 0) {
+        const available = window.innerHeight - rect.top - 24;
+        container.style.height = Math.max(320, available) + 'px';
+      }
+      if (_visNetwork) {
+        _visNetwork.setSize(container.offsetWidth + 'px', container.offsetHeight + 'px');
+        _visNetwork.redraw();
+        _visNetwork.fit({ padding: 60 });
+      } else {
+        loadKG();
+      }
+    };
+    setTimeout(setFitHeight, 80);
+  }
 
   function _kgContainer() {
     const proj = document.getElementById('kg-graph-projects');
@@ -1819,11 +1892,62 @@
     renderKG();
   }
 
+  let _kgProjectFilter = 'all'; // 'all' or project name
+
+  function _setKgProjectFilter(proj) {
+    _kgProjectFilter = proj;
+    // Update project filter buttons
+    document.querySelectorAll('.kg-proj-btn').forEach(btn => {
+      btn.style.borderColor = btn.dataset.proj === proj ? 'var(--blue)' : 'var(--border)';
+      btn.style.color = btn.dataset.proj === proj ? 'var(--blue)' : 'var(--ink-dim)';
+      btn.style.background = btn.dataset.proj === proj ? 'rgba(11,168,224,0.08)' : 'transparent';
+    });
+    renderKG();
+  }
+
+  function _focusProjectInKg(projName) {
+    const details = document.getElementById('projects-kg-details');
+    if (details && !details.open) {
+      details.open = true;
+      // loadKG is async, wait for it then set filter
+      (async () => { await loadKG(); _setKgProjectFilter(projName); })();
+    } else {
+      _setKgProjectFilter(projName);
+    }
+    setTimeout(() => details?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  }
+
+  function _buildKgProjectFilter() {
+    const area = document.getElementById('kg-project-filter');
+    if (!area || !_kgData) return;
+    const projects = [...new Set(_kgData.nodes.map(n => n.project).filter(Boolean))];
+    if (projects.length <= 1) { area.innerHTML = ''; return; }
+    area.innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <span style="font-size:11px;color:var(--ink-dim);margin-right:4px">Project:</span>
+        <button class="kg-proj-btn" data-proj="all" onclick="_setKgProjectFilter('all')"
+          style="font-size:11px;padding:3px 12px;border-radius:var(--radius);border:1px solid var(--blue);color:var(--blue);background:rgba(11,168,224,0.08);cursor:pointer;font-family:inherit">
+          All
+        </button>
+        ${projects.map(p => `
+          <button class="kg-proj-btn" data-proj="${escHtml(p)}" onclick="_setKgProjectFilter('${escHtml(p)}')"
+            style="font-size:11px;padding:3px 12px;border-radius:var(--radius);border:1px solid var(--border);color:var(--ink-dim);background:transparent;cursor:pointer;font-family:inherit">
+            ${escHtml(p)}
+          </button>
+        `).join('')}
+        <span style="font-size:10px;color:var(--ink-faint);margin-left:8px">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#0BA8E0;border:1px solid #0BA8E0;vertical-align:middle"></span>
+          shared tool
+        </span>
+      </div>`;
+  }
+
   function renderKG() {
     const filter = document.querySelector('input[name="kg-filter"]:checked')?.value || 'all';
     const nAgents = _kgData.nodes.filter(n => n.node_type === 'agent').length;
     const nTools  = _kgData.nodes.filter(n => n.node_type === 'tool').length;
     const nEdges  = (_kgData.edges || []).length;
+    _buildKgProjectFilter();
     // Update counts — both in main panel and projects panel
     const setCount = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     setCount('kg-count-agents', `agents ${nAgents}`);
@@ -1832,7 +1956,24 @@
     const projCounts = document.getElementById('projects-kg-counts');
     if (projCounts) projCounts.textContent = `${nAgents} agents · ${nTools} tools · ${nEdges} edges`;
 
-    const filteredNodes = filter === 'all' ? _kgData.nodes : _kgData.nodes.filter(n => n.node_type === filter);
+    // Project filter: if a project is selected, keep nodes of that project + shared tools
+    // A "shared tool" is a tool used by more than one project
+    const toolProjects = {};
+    for (const n of _kgData.nodes) {
+      if (n.node_type === 'tool' && n.project) {
+        if (!toolProjects[n.id]) toolProjects[n.id] = new Set();
+        toolProjects[n.id].add(n.project);
+      }
+    }
+    const sharedToolIds = new Set(Object.entries(toolProjects).filter(([,s]) => s.size > 1).map(([id]) => id));
+
+    let projectNodes = _kgData.nodes;
+    if (_kgProjectFilter !== 'all') {
+      projectNodes = _kgData.nodes.filter(n =>
+        n.project === _kgProjectFilter || sharedToolIds.has(n.id)
+      );
+    }
+    const filteredNodes = filter === 'all' ? projectNodes : projectNodes.filter(n => n.node_type === filter);
     const filteredIds = new Set(filteredNodes.map(n => n.id));
 
     if (!filteredNodes.length) {
@@ -1858,12 +1999,14 @@
 
     const visNodes = filteredNodes.map(n => {
       const isTool  = n.node_type === 'tool';
+      const isShared = sharedToolIds.has(n.id) && _kgProjectFilter !== 'all';
       const conf    = n.confidence ?? 1.0;
       const displayScore = n.human_score != null ? n.human_score : n.judge_score;
       const scoreLabel = displayScore != null ? `  ${displayScore.toFixed(1)}/5` : '';
-      const bgColor = isTool ? '#1c1400' : '#100d2a';
-      const bdColor = isTool ? '#e8a600' : '#9085e9';
-      const fontColor = isTool ? '#f5d060' : '#d0c8ff';
+      // Shared tools highlighted in blue, others keep their type color
+      const bgColor = isShared ? '#001c2a' : isTool ? '#1c1400' : '#100d2a';
+      const bdColor = isShared ? '#0BA8E0' : isTool ? '#e8a600' : '#9085e9';
+      const fontColor = isShared ? '#7dd8f5' : isTool ? '#f5d060' : '#d0c8ff';
       const label = scoreLabel ? `${n.id}\n${scoreLabel}` : n.id;
       return {
         id:    n.id,
@@ -1918,30 +2061,24 @@
       });
 
     const data = { nodes: new vis.DataSet(visNodes), edges: new vis.DataSet(visEdges) };
-    // Use hierarchical layout when pipeline edges exist — cleaner topology
-    const hasPipeline = (_kgData.edges || []).some(e => e.relation === 'PIPELINE_MEMBER');
     const options = {
-      physics: hasPipeline ? { enabled: false } : {
+      physics: {
         enabled: true,
         solver: 'forceAtlas2Based',
         forceAtlas2Based: {
-          gravitationalConstant: -300,
-          centralGravity: 0.01,
-          springLength: 320,
-          springConstant: 0.05,
+          gravitationalConstant: -200,
+          centralGravity: 0.005,
+          springLength: 260,
+          springConstant: 0.04,
           damping: 0.7,
           avoidOverlap: 1.0,
         },
-        stabilization: { iterations: 400, updateInterval: 20 },
+        stabilization: { iterations: 500, updateInterval: 20 },
       },
-      layout: hasPipeline
-        ? { hierarchical: { enabled: true, direction: 'LR', sortMethod: 'directed', levelSeparation: 280, nodeSpacing: 160 } }
-        : { improvedLayout: true, randomSeed: 42 },
-      interaction: { hover: true, tooltipDelay: 99999, zoomView: true, dragView: true, dragNodes: true, navigationButtons: false },
-      edges: {
-        selectionWidth: 3,
-        smooth: hasPipeline ? { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 } : { type: 'dynamic' },
-      },
+      layout: { improvedLayout: true, randomSeed: 42 },
+      interaction: { hover: true, tooltipDelay: 99999, zoomView: true, dragView: true, dragNodes: true, navigationButtons: false, zoomSpeed: 0.15 },
+      configure: false,
+      edges: { selectionWidth: 3, smooth: { type: 'dynamic' } },
       nodes: { borderWidthSelected: 3 },
     };
 
@@ -1949,10 +2086,20 @@
     _visNetwork = new vis.Network(container, data, options);
     _visNetwork.once('stabilizationIterationsDone', () => {
       _visNetwork.setOptions({ physics: { enabled: false } });
-      _visNetwork.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+      const c = _kgContainer();
+      _visNetwork.setSize(c.offsetWidth + 'px', c.offsetHeight + 'px');
+      _visNetwork.redraw();
+      _visNetwork.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' }, padding: 60 });
     });
-    // Fallback fit in case stabilization fires before listener is attached
-    setTimeout(() => { try { _visNetwork.fit(); } catch(_) {} }, 600);
+    // Fallback: force resize + fit after container is fully painted
+    setTimeout(() => {
+      try {
+        const c = _kgContainer();
+        _visNetwork.setSize(c.offsetWidth + 'px', c.offsetHeight + 'px');
+        _visNetwork.redraw();
+        _visNetwork.fit({ padding: 60 });
+      } catch(_) {}
+    }, 1000);
 
     // Click on a node → show persistent panel (tooltip has pointer-events:none in vis)
     _visNetwork.on('click', function(params) {
@@ -2077,16 +2224,51 @@
   let _trendData = null;
 
   async function _populateTrendAgents() {
-    const runs = await fetch('/api/runs').then(r => r.json());
+    const [runs, kgRaw] = await Promise.all([
+      fetch('/api/runs').then(r => r.json()),
+      _kgData ? Promise.resolve(_kgData) : fetch('/api/kg').then(r => r.json()).catch(() => ({ nodes: [], edges: [] })),
+    ]);
+    if (!_kgData) _kgData = kgRaw;
+
+    // Build agent→project map from KG
+    const agentProject = {};
+    for (const n of (_kgData.nodes || [])) {
+      if (n.project) agentProject[n.id] = n.project;
+    }
+
+    // Collect agents from runs
     const agents = new Set();
     for (const run of runs) for (const b of (run.blocs || [])) {
       const name = b.agent || b.agent_suggested || '';
       if (name) agents.add(name);
     }
+
+    // Group by project
+    const byProject = {};
+    for (const a of agents) {
+      const proj = agentProject[a] || '';
+      if (!byProject[proj]) byProject[proj] = [];
+      byProject[proj].push(a);
+    }
+
     const sel = document.getElementById('trend-agent-select');
     const current = sel.value;
-    sel.innerHTML = '<option value="">— Choisir un agent —</option>' +
-      [...agents].sort().map(a => `<option value="${escHtml(a)}"${a===current?' selected':''}>${escHtml(a)}</option>`).join('');
+    const projectKeys = Object.keys(byProject).sort((a, b) => (a || 'zzz').localeCompare(b || 'zzz'));
+    const hasGroups = projectKeys.length > 1 || (projectKeys.length === 1 && projectKeys[0] !== '');
+
+    if (hasGroups) {
+      sel.innerHTML = '<option value="">— Choisir un agent —</option>' +
+        projectKeys.map(proj => {
+          const label = proj || 'No project';
+          const opts = byProject[proj].sort().map(a =>
+            `<option value="${escHtml(a)}"${a===current?' selected':''}>${escHtml(a)}</option>`
+          ).join('');
+          return `<optgroup label="${escHtml(label)}">${opts}</optgroup>`;
+        }).join('');
+    } else {
+      sel.innerHTML = '<option value="">— Choisir un agent —</option>' +
+        [...agents].sort().map(a => `<option value="${escHtml(a)}"${a===current?' selected':''}>${escHtml(a)}</option>`).join('');
+    }
     if (current && agents.has(current)) loadTrend(current);
   }
 
@@ -2498,6 +2680,7 @@
     _loadTestProjects();
     _loadTestHistory();
     _saveTab('tests');
+    _setSidebarActive('tests');
   }
 
   async function _loadTestProjects() {
@@ -3853,5 +4036,7 @@
     if (e.target === this) this.classList.remove('open');
   });
 </script>
+</div><!-- /.main-area -->
+</div><!-- /.app-shell -->
 </body>
 </html>

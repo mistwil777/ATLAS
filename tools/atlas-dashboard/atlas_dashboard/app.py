@@ -2701,10 +2701,11 @@ def api_download_tool(run_id: str, tool_name: str):
     output_path = _Path(built["output_path"])
     if not output_path.exists():
         raise HTTPException(status_code=404, detail="Tool directory not found")
+    _SKIP = {"__pycache__", ".git", ".egg-info"}
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in output_path.rglob("*"):
-            if p.is_file():
+            if p.is_file() and not any(part.endswith(".egg-info") or part in _SKIP for part in p.parts):
                 zf.write(p, p.relative_to(output_path.parent))
     buf.seek(0)
     return StreamingResponse(
@@ -2729,10 +2730,11 @@ def api_download_agent(run_id: str, agent_name: str):
     if not output_path.exists():
         raise HTTPException(status_code=404, detail="Scaffolded directory not found")
 
+    _SKIP = {"__pycache__", ".git", ".egg-info"}
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in output_path.rglob("*"):
-            if p.is_file():
+            if p.is_file() and not any(part.endswith(".egg-info") or part in _SKIP for part in p.parts):
                 zf.write(p, p.relative_to(output_path.parent))
     buf.seek(0)
 
@@ -3691,8 +3693,9 @@ def _mcp_agent_zip(project: str, agent: str) -> bytes:
         )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        _SKIP = {"__pycache__", ".git", ".egg-info"}
         for f in agent_dir.rglob("*"):
-            if f.is_file() and "__pycache__" not in f.parts:
+            if f.is_file() and not any(p.endswith(".egg-info") or p in _SKIP for p in f.parts):
                 zf.write(f, f.relative_to(agent_dir.parent))
     return buf.getvalue()
 

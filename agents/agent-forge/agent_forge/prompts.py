@@ -14,11 +14,37 @@ Return ONLY a JSON object with these keys:
 - "constraints": list of strings, each a notable constraint (e.g. "offline", "no external API calls")
 - "uses_llm": true if the agent needs an LLM to operate, false if it is purely algorithmic
 - "component_type": "agent" if the component needs an LLM or decision logic, "tool" if it is a pure stateless function (no LLM, no state, single responsibility)
+- "required_tools": list of objects describing external tools or libraries this agent will need to call.
+  Each object has:
+    - "name": short identifier (snake_case), e.g. "text_normalizer", "date_parser"
+    - "description": one sentence describing what the tool must do
+    - "is_pure_function": true if the tool is a stateless pure function (no LLM, no I/O side effects)
+  Leave as empty list [] if the agent needs no external tools.
 
 Specification:
 {spec_content}
 
 JSON:"""
+
+
+TOOL_RESOLUTION = """\
+You are a Python library expert. Given the following tool requirement, determine whether a \
+well-known, widely-used open-source Python library already covers this need.
+
+Tool requirement:
+- Name: {tool_name}
+- Description: {tool_description}
+
+Answer with a JSON object:
+{{
+  "has_oss": true or false,
+  "library": "library-name or null",
+  "install": "pip install X or null",
+  "reason": "one sentence explaining why this library fits or why no library fits"
+}}
+
+Return ONLY the JSON object, no markdown.
+"""
 
 
 PROMPT_GENERATION = """\
