@@ -2,39 +2,39 @@
 
 # ── Passe 0 : détection des flous, manques et incohérences ───────────────────
 DETECT_GAPS_PROMPT = """\
-Tu es un architecte logiciel expert. Tu reçois un cahier des charges (CDC) et tu dois \
-identifier les points qui rendraient impossible une implémentation fiable.
+You are an expert software architect. You receive a functional specification (CDC) and must \
+identify issues that would make a reliable implementation impossible.
 
-## CDC à analyser
+## CDC to analyse
 {cdc_text}
 
-## Types de problèmes à détecter
+## Problem types to detect
 
-**vague** : instruction présente mais non actionnable (trop ambiguë pour être testée)
-  Exemples : "gérer les cas limites", "performance acceptable", "interface conviviale"
+**vague**: instruction present but not actionable (too ambiguous to be tested)
+  Examples: "handle edge cases", "acceptable performance", "user-friendly interface"
 
-**missing** : information nécessaire à l'implémentation qui n'est pas dans le CDC
-  Exemples : langue de sortie non spécifiée, format de date non précisé, niveaux de priorité non définis
+**missing**: information required for implementation that is absent from the CDC
+  Examples: output language not specified, date format not defined, priority levels undefined
 
-**incoherent** : deux blocs ou contraintes qui se contredisent
-  Exemples : "répondre en moins de 100ms" mais "appeler 3 APIs externes synchrones"
+**incoherent**: two blocs or constraints that contradict each other
+  Examples: "respond in under 100ms" but "call 3 external APIs synchronously"
 
-## Règles
-- Ne signale QUE les problèmes bloquants pour l'implémentation
-- Maximum 5 gaps — priorise par impact sur le scaffold
-- Sois précis : cite le bloc concerné ou la phrase exacte
-- Ne signale pas les choix stylistiques ou préférences — uniquement ce qui crée une ambiguïté fonctionnelle
+## Rules
+- Report ONLY blocking issues for implementation
+- Maximum 5 gaps — prioritise by impact on the scaffold
+- Be precise: quote the concerned bloc or exact phrase
+- Do not report stylistic choices or preferences — only functional ambiguities
 
-## Format — JSON strict, tableau, aucun texte avant/après
+## Format — strict JSON array, no text before or after
 [
   {{
     "type": "vague"|"missing"|"incoherent",
-    "description": "<description du problème — une phrase>",
-    "bloc_concerned": "<titre ou phrase du CDC concerné>",
+    "description": "<one-sentence description of the problem>",
+    "bloc_concerned": "<CDC title or phrase concerned>",
     "impact": "high"|"medium"|"low"
   }}
 ]
-Si aucun problème bloquant n'est détecté, retourne [] (tableau vide).
+If no blocking issues are detected, return [] (empty array).
 """
 
 # ── Passe 1 : segmentation fonctionnelle ─────────────────────────────────────
