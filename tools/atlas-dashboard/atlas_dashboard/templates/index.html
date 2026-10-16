@@ -745,6 +745,7 @@
         ${run.requires_review && !isWaiting ? '<span class="badge badge-review">requires review</span>' : ''}
         <span style="color:var(--ink-dim);font-size:11px">${fmtDate(run.created_at)}</span>
         ${isResumed && run.resumed_as ? `<span style="font-size:11px;color:#6a9f6a">→ <a href="#" onclick="showRun('${run.resumed_as}');return false;" style="color:#6a9f6a">run repris</a></span>` : ''}
+        <button class="btn-reject" style="margin-left:auto;background:transparent;border:1px solid var(--red);color:var(--red)" onclick="deleteRun('${runId}')">Delete</button>
       </div>
       ${buildProgressBanner(run)}
       ${isWaiting ? buildWaitingPanel(run) : ''}
@@ -757,9 +758,6 @@
           <button class="btn-approve" onclick="decideSelected('${runId}','approve')">Approve selection</button>
         ` : `<button class="btn-approve" ${isPending ? '' : 'disabled'} onclick="decide('${runId}','approve')">Approve</button>`}
         <button class="btn-reject"  ${isPending ? '' : 'disabled'} onclick="decide('${runId}','reject')">Reject</button>
-      </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:${isWaiting ? '8px' : '-36px'}">
-        <button class="btn-reject" style="background:transparent;border:1px solid var(--red);color:var(--red)" onclick="deleteRun('${runId}')">Delete</button>
       </div>
       ${(() => {
         const blocs = run.blocs || [];
