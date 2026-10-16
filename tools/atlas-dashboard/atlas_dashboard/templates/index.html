@@ -598,7 +598,7 @@
 </div>
 
 <!-- ── Test agent panel ──────────────────────────────────────────────────── -->
-<div id="test-agent-panel" style="display:none;padding:24px;max-width:900px;margin:0 auto">
+<div id="test-agent-panel" style="display:none;padding:32px 48px;width:100%;box-sizing:border-box">
   <div style="display:flex;align-items:center;gap:16px;margin-bottom:6px">
     <button onclick="_closeTestAgentPanel()" style="background:none;border:none;color:var(--ink-dim);cursor:pointer;font-size:18px;padding:0;line-height:1">←</button>
     <h2 style="margin:0" id="tap-title">Test agent</h2>
@@ -626,7 +626,7 @@
       <span style="font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Output</span>
       <span id="tap-passed-badge" style="font-size:11px;padding:2px 8px;border-radius:3px"></span>
     </div>
-    <pre id="tap-output-box" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:12px;color:var(--ink);overflow-x:auto;white-space:pre-wrap;max-height:260px;overflow-y:auto"></pre>
+    <pre id="tap-output-box" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:12px;color:var(--ink);overflow-x:auto;white-space:pre-wrap;max-height:400px;overflow-y:auto"></pre>
 
     <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
       <button id="tap-btn-judge" onclick="_tapJudge()" style="background:var(--aqua);color:#000;border-color:var(--aqua);font-weight:600">Evaluate (judge)</button>
@@ -650,7 +650,7 @@
     <!-- Judge result -->
     <div id="tap-step-judge" style="display:none;margin-top:20px">
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
-        <span style="font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Score post-test</span>
+        <span style="font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Post-test score</span>
         <span id="tap-score-badge" style="font-size:20px;font-weight:700"></span>
       </div>
       <div id="tap-feedback-box" style="font-size:12px;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px;line-height:1.6"></div>
@@ -659,7 +659,7 @@
         <span style="font-size:12px;color:var(--ink-dim);flex:1" id="tap-action-hint"></span>
         <button id="tap-btn-rescaffold" style="display:none;font-size:12px;padding:5px 14px;border:1px solid var(--yellow);color:var(--yellow);border-radius:var(--radius);background:none;cursor:pointer" onclick="_tapReScaffold()">Regenerate</button>
         <button id="tap-btn-rerun" style="display:none;font-size:12px;padding:5px 14px;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);background:none;cursor:pointer" onclick="_tapRunTest()">Re-run test</button>
-        <button onclick="_tapGoToTrends()" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Voir dans Agent Scores →</button>
+        <button onclick="_tapGoToTrends()" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">View in Agent Scores →</button>
       </div>
     </div>
   </div>
@@ -4103,7 +4103,7 @@
           ${_tapInputs.length > 1 ? `<button onclick="_tapRemoveInput(${idx})" style="background:none;border:none;color:var(--ink-dim);cursor:pointer;font-size:14px;padding:0">×</button>` : ''}
         </div>
         <label style="font-size:11px;color:var(--ink-dim);display:block;margin-bottom:3px">cdc_bloc</label>
-        <textarea id="tap-cdc-${idx}" rows="4" style="width:100%;box-sizing:border-box;background:#12121f;border:1px solid #252535;border-radius:var(--radius);padding:8px;color:#fff;font-size:12px;resize:vertical;font-family:monospace">${cdc}</textarea>
+        <textarea id="tap-cdc-${idx}" rows="6" style="width:100%;box-sizing:border-box;background:#12121f;border:1px solid #252535;border-radius:var(--radius);padding:8px;color:#fff;font-size:12px;resize:vertical;font-family:monospace">${cdc}</textarea>
         <label style="font-size:11px;color:var(--ink-dim);display:block;margin-top:6px;margin-bottom:3px">context (optional)</label>
         <input id="tap-ctx-${idx}" type="text" value="${ctx}" placeholder="" style="width:100%;box-sizing:border-box;background:#12121f;border:1px solid #252535;border-radius:var(--radius);padding:6px 8px;color:#fff;font-size:12px">
       </div>`;
