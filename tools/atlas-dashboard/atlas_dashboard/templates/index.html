@@ -1313,8 +1313,6 @@
             <span class="badge badge-approved">installed</span>
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
-              <input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
-              <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--ink-dim);color:var(--ink-dim);font-size:11px">Regenerate</button>
               <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:11px;padding:3px 10px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Test</button>
             </div>
           </div>
