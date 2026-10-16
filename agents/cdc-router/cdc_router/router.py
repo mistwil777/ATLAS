@@ -73,7 +73,7 @@ def route(
     for bloc in blocs:
         b = dict(bloc)
         bloc_type = b.get("type")
-        agent_name = b.get("agent_suggested")
+        agent_name = b.get("agent") or b.get("agent_suggested")
 
         # Skip duplicate blocs (same type + name already processed)
         dedup_key = f"{bloc_type}:{agent_name}" if agent_name else None
@@ -81,6 +81,9 @@ def route(
             continue
         if dedup_key:
             seen_names.add(dedup_key)
+
+        # Normalize: prefer 'agent' field, fall back to 'agent_suggested'
+        agent_name = b.get("agent") or b.get("agent_suggested")
 
         if bloc_type == "ia" and agent_name:
             candidate = known_agents.get(agent_name)
