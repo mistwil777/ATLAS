@@ -295,7 +295,7 @@ def _process_bloc(
     llm_cfg: dict,
     judge_fn: Callable | None,
 ) -> dict:
-    agent_name = bloc.get("agent_suggested", "")
+    agent_name = bloc.get("agent") or bloc.get("agent_suggested", "")
     content = bloc.get("bloc", "")
     bloc_type = bloc.get("type", "ia")
 
