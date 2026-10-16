@@ -127,7 +127,7 @@ class CdcRouterAgent:
 
         from cdc_router.router import route  # noqa: PLC0415
 
-        routing = route(blocs, kg_graph)
+        routing = route(blocs, kg_graph, llm_fn=self._llm, llm_cfg=self.llm_cfg)
 
         if routing["requires_creation"]:
             for name in routing["requires_creation"]:

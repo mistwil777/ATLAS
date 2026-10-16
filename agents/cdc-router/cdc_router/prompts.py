@@ -207,3 +207,34 @@ Expected format:
 Previous response:
 {previous_response}
 """
+
+# ── Capability coherence check ────────────────────────────────────────────────
+CAPABILITY_CHECK_PROMPT = """\
+You are an ATLAS architect. A new CDC requires a component, and an existing component \
+with the same name was found in the catalogue. Determine whether the existing component \
+can be reused as-is, adapted, or must be replaced by a new one.
+
+Existing component:
+- Name: {existing_name}
+- Type: {existing_type}
+- Description: {existing_description}
+- Capabilities: {existing_capabilities}
+
+Required by new CDC:
+- Name: {required_name}
+- Type: {required_type}
+- Description: {required_description}
+
+Answer with a JSON object:
+{{
+  "decision": "reuse" | "adapt" | "create",
+  "reason": "one sentence"
+}}
+
+Rules:
+- "reuse": same purpose, same interface — use as-is
+- "adapt": same domain, compatible interface — minor prompt/logic update needed
+- "create": fundamentally different purpose — create a new component with a different name
+
+Return ONLY the JSON object.
+"""
