@@ -299,6 +299,8 @@ def _process_bloc(
         "called_by": bloc.get("called_by", ""),
         "justification": bloc.get("justification", ""),
         "criteria": bloc.get("criteria") or [],
+        "agent_exists": bloc.get("agent_exists"),
+        "reuse_decision": bloc.get("reuse_decision"),
         "status": "skipped",
         "judge_passed": None,
         "judge_score": None,
