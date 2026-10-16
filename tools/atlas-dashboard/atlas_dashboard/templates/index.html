@@ -751,6 +751,7 @@
       ${buildProgressBanner(run)}
       ${isWaiting ? buildWaitingPanel(run) : ''}
       <div class="actions" ${isWaiting ? 'style="display:none"' : ''}>
+        ${isPending ? `<span style="font-size:11px;color:var(--ink-dim);flex-basis:100%;margin-bottom:4px">Step 1 — Review the routing plan below, then approve to start scaffolding.</span>` : ''}
         ${run.requires_review && isPending ? `
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--ink-dim)">
             <input type="checkbox" id="select-all" checked onchange="toggleSelectAll(this)" style="accent-color:var(--violet)">
@@ -1018,6 +1019,7 @@
     const tools = run.requires_tools || [];
     if (!tools.length) return '';
     const built = run.tools_built || {};
+    const isPendingApproval = run.status === 'pending' || run.status === 'routing';
 
     const rows = tools.map(name => {
       const key = _toolKey(run.run_id, name);
@@ -1032,7 +1034,8 @@
       let codeHtml = '';
 
       if (state === 'pending') {
-        actionButtons = `<button class="btn-build-tool" onclick="buildTool('${run.run_id}','${name}')">Build</button>`;
+        const locked = isPendingApproval;
+        actionButtons = `<button class="btn-build-tool" ${locked ? 'disabled title="Approve the routing plan first"' : `onclick="buildTool('${run.run_id}','${name}')"`} style="${locked ? 'opacity:0.35;cursor:not-allowed' : ''}">Build</button>`;
       } else if (state === 'building') {
         statusBadge = `<span class="spinner"></span>`;
         actionButtons = `<span style="color:var(--ink-dim);font-size:11px">Building…</span>`;
@@ -1154,6 +1157,8 @@
     if (!agents.length) return '';
     const scaffolded = run.scaffolded || {};
     const allInstalled = agents.every(a => scaffolded[a]?.installed);
+    const isApproved = run.status === 'approved';
+    const isPendingApproval = run.status === 'pending' || run.status === 'routing';
 
     const rows = agents.map(agent => {
       const sc = scaffolded[agent];
@@ -1162,13 +1167,14 @@
 
       let controls = '';
       if (state === 'pending') {
+        const locked = isPendingApproval;
         controls = `
-          <input type="text" id="ingest-text-${agent}" placeholder="Additional context…" oninput="onIngestTextInput('${agent}',this)" style="flex:1;min-width:0;max-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:4px 8px;outline:none">
-          <label title="Joindre des documents (PDF, txt, md, html, images…)" style="cursor:pointer;padding:4px 8px;border:1px dashed var(--ink-dim);border-radius:var(--radius);font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px;white-space:nowrap">
+          <input type="text" id="ingest-text-${agent}" placeholder="Additional context…" oninput="onIngestTextInput('${agent}',this)" ${locked ? 'disabled' : ''} style="flex:1;min-width:0;max-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:4px 8px;outline:none;${locked ? 'opacity:0.35;cursor:not-allowed' : ''}">
+          <label title="${locked ? 'Approve the routing plan first' : 'Attach documents'}" style="cursor:${locked ? 'not-allowed' : 'pointer'};padding:4px 8px;border:1px dashed var(--ink-dim);border-radius:var(--radius);font-size:11px;color:var(--ink-dim);display:flex;align-items:center;gap:4px;white-space:nowrap;${locked ? 'opacity:0.35' : ''}">
             <span id="ingest-label-${agent}">📎</span>
-            <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎 '+this.files.length:'📎'">
+            <input type="file" multiple accept=".pdf,.txt,.md,.html,.htm,.csv,.json,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none" ${locked ? 'disabled' : ''} onchange="onIngestFilesSelected('${agent}',this);document.getElementById('ingest-label-${agent}').textContent=this.files.length>0?'📎 '+this.files.length:'📎'">
           </label>
-          <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')">Generate</button>`;
+          <button class="btn-scaffold" ${locked ? 'disabled title="Approve the routing plan first"' : `onclick="scaffold('${run.run_id}','${agent}')"`} style="${locked ? 'opacity:0.35;cursor:not-allowed' : ''}">Generate</button>`;
       } else if (state === 'scaffolding') {
         controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Generating…</span>`;
       } else if (state === 'scaffolded') {
@@ -1291,7 +1297,10 @@
         </div>`;
     }).join('');
 
-    return `<div class="create-panel"><h3>Agents to Create (${agents.length})</h3>${rows}</div>`;
+    const step2hint = isApproved
+      ? `<p style="font-size:11px;color:var(--ink-dim);margin:0 0 10px">Step 2 — Generate each agent below, then install it.</p>`
+      : `<p style="font-size:11px;color:var(--ink-dim);margin:0 0 10px">Approve the routing plan above to unlock generation.</p>`;
+    return `<div class="create-panel"><h3>Agents to Create (${agents.length})</h3>${step2hint}${rows}</div>`;
   }
 
   function buildAdaptPanel(run) {
