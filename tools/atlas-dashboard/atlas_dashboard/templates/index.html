@@ -4150,7 +4150,7 @@
     const tab = (function() { try { return localStorage.getItem('atlas_tab'); } catch(_) { return null; } })();
     if (tab === 'kg') { showTabKG(); }
     else if (tab === 'trend') { showTabTrend(); }
-    else if (tab === 'runs') { loadRuns(false); }
+    else if (tab === 'runs') { showTabRuns(); loadRuns(false); }
     else if (tab === 'folders') { showTabProjects(); }
     else if (tab === 'projects') { showTabProjects(); }
     else { showTabTests(); }
