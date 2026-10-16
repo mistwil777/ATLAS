@@ -2705,7 +2705,9 @@ def api_download_tool(run_id: str, tool_name: str):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in output_path.rglob("*"):
-            if p.is_file() and not any(part.endswith(".egg-info") or part in _SKIP for part in p.parts):
+            if p.is_file() and not any(
+                part.endswith(".egg-info") or part in _SKIP for part in p.parts
+            ):
                 zf.write(p, p.relative_to(output_path.parent))
     buf.seek(0)
     return StreamingResponse(
@@ -2734,7 +2736,9 @@ def api_download_agent(run_id: str, agent_name: str):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in output_path.rglob("*"):
-            if p.is_file() and not any(part.endswith(".egg-info") or part in _SKIP for part in p.parts):
+            if p.is_file() and not any(
+                part.endswith(".egg-info") or part in _SKIP for part in p.parts
+            ):
                 zf.write(p, p.relative_to(output_path.parent))
     buf.seek(0)
 
@@ -3485,7 +3489,6 @@ class AgentPromptPatch(BaseModel):
 
 def _find_prompts_py(agent_name: str, project: str = "") -> _Path | None:
     """Locate the prompts.py for a given agent name across all projects."""
-    import re as _re  # noqa: PLC0415
 
     slug = _agent_slug(agent_name)
     base = _Path.home() / ".atlas" / "projects"
@@ -3648,7 +3651,7 @@ def api_agent_propagate(agent_name: str):
 import json as _json  # noqa: E402
 
 
-def _mcp_kg() -> "KGStore":  # type: ignore[name-defined]
+def _mcp_kg():  # type: ignore[return]
     from atlas_memory.kg import KGStore  # noqa: PLC0415
 
     return KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
@@ -3735,8 +3738,8 @@ async def mcp_endpoint(request: Request):
     """MCP HTTP Streamable endpoint."""
     try:
         body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from exc
 
     method = body.get("method", "")
     req_id = body.get("id")
