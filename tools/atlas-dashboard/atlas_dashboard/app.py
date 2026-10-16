@@ -2956,19 +2956,34 @@ def api_judge_test(run_id: str, agent_name: str, body: JudgeTestRequest):
         test_run_id = body.run_id or run_id
         if score_val is not None:
             kg = KGStore(_Path.home() / ".atlas" / "memory" / "graph.json")
-            if agent_name in kg._g:
-                kg.update_agent_score(
+            # Register agent in KG if not already present so score is always tracked
+            if agent_name not in kg._g:
+                sc_entry = (store.get_run(run_id) or {}).get("scaffolded", {}).get(agent_name, {})
+                output_path = sc_entry.get("output_path", "")
+                project, cdc_summary, context_tags = _extract_run_context(run)
+                _register_agent_in_kg(
                     agent_name,
-                    score_val,
+                    output_path,
+                    judge_score=score_val,
                     run_id=test_run_id,
-                    source="test",
-                    test_detail={
-                        "input": body.input,
-                        "output": body.output,
-                        "feedback": feedback,
-                        "criteria": criteria_scores,
-                    },
+                    project=project,
+                    cdc_summary=cdc_summary,
+                    context_tags=context_tags,
                 )
+            kg.update_agent_score(
+                agent_name,
+                score_val,
+                run_id=test_run_id,
+                source="test",
+                test_detail={
+                    "input": body.input,
+                    "output": body.output,
+                    "feedback": feedback,
+                    "criteria": criteria_scores,
+                },
+            )
+            # Persist test score back into run store so it survives dashboard restarts
+            store.set_scaffold_judge(run_id, agent_name, score_val, criteria_scores, feedback)
 
         return {
             "ok": True,
@@ -2985,6 +3000,116 @@ def api_judge_test(run_id: str, agent_name: str, body: JudgeTestRequest):
             "judge-test failed for %s: %s", agent_name, exc
         )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+class DiagnoseErrorRequest(BaseModel):
+    error: str
+    output: str = ""
+    input: dict = {}
+
+
+_DIAGNOSE_PROMPT = """\
+You are an ATLAS architect reviewing a failed agent test.
+
+Agent: {agent_name}
+CDC context (excerpt): {cdc_context}
+Test input: {test_input}
+Test output: {test_output}
+Error / traceback: {error}
+
+Analyse the failure and respond with a JSON object:
+{{
+  "cause": "<one sentence: root cause in plain language, no jargon>",
+  "recommendation": "<one sentence: concrete action to fix it>",
+  "regenerate_context": "<if regeneration is recommended: exact instruction to add as context for agent-forge, else empty string>"
+}}
+
+Rules:
+- cause must be understandable by a non-developer
+- recommendation must name a specific action (Regenerate, fix the CDC, check the install, etc.)
+- regenerate_context must be a directive agent-forge can act on directly (e.g. "Do not import from other project modules. This agent must be fully self-contained.")
+- Return ONLY valid JSON, no markdown, no explanation.
+"""
+
+
+@app.post("/api/runs/{run_id}/agents/{agent_name}/diagnose-error")
+def api_diagnose_error(run_id: str, agent_name: str, body: DiagnoseErrorRequest):
+    """Analyse a test failure with LLM and store diagnostic for audit trail."""
+    import json as _json  # noqa: PLC0415
+    import logging  # noqa: PLC0415
+
+    store = get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    cdc_context = run.get("metadata", {}).get(
+        "cdc_full", run.get("metadata", {}).get("cdc_preview", "")
+    )
+    llm_fn, llm_cfg = _llm_fn_for_dashboard()
+
+    prompt = _DIAGNOSE_PROMPT.format(
+        agent_name=agent_name,
+        cdc_context=cdc_context[:1200],
+        test_input=_json.dumps(body.input, ensure_ascii=False)[:400],
+        test_output=(body.output or "")[:400],
+        error=(body.error or "")[:600],
+    )
+
+    log = logging.getLogger("atlas_dashboard")
+    try:
+        raw = llm_fn(prompt, llm_cfg, 300)
+        if not raw:
+            raise ValueError("LLM returned empty response")
+
+        raw = raw.strip()
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        result = _json.loads(raw[start:end]) if start >= 0 and end > 0 else {}
+
+        cause = result.get("cause", "Unknown error — see traceback below.")
+        recommendation = result.get("recommendation", "Review the agent code and regenerate.")
+        regenerate_context = result.get("regenerate_context", "")
+
+        store.set_test_diagnostic(
+            run_id,
+            agent_name,
+            error=body.error or body.output,
+            cause=cause,
+            recommendation=recommendation,
+            regenerate_context=regenerate_context,
+        )
+        log.info("diagnose-error: stored diagnostic for %s in run %s", agent_name, run_id)
+        return {
+            "ok": True,
+            "agent": agent_name,
+            "cause": cause,
+            "recommendation": recommendation,
+            "regenerate_context": regenerate_context,
+        }
+    except Exception as exc:  # noqa: BLE001
+        log.warning("diagnose-error failed for %s: %s", agent_name, exc)
+        # Store minimal diagnostic even on LLM failure
+        store.set_test_diagnostic(
+            run_id,
+            agent_name,
+            error=body.error or body.output,
+            cause="Diagnostic unavailable — LLM call failed.",
+            recommendation="Review the traceback above and regenerate the agent.",
+            regenerate_context="",
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/runs/{run_id}/agents/{agent_name}/diagnostic-action")
+def api_diagnostic_action(run_id: str, agent_name: str, body: dict):
+    """Record the action taken after a diagnostic (regenerate / dismissed)."""
+    store = get_store()
+    if store.get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    action = body.get("action", "")
+    store.set_test_diagnostic_action(run_id, agent_name, action)
+    return {"ok": True}
 
 
 # ── UI ─────────────────────────────────────────────────────────────────────────

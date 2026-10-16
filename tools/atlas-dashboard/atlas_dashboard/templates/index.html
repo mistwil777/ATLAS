@@ -337,6 +337,21 @@
 </head>
 <body>
 
+<!-- ── Batch test progress toast ─────────────────────────────────────────── -->
+<div id="test-progress-toast" style="display:none;position:fixed;bottom:24px;right:24px;z-index:1900;
+     background:var(--surface);border:1px solid var(--violet);border-radius:10px;padding:16px 20px;
+     min-width:280px;max-width:360px;box-shadow:0 8px 40px rgba(0,0,0,.6)">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+    <span id="test-toast-spinner" class="spinner" style="width:14px;height:14px;border-width:2px"></span>
+    <span style="font-size:12px;font-weight:600;color:var(--violet);text-transform:uppercase;letter-spacing:.06em">Testing agents</span>
+    <button onclick="document.getElementById('test-progress-toast').style.display='none'" style="background:none;border:none;color:var(--ink-dim);cursor:pointer;font-size:13px;padding:0;margin-left:auto;line-height:1">✕</button>
+  </div>
+  <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden;margin-bottom:8px">
+    <div id="test-toast-bar" style="height:100%;width:0%;background:var(--violet);border-radius:4px;transition:width .3s ease"></div>
+  </div>
+  <div id="test-toast-label" style="font-size:11px;color:var(--ink-dim)">Preparing…</div>
+</div>
+
 <!-- ── Pipeline toast (persistent, survives navigation) ──────────────────── -->
 <div id="pipeline-toast" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2000;
      background:var(--surface);border:1px solid var(--blue);border-radius:10px;padding:24px 32px;
@@ -515,7 +530,7 @@
     <div id="adv-block-reason" style="display:none;font-size:11px;color:var(--yellow);padding:6px 0;line-height:1.5"></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <button id="adv-validate-btn" class="btn-apply-retry" onclick="validateAdvice()" disabled>Validate and generate</button>
-      <button id="adv-retest-btn" onclick="_advisorRunTest()" style="font-size:12px;padding:6px 16px;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);background:none;cursor:pointer;display:none">Relancer test</button>
+      <button id="adv-retest-btn" onclick="_advisorRunTest()" style="font-size:12px;padding:6px 16px;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);background:none;cursor:pointer;display:none">Re-run test</button>
     </div>
   </div>
 </div>
@@ -614,8 +629,22 @@
     <pre id="tap-output-box" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:12px;color:var(--ink);overflow-x:auto;white-space:pre-wrap;max-height:260px;overflow-y:auto"></pre>
 
     <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
-      <button id="tap-btn-judge" onclick="_tapJudge()" style="background:var(--aqua);color:#000;border-color:var(--aqua);font-weight:600">Évaluer (juge)</button>
+      <button id="tap-btn-judge" onclick="_tapJudge()" style="background:var(--aqua);color:#000;border-color:var(--aqua);font-weight:600">Evaluate (judge)</button>
       <span id="tap-judge-status" style="font-size:12px;color:var(--ink-dim)"></span>
+    </div>
+
+    <!-- Diagnostic card (auto-shown on failure) -->
+    <div id="tap-diagnostic-card" style="display:none;margin-top:16px;border:1px solid var(--yellow);border-radius:var(--radius);padding:14px 16px;background:#1a1500">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:11px;font-weight:700;color:var(--yellow);text-transform:uppercase;letter-spacing:.06em">⚠ Diagnostic</span>
+        <span id="tap-diag-timestamp" style="font-size:10px;color:var(--ink-dim);margin-left:auto"></span>
+      </div>
+      <div id="tap-diag-cause" style="font-size:12px;color:var(--ink);margin-bottom:6px;line-height:1.5"></div>
+      <div id="tap-diag-recommendation" style="font-size:12px;color:var(--ink-dim);margin-bottom:12px;line-height:1.5"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="tap-diag-regen-btn" style="display:none;font-size:12px;padding:5px 14px;border:1px solid var(--yellow);color:var(--yellow);border-radius:var(--radius);background:none;cursor:pointer" onclick="_tapDiagRegenerate()">Regenerate with this fix</button>
+        <button onclick="_tapDiagDismiss()" style="font-size:12px;padding:5px 14px;border:1px solid var(--border);color:var(--ink-dim);border-radius:var(--radius);background:none;cursor:pointer">Dismiss</button>
+      </div>
     </div>
 
     <!-- Judge result -->
@@ -629,7 +658,7 @@
       <div id="tap-action-bar" style="display:none;padding:12px 16px;background:#12121f;border:1px solid #252535;border-radius:var(--radius);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--ink-dim);flex:1" id="tap-action-hint"></span>
         <button id="tap-btn-rescaffold" style="display:none;font-size:12px;padding:5px 14px;border:1px solid var(--yellow);color:var(--yellow);border-radius:var(--radius);background:none;cursor:pointer" onclick="_tapReScaffold()">Regenerate</button>
-        <button id="tap-btn-rerun" style="display:none;font-size:12px;padding:5px 14px;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);background:none;cursor:pointer" onclick="_tapRunTest()">Relancer test</button>
+        <button id="tap-btn-rerun" style="display:none;font-size:12px;padding:5px 14px;border:1px solid var(--blue);color:var(--blue);border-radius:var(--radius);background:none;cursor:pointer" onclick="_tapRunTest()">Re-run test</button>
         <button onclick="_tapGoToTrends()" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Voir dans Agent Scores →</button>
       </div>
     </div>
@@ -1199,35 +1228,89 @@
     for (const agent of agents) { await installAgent(runId, agent); }
   }
 
+  function _testToastShow(label, pct) {
+    const toast = document.getElementById('test-progress-toast');
+    const bar   = document.getElementById('test-toast-bar');
+    const lbl   = document.getElementById('test-toast-label');
+    const spin  = document.getElementById('test-toast-spinner');
+    toast.style.display = 'block';
+    bar.style.width = pct + '%';
+    lbl.textContent = label;
+    spin.style.display = pct >= 100 ? 'none' : '';
+  }
+  function _testToastDone(label) {
+    document.getElementById('test-toast-bar').style.width = '100%';
+    document.getElementById('test-toast-label').textContent = label;
+    document.getElementById('test-toast-spinner').style.display = 'none';
+    setTimeout(() => { document.getElementById('test-progress-toast').style.display = 'none'; }, 4000);
+  }
+
   async function testSelected(runId) {
+    try {
     const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
-    const agents = (run.requires_creation || []).filter(a => {
-      const key = _stateKey(runId, a);
-      const sc = (run.scaffolded || {})[a];
-      const state = _scaffoldState[key]?.state || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
-      return (state === 'installed' || state === 'scaffolded') && _isSelected(runId, a);
-    });
+    const agents = Object.entries(run.scaffolded || {})
+      .filter(([name, sc]) => {
+        const key = _stateKey(runId, name);
+        const state = _scaffoldState[key]?.state || (sc?.installed ? 'installed' : 'scaffolded');
+        return (state === 'installed' || state === 'scaffolded') && _isSelected(runId, name);
+      })
+      .map(([name]) => name);
     if (!agents.length) { alert('No installed agents selected.'); return; }
     const total = agents.length;
     let done = 0;
-    const statusEl = document.getElementById('page-subtitle');
-    const prevSubtitle = statusEl?.textContent || '';
-    if (statusEl) statusEl.textContent = `Running tests 0/${total}…`;
+    const results = []; // {agent, score, error}
+    _testToastShow(`0 / ${total} agents tested…`, 0);
     for (const agent of agents) {
+      _testToastShow(`Testing ${agent}… (${done + 1}/${total})`, Math.round(done / total * 100));
+      let agentScore = null;
+      let agentError = null;
       try {
         const genRes = await fetch(`/api/runs/${runId}/agents/${agent}/test-inputs?n=1`).then(r => r.json()).catch(() => null);
         const input = genRes?.inputs?.[0] || { cdc_bloc: '', context: '' };
-        await fetch(`/api/runs/${runId}/agents/${agent}/run-test`, {
+        const testRaw = await fetch(`/api/runs/${runId}/agents/${agent}/run-test`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ inputs: input }),
-        }).catch(() => null);
-      } catch(_) {}
+        });
+        if (!testRaw.ok) {
+          const errBody = await testRaw.json().catch(() => ({}));
+          agentError = errBody.detail || `run-test HTTP ${testRaw.status}`;
+        } else {
+          const testRes = await testRaw.json().catch(() => null);
+          if (testRes?.output) {
+            const outputStr = typeof testRes.output === 'string' ? testRes.output : JSON.stringify(testRes.output);
+            const judgeRaw = await fetch(`/api/runs/${runId}/agents/${agent}/judge-test`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ agent_name: agent, input: input, output: outputStr, run_id: runId }),
+            });
+            if (judgeRaw.ok) {
+              const judgeRes = await judgeRaw.json().catch(() => null);
+              agentScore = judgeRes?.judge_score ?? null;
+              // Cache score in-memory so installed row can show it immediately
+              const key = _stateKey(runId, agent);
+              if (!_scaffoldState[key]) _scaffoldState[key] = { state: 'installed' };
+              _scaffoldState[key].testScore = agentScore;
+            } else {
+              const errBody = await judgeRaw.json().catch(() => ({}));
+              agentError = errBody.detail || `judge-test HTTP ${judgeRaw.status}`;
+            }
+          } else {
+            agentError = testRes?.error || 'run-test returned no output';
+          }
+        }
+      } catch(err) { agentError = err.message; }
+      results.push({ agent, score: agentScore, error: agentError });
       done++;
-      if (statusEl) statusEl.textContent = `Running tests ${done}/${total}…`;
     }
-    if (statusEl) statusEl.textContent = `Tests complete — ${total} agent(s) tested. See Tests tab.`;
-    setTimeout(() => { if (statusEl) statusEl.textContent = prevSubtitle; }, 4000);
+    const scored = results.filter(r => r.score !== null).length;
+    const failed = results.filter(r => r.error).length;
+    const errors = results.filter(r => r.error).map(r => `• ${r.agent}: ${r.error}`).join('\n');
+    const summary = `Done — ${scored}/${total} agents scored${failed ? `, ${failed} error(s)` : ''}.`;
+    _testToastDone(summary + (scored ? ' See Tests tab.' : ''));
+    if (failed && errors) console.warn('testSelected errors:\n' + errors);
+    await showRun(runId);
+    } catch(e) { alert('testSelected error: ' + e.message); }
   }
 
   async function adaptSelected(runId) {
@@ -1339,13 +1422,17 @@
         const iFirstContent = iDefault ? escHtml(iFiles[iDefault]) : '';
         const iKey = `agent-detail-${agent}`;
         const iSel = _isSelected(run.run_id, agent);
+        const iTestScore = _scaffoldState[_stateKey(run.run_id, agent)]?.testScore ?? sc?.judge_score ?? null;
+        const iScoreCol = iTestScore === null ? 'var(--ink-dim)' : iTestScore >= 4 ? 'var(--aqua)' : iTestScore >= 2 ? 'var(--yellow)' : 'var(--red)';
         return `<div class="agent-row card-collapsible" id="agent-row-${agent}" data-card-key="${iKey}">
           <div class="agent-row-header card-toggle" onclick="toggleCard('${iKey}',event)" style="cursor:pointer">
             <input type="checkbox" ${iSel ? 'checked' : ''} style="accent-color:var(--aqua);margin-right:8px;cursor:pointer" onclick="event.stopPropagation()" onchange="_toggleAgentSel('${run.run_id}','${agent}',this.checked)">
             <span class="agent-row-name">${agent}</span>
             <span class="badge badge-approved">installed</span>
+            ${iTestScore !== null ? `<span onclick="event.stopPropagation();_openAgentScores('${agent}')" style="font-size:11px;font-weight:700;color:${iScoreCol};border:1px solid ${iScoreCol};border-radius:var(--radius);padding:1px 7px;cursor:pointer" title="View in Agent Scores">${iTestScore.toFixed(1)}/5 ↗</span>` : ''}
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
+              ${iTestScore !== null && iTestScore < 2 ? `<button onclick="scaffold('${run.run_id}','${agent}')" style="font-size:11px;padding:3px 10px;border:1px solid var(--yellow);color:var(--yellow);border-radius:var(--radius);background:none;cursor:pointer" title="Score too low — regenerate this agent">Regenerate</button>` : ''}
               <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:11px;padding:3px 10px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Test</button>
             </div>
           </div>
@@ -2039,6 +2126,13 @@
     _setSidebarActive('trend');
   }
 
+  async function _openAgentScores(agentName) {
+    showTabTrend();
+    await _populateTrendAgents();
+    const sel = document.getElementById('trend-agent-select');
+    if (sel) { sel.value = agentName; loadTrend(agentName); }
+  }
+
   let _visNetwork = null;
 
   function _onKgDetailsToggle() {
@@ -2628,7 +2722,7 @@
         const tRetestRunId = p.run_id || _lastRunId;
         const hasInput = t.input && Object.keys(t.input).length > 0;
         const retestBtn = hasInput && tRetestRunId
-          ? `<button onclick="event.stopPropagation();_retestTicketFrom('${tRetestRunId}','${idx}-${ti}')" style="font-size:11px;padding:4px 12px;border:1px solid ${t.passed ? 'var(--blue)' : 'var(--yellow)'};color:${t.passed ? 'var(--blue)' : 'var(--yellow)'};border-radius:3px;background:none;cursor:pointer;white-space:nowrap">${t.passed ? 'Re-tester' : 'Re-tester (échec)'}</button>`
+          ? `<button onclick="event.stopPropagation();_retestTicketFrom('${tRetestRunId}','${idx}-${ti}')" style="font-size:11px;padding:4px 12px;border:1px solid ${t.passed ? 'var(--blue)' : 'var(--yellow)'};color:${t.passed ? 'var(--blue)' : 'var(--yellow)'};border-radius:3px;background:none;cursor:pointer;white-space:nowrap">${t.passed ? 'Re-test' : 'Re-test (failed)'}</button>`
           : '';
 
         html += `
@@ -2746,7 +2840,7 @@
 
     panel.dataset.actions = JSON.stringify(data.suggested_actions || []);
 
-    // Show "Relancer test" button — always available after analysis
+    // Show "Re-run test" button — always available after analysis
     const retestBtn = document.getElementById('adv-retest-btn');
     if (retestBtn && _lastRunId) retestBtn.style.display = '';
   }
@@ -4074,12 +4168,15 @@
       status.textContent = '';
       document.getElementById('tap-step-result').style.display = 'block';
       document.getElementById('tap-step-judge').style.display = 'none';
+      document.getElementById('tap-diagnostic-card').style.display = 'none';
       const badge = document.getElementById('tap-passed-badge');
       badge.textContent = 'Failed';
       badge.style.background = '#3a1515';
       badge.style.color = 'var(--red)';
       document.getElementById('tap-output-box').textContent = res.error;
       _tapOutput = '';
+      // Auto-trigger diagnostic
+      _tapAutoDiagnose(inputs[0], res.error);
       return;
     }
 
@@ -4098,12 +4195,12 @@
   }
 
   async function _tapJudge() {
-    if (!_tapOutput) { alert('Lance d\'abord le test.'); return; }
+    if (!_tapOutput) { alert('Run a test first.'); return; }
 
     const btn = document.getElementById('tap-btn-judge');
     const status = document.getElementById('tap-judge-status');
     btn.disabled = true;
-    status.textContent = 'Évaluation en cours…';
+    status.textContent = 'Evaluating…';
 
     const inputs = _tapCollectInputs();
     const res = await fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/judge-test`, {
@@ -4114,7 +4211,7 @@
     btn.disabled = false;
     status.textContent = '';
 
-    if (res.error) { alert(`Erreur juge : ${res.error}`); return; }
+    if (res.error) { alert(`Judge error: ${res.error}`); return; }
 
     _tapJudgeScore = res.judge_score;
     const score = res.judge_score;
@@ -4146,16 +4243,71 @@
       btnRerun.style.display = '';
       document.getElementById('tap-action-hint').textContent =
         score < 3
-          ? `Score ${score.toFixed(1)}/5 — qualité insuffisante. Regenerate recommandé.`
-          : `Score ${score.toFixed(1)}/5 — améliorations possibles.`;
+          ? `Score ${score.toFixed(1)}/5 — insufficient quality. Regenerate recommended.`
+          : `Score ${score.toFixed(1)}/5 — improvements possible.`;
       btnRescaffold.setAttribute('data-run', _tapRunId);
       btnRescaffold.setAttribute('data-agent', _tapAgentName);
     } else {
       btnRescaffold.style.display = 'none';
       btnRerun.style.display = 'none';
       document.getElementById('tap-action-hint').textContent =
-        score != null ? `Score ${score.toFixed(1)}/5 — résultat enregistré dans Agent Scores.` : '';
+        score != null ? `Score ${score.toFixed(1)}/5 — result saved in Agent Scores.` : '';
     }
+  }
+
+  let _tapDiagRegenCtx = '';
+
+  async function _tapAutoDiagnose(input, error) {
+    const card = document.getElementById('tap-diagnostic-card');
+    const causeEl = document.getElementById('tap-diag-cause');
+    const recEl = document.getElementById('tap-diag-recommendation');
+    const tsEl = document.getElementById('tap-diag-timestamp');
+    const regenBtn = document.getElementById('tap-diag-regen-btn');
+    card.style.display = 'block';
+    causeEl.textContent = 'Analysing failure…';
+    recEl.textContent = '';
+    tsEl.textContent = '';
+    regenBtn.style.display = 'none';
+    try {
+      const res = await fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/diagnose-error`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error, output: '', input: input || {} }),
+      }).then(r => r.json()).catch(e => ({ error: String(e) }));
+      if (res.ok) {
+        causeEl.textContent = res.cause;
+        recEl.textContent = '→ ' + res.recommendation;
+        tsEl.textContent = new Date().toLocaleTimeString();
+        _tapDiagRegenCtx = res.regenerate_context || '';
+        if (_tapDiagRegenCtx) regenBtn.style.display = '';
+      } else {
+        causeEl.textContent = 'Diagnostic unavailable.';
+        recEl.textContent = res.error || '';
+      }
+    } catch(e) {
+      causeEl.textContent = 'Diagnostic unavailable.';
+    }
+  }
+
+  function _tapDiagRegenerate() {
+    // Record action in audit trail
+    fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/diagnostic-action`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'regenerate' }),
+    }).catch(() => null);
+    // Pre-fill ingest context and trigger scaffold
+    const ctxInput = document.getElementById(`ingest-text-${_tapAgentName}`);
+    if (ctxInput && _tapDiagRegenCtx) ctxInput.value = _tapDiagRegenCtx;
+    _closeTestAgentPanel();
+    showTabRuns();
+    scaffold(_tapRunId, _tapAgentName);
+  }
+
+  function _tapDiagDismiss() {
+    fetch(`/api/runs/${_tapRunId}/agents/${_tapAgentName}/diagnostic-action`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'dismissed' }),
+    }).catch(() => null);
+    document.getElementById('tap-diagnostic-card').style.display = 'none';
   }
 
   function _tapReScaffold() {

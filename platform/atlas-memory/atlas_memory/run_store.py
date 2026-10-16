@@ -193,6 +193,42 @@ class RunStore:
         run.setdefault("scaffolded", {}).setdefault(agent_name, {})["installed"] = True
         self._write(run_id, run)
 
+    def set_test_diagnostic(
+        self,
+        run_id: str,
+        agent_name: str,
+        error: str,
+        cause: str,
+        recommendation: str,
+        regenerate_context: str = "",
+        action_taken: str = "",
+    ) -> None:
+        """Store a test-failure diagnostic entry for audit trail."""
+        run = self._read(run_id)
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error": error,
+            "cause": cause,
+            "recommendation": recommendation,
+            "regenerate_context": regenerate_context,
+            "action_taken": action_taken,
+        }
+        run.setdefault("test_diagnostics", {}).setdefault(agent_name, []).append(entry)
+        self._write(run_id, run)
+
+    def set_test_diagnostic_action(
+        self,
+        run_id: str,
+        agent_name: str,
+        action_taken: str,
+    ) -> None:
+        """Update the action_taken field on the latest test diagnostic for an agent."""
+        run = self._read(run_id)
+        history = run.get("test_diagnostics", {}).get(agent_name, [])
+        if history:
+            history[-1]["action_taken"] = action_taken
+        self._write(run_id, run)
+
     def set_improvement_result(
         self,
         run_id: str,
