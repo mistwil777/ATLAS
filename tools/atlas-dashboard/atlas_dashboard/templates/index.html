@@ -1168,6 +1168,15 @@
     agents.forEach(a => { _agentSelection[_selKey(runId, a)] = checked; });
   }
 
+  async function _toggleAllAgentsFromCheckbox(cb) {
+    const runId = cb.dataset.runid;
+    const panel = cb.dataset.panel;
+    const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
+    const agents = panel === 'adapt' ? (run.requires_adaptation || []) : (run.requires_creation || []);
+    _toggleAllAgents(runId, agents, cb.checked);
+    await showRun(runId);
+  }
+
   async function generateSelected(runId) {
     const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
     const agents = (run.requires_creation || []).filter(a => {
@@ -1344,7 +1353,7 @@
 
     const bulkBar = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-dim);cursor:pointer">
-        <input type="checkbox" ${allSel ? 'checked' : ''} style="accent-color:var(--aqua)" onchange="_toggleAllAgents('${run.run_id}',${JSON.stringify(agents)},this.checked);showRun(${JSON.stringify(run.run_id)})">
+        <input type="checkbox" ${allSel ? 'checked' : ''} style="accent-color:var(--aqua)" data-runid="${run.run_id}" data-panel="create" onchange="_toggleAllAgentsFromCheckbox(this)">
         Select all
       </label>
       ${anyPending && !isPendingApproval ? `<button onclick="generateSelected('${run.run_id}')" style="font-size:11px;padding:3px 12px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer" title="Generates selected agents without additional context">Generate selected</button>` : ''}
@@ -1405,7 +1414,7 @@
     const allAdaptSel = agents.every(a => _isSelected(run.run_id, a));
     const adaptBulkBar = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
       <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-dim);cursor:pointer">
-        <input type="checkbox" ${allAdaptSel ? 'checked' : ''} style="accent-color:var(--aqua)" onchange="_toggleAllAgents('${run.run_id}',${JSON.stringify(agents)},this.checked);showRun(${JSON.stringify(run.run_id)})">
+        <input type="checkbox" ${allAdaptSel ? 'checked' : ''} style="accent-color:var(--aqua)" data-runid="${run.run_id}" data-panel="adapt" onchange="_toggleAllAgentsFromCheckbox(this)">
         Select all
       </label>
       ${anyAdaptPending && !isPendingApproval ? `<button onclick="adaptSelected('${run.run_id}')" style="font-size:11px;padding:3px 12px;border:1px solid var(--aqua);color:var(--aqua);border-radius:var(--radius);background:none;cursor:pointer">Adapt selected</button>` : ''}
