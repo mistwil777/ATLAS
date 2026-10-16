@@ -1340,15 +1340,14 @@
             ${buildDiagnosisPanel(run.run_id, agent, diagnosis)}
           </div>`;
       }
-      return `
-        const sel = _isSelected(run.run_id, agent);
-        return `<div class="agent-row" id="agent-row-${agent}">
-          <div class="agent-row-header">
-            <input type="checkbox" ${sel ? 'checked' : ''} style="accent-color:var(--aqua);margin-right:8px;cursor:pointer" onchange="_toggleAgentSel('${run.run_id}','${agent}',this.checked)">
-            <span class="agent-row-name">${agent}</span>
-            ${controls}
-          </div>
-        </div>`;
+      const sel = _isSelected(run.run_id, agent);
+      return `<div class="agent-row" id="agent-row-${agent}">
+        <div class="agent-row-header">
+          <input type="checkbox" ${sel ? 'checked' : ''} style="accent-color:var(--aqua);margin-right:8px;cursor:pointer" onchange="_toggleAgentSel('${run.run_id}','${agent}',this.checked)">
+          <span class="agent-row-name">${agent}</span>
+          ${controls}
+        </div>
+      </div>`;
     }).join('');
 
     const bulkBar = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
