@@ -2002,6 +2002,13 @@ def api_install(run_id: str, agent_name: str):
     sc_entry = (store.get_run(run_id) or {}).get("scaffolded", {}).get(agent_name, {})
     judge_score = sc_entry.get("judge_score")
     project, cdc_summary, context_tags = _extract_run_context(run)
+    # Build meaningful capabilities from bloc justification + criteria
+    agent_bloc = next((b for b in run.get("blocs", []) if b.get("agent") == agent_name), None)
+    kg_capabilities: list[str] = []
+    if agent_bloc:
+        if agent_bloc.get("justification"):
+            kg_capabilities.append(agent_bloc["justification"])
+        kg_capabilities.extend(agent_bloc.get("criteria") or [])
     _register_agent_in_kg(
         agent_name,
         output_path,
@@ -2010,6 +2017,7 @@ def api_install(run_id: str, agent_name: str):
         project=project,
         cdc_summary=cdc_summary,
         context_tags=context_tags,
+        capabilities=kg_capabilities or None,
     )
 
     # Create PIPELINE_MEMBER edges between all installed agents in this run
@@ -2598,6 +2606,7 @@ def _register_agent_in_kg(
     project: str = "",
     cdc_summary: str = "",
     context_tags: list[str] | None = None,
+    capabilities: list[str] | None = None,
 ) -> str:
     """Add the freshly installed agent to atlas-memory KG. Returns the effective KG name.
 
@@ -2631,7 +2640,7 @@ def _register_agent_in_kg(
             mem.run(
                 operation="register_agent",
                 name=effective_name,
-                capabilities=[f"Handles {agent_name} tasks as defined in CDC"],
+                capabilities=capabilities or [f"Handles {agent_name} tasks as defined in CDC"],
                 tags=["scaffolded"],
                 judge_score=judge_score,
                 confidence=confidence,

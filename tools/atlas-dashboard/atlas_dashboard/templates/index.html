@@ -686,7 +686,7 @@
       const badgeCls = `badge-${r.status}`;
       return `
       <div class="run-item${r.run_id === selectedId ? ' selected' : ''}" onclick="showRun('${r.run_id}')">
-        <div class="run-id">${r.run_id}</div>
+        <div class="run-id">${(() => { const p = (r.metadata||{}).cdc_preview||''; const title = p.split('\n').find(l=>l.trim()); return title ? title.replace(/^Titre\s*:\s*/i,'').slice(0,60) : r.run_id.slice(0,18)+'…'; })()}</div>
         <div class="run-meta">
           <span class="badge ${badgeCls}">${statusLabel}</span>
           ${isWaiting ? `<span style="font-size:10px;color:var(--blue)">● ${r.pending_agent || ''}${(r.pending_questions||[]).length ? ' — ' + (r.pending_questions||[]).length + ' question(s)' : ''}</span>` : ''}
