@@ -447,7 +447,7 @@ def _gaps_to_questions(gaps: list[dict]) -> list[dict]:
                 "criterion": f"cdc_gap_{i + 1}",
                 "question": f"{desc}{context}",
                 "question_type": "text",
-                "hint": "",
+                "hint": gap.get("suggestion", ""),
                 "options": [],
                 "cause": "missing_spec",
                 "gap_type": gap.get("type", "missing"),

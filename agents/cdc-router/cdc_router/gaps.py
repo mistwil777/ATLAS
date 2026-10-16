@@ -32,7 +32,45 @@ def detect_cdc_gaps(
     if kg_graph:
         gaps = _filter_known_gaps(gaps, kg_graph)
 
-    return gaps[:_MAX_GAPS]
+    gaps = gaps[:_MAX_GAPS]
+    _add_suggestions(gaps, cdc_text, llm_fn, llm_cfg)
+    return gaps
+
+
+_SUGGESTION_PROMPT = """\
+You are an expert software architect. A functional specification (CDC) has a gap or ambiguity.
+Based on the CDC content, propose the most reasonable default value or clarification for this gap.
+
+CDC (excerpt):
+{cdc_text}
+
+Gap: {gap_description}
+Concerned bloc: {bloc_concerned}
+
+Give a concise, actionable suggestion (1-2 sentences max) that could be used as a default if the
+client does not respond. Be specific — use values, formats, or rules from the CDC when possible.
+Return only the suggestion text, no preamble.
+"""
+
+
+def _add_suggestions(
+    gaps: list[dict],
+    cdc_text: str,
+    llm_fn: Callable[[str, dict, int], str | None],
+    llm_cfg: dict,
+) -> None:
+    """Enrich each gap with an LLM-generated suggestion (in-place)."""
+    for gap in gaps:
+        try:
+            prompt = _SUGGESTION_PROMPT.format(
+                cdc_text=cdc_text[:1200],
+                gap_description=gap.get("description", ""),
+                bloc_concerned=gap.get("bloc_concerned", ""),
+            )
+            suggestion = llm_fn(prompt, llm_cfg, 150)
+            gap["suggestion"] = suggestion.strip() if suggestion else ""
+        except Exception:  # noqa: BLE001
+            gap["suggestion"] = ""
 
 
 def _parse_gaps(raw: str) -> list[dict]:

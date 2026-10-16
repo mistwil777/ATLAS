@@ -913,7 +913,6 @@
 
     const questions = qs.map((q, i) => {
       const num = `① ② ③ ④ ⑤`.split(' ')[i] || `(${i+1})`;
-      const hint = q.hint ? `<div class="waiting-q-hint">${escHtml(q.hint)}</div>` : '';
       let input = '';
       if (q.question_type === 'single_choice' && q.options && q.options.length) {
         const opts = q.options.map((opt, j) =>
@@ -926,12 +925,13 @@
         ).join('');
         input = `<div class="waiting-q-options">${opts}</div>`;
       } else {
-        input = `<input type="text" class="waiting-q-text-input" id="ans_${q.id}" placeholder="${escHtml(q.hint || '')}" />`;
+        input = `<input type="text" class="waiting-q-text-input" id="ans_${q.id}" value="${escHtml(q.hint || '')}" placeholder="Your answer…" />`;
       }
+      const suggestionHtml = q.hint ? `<div style="font-size:11px;color:var(--aqua);margin-bottom:4px">💡 Suggestion: ${escHtml(q.hint)}</div>` : '';
       return `<div class="waiting-question">
         <div class="waiting-q-num">${num} ${escHtml(q.criterion || '')}</div>
         <div class="waiting-q-text">${escHtml(q.question || '')}</div>
-        ${hint}
+        ${suggestionHtml}
         ${input}
       </div>`;
     }).join('');
