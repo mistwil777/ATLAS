@@ -1149,8 +1149,57 @@
   // ── Agents to Create ─────────────────────────────────────────────────────────
 
   const _scaffoldState = {}; // runId+agentName → {state, files, outputPath}
+  const _agentSelection = {}; // runId+agentName → bool (checkbox state, survives re-render)
 
   function _stateKey(runId, agent) { return `${runId}::${agent}`; }
+
+  function _selKey(runId, agent) { return `${runId}::sel::${agent}`; }
+
+  function _isSelected(runId, agent) {
+    const k = _selKey(runId, agent);
+    return _agentSelection[k] !== false; // default: selected
+  }
+
+  function _toggleAgentSel(runId, agent, checked) {
+    _agentSelection[_selKey(runId, agent)] = checked;
+  }
+
+  function _toggleAllAgents(runId, agents, checked) {
+    agents.forEach(a => { _agentSelection[_selKey(runId, a)] = checked; });
+  }
+
+  async function generateSelected(runId) {
+    const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
+    const agents = (run.requires_creation || []).filter(a => {
+      const key = _stateKey(runId, a);
+      const sc = (run.scaffolded || {})[a];
+      const state = _scaffoldState[key]?.state || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
+      return state === 'pending' && _isSelected(runId, a);
+    });
+    for (const agent of agents) { await scaffold(runId, agent); }
+  }
+
+  async function installSelected(runId) {
+    const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
+    const agents = (run.requires_creation || []).filter(a => {
+      const key = _stateKey(runId, a);
+      const sc = (run.scaffolded || {})[a];
+      const state = _scaffoldState[key]?.state || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
+      return (state === 'scaffolded') && _isSelected(runId, a);
+    });
+    for (const agent of agents) { await installAgent(runId, agent); }
+  }
+
+  async function adaptSelected(runId) {
+    const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
+    const agents = (run.requires_adaptation || []).filter(a => {
+      const key = _stateKey(runId, a);
+      const sc = (run.scaffolded || {})[a];
+      const state = _scaffoldState[key]?.state || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
+      return state === 'pending' && _isSelected(runId, a);
+    });
+    for (const agent of agents) { await scaffold(runId, agent); }
+  }
 
   function buildCreatePanel(run) {
     const agents = run.requires_creation || [];
@@ -1159,6 +1208,16 @@
     const allInstalled = agents.every(a => scaffolded[a]?.installed);
     const isApproved = run.status === 'approved';
     const isPendingApproval = run.status === 'pending' || run.status === 'routing';
+
+    // Compute per-agent states for bulk button visibility
+    const agentStates = agents.map(a => {
+      const key = _stateKey(run.run_id, a);
+      const sc = scaffolded[a];
+      return _scaffoldState[key]?.state || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
+    });
+    const anyPending = agentStates.some(s => s === 'pending');
+    const anyScaffolded = agentStates.some(s => s === 'scaffolded');
+    const allSel = agents.every(a => _isSelected(run.run_id, a));
 
     const rows = agents.map(agent => {
       const sc = scaffolded[agent];
@@ -1273,18 +1332,29 @@
           </div>`;
       }
       return `
-        <div class="agent-row" id="agent-row-${agent}">
+        const sel = _isSelected(run.run_id, agent);
+        return `<div class="agent-row" id="agent-row-${agent}">
           <div class="agent-row-header">
+            <input type="checkbox" ${sel ? 'checked' : ''} style="accent-color:var(--aqua);margin-right:8px;cursor:pointer" onchange="_toggleAgentSel('${run.run_id}','${agent}',this.checked)">
             <span class="agent-row-name">${agent}</span>
             ${controls}
           </div>
         </div>`;
     }).join('');
 
+    const bulkBar = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-dim);cursor:pointer">
+        <input type="checkbox" ${allSel ? 'checked' : ''} style="accent-color:var(--aqua)" onchange="_toggleAllAgents('${run.run_id}',${JSON.stringify(agents)},this.checked);showRun(${JSON.stringify(run.run_id)})">
+        Select all
+      </label>
+      ${anyPending && !isPendingApproval ? `<button onclick="generateSelected('${run.run_id}')" style="font-size:11px;padding:3px 12px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer" title="Generates selected agents without additional context">Generate selected</button>` : ''}
+      ${anyScaffolded ? `<button onclick="installSelected('${run.run_id}')" style="font-size:11px;padding:3px 12px;border:1px solid var(--aqua);color:var(--aqua);border-radius:var(--radius);background:none;cursor:pointer">Install selected</button>` : ''}
+    </div>`;
+
     const step2hint = isApproved
-      ? `<p style="font-size:11px;color:var(--ink-dim);margin:0 0 10px">Step 2 — Generate each agent below, then install it.</p>`
-      : `<p style="font-size:11px;color:var(--ink-dim);margin:0 0 10px">Approve the routing plan above to unlock generation.</p>`;
-    return `<div class="create-panel"><h3>Agents to Create (${agents.length})</h3>${step2hint}${rows}</div>`;
+      ? `<p style="font-size:11px;color:var(--ink-dim);margin:0 0 8px">Step 2 — Generate each agent below, then install it.</p>`
+      : `<p style="font-size:11px;color:var(--ink-dim);margin:0 0 8px">Approve the routing plan above to unlock generation.</p>`;
+    return `<div class="create-panel"><h3>Agents to Create (${agents.length})</h3>${step2hint}${bulkBar}${rows}</div>`;
   }
 
   function buildAdaptPanel(run) {
@@ -1315,15 +1385,33 @@
           <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Test</button>`;
       }
 
+      const sel = _isSelected(run.run_id, agent);
       return `<div class="agent-row" id="agent-row-adapt-${agent}">
         <div class="agent-row-header">
+          <input type="checkbox" ${sel ? 'checked' : ''} style="accent-color:var(--aqua);margin-right:8px;cursor:pointer" onchange="_toggleAgentSel('${run.run_id}','${agent}',this.checked)">
           <span class="agent-row-name">${agent}</span>
           <span style="font-size:10px;color:var(--aqua);border:1px solid var(--aqua);border-radius:3px;padding:1px 6px;margin-left:8px">adapt</span>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto">${controls}</div>
         </div>
       </div>`;
     }).join('');
-    return `<div class="create-panel" style="margin-top:16px"><h3 style="color:var(--aqua)">Agents to Adapt (${agents.length})</h3>${rows}</div>`;
+
+    const anyAdaptPending = agents.some(a => {
+      const key = _stateKey(run.run_id, a);
+      const sc = scaffolded[a];
+      const state = _scaffoldState[key]?.state || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
+      return state === 'pending';
+    });
+    const allAdaptSel = agents.every(a => _isSelected(run.run_id, a));
+    const adaptBulkBar = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-dim);cursor:pointer">
+        <input type="checkbox" ${allAdaptSel ? 'checked' : ''} style="accent-color:var(--aqua)" onchange="_toggleAllAgents('${run.run_id}',${JSON.stringify(agents)},this.checked);showRun(${JSON.stringify(run.run_id)})">
+        Select all
+      </label>
+      ${anyAdaptPending && !isPendingApproval ? `<button onclick="adaptSelected('${run.run_id}')" style="font-size:11px;padding:3px 12px;border:1px solid var(--aqua);color:var(--aqua);border-radius:var(--radius);background:none;cursor:pointer">Adapt selected</button>` : ''}
+    </div>`;
+
+    return `<div class="create-panel" style="margin-top:16px"><h3 style="color:var(--aqua)">Agents to Adapt (${agents.length})</h3>${adaptBulkBar}${rows}</div>`;
   }
 
   // ── Diagnosis CR panel ───────────────────────────────────────────────────────
