@@ -1204,11 +1204,10 @@
         return `<div class="agent-row card-collapsible" id="agent-row-${agent}" data-card-key="${aKey}">
           <div class="agent-row-header card-toggle" onclick="toggleCard('${aKey}',event)" style="cursor:pointer">
             <span class="agent-row-name">${agent}</span>
-            ${judgeScore !== null ? `<span style="font-size:13px;font-weight:700;color:${scoreColor}">${scoreLabel}<span style="font-size:11px;color:var(--ink-dim)">/5</span></span>` : ''}
             <span class="toggle-chevron">▶</span>
             <div style="display:flex;gap:6px;align-items:center;margin-left:auto" onclick="event.stopPropagation()">
-              ${judgeScore !== null && judgeScore < 5
-                ? `<input type="text" id="ingest-text-${agent}" placeholder="Contexte…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
+              ${judgeScore !== null && judgeScore < 4
+                ? `<input type="text" id="ingest-text-${agent}" placeholder="Additional context…" oninput="onIngestTextInput('${agent}',this)" style="width:140px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:3px 7px;outline:none">
                   <button class="btn-scaffold" onclick="scaffold('${run.run_id}','${agent}')" style="border-color:var(--yellow);color:var(--yellow)">Regenerate</button>`
                 : ''
               }
@@ -1218,26 +1217,11 @@
           </div>
           <div class="card-body" style="width:100%">
             <div class="scaffold-panel">
-              <div class="scaffold-section scaffold-judge">
-                <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-                  <div>
-                    <span style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em">Judge score</span><br>
-                    <span style="font-size:22px;font-weight:700;color:${scoreColor}">${scoreLabel}</span>
-                    ${judgeScore !== null ? `<span style="font-size:12px;color:var(--ink-dim)"> / 5</span>` : ''}
-                  </div>
-                  ${_scaffoldState[key]?.rejudging
-                    ? `<button class="btn-rejudge" disabled>⏳ Evaluating…</button>`
-                    : `<button class="btn-rejudge" onclick="rejudge('${run.run_id}','${agent}')">Re-evaluate</button>`
-                  }
-                </div>
-                ${criteriaRows ? `<table style="border-collapse:collapse;width:100%">${criteriaRows}</table>` : ''}
-                ${feedbackShort ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-dim);font-style:italic">${escHtml(feedbackShort.slice(0,250))}</div>` : ''}
-              </div>
               <div class="scaffold-section">
-                <div style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Code généré</div>
+                <div style="font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Generated code</div>
                 <div class="file-select-row">
                   <select class="file-select" id="sel-${agent}" onchange="switchFileData(this,'code-${agent}','${agent}')">${selectOpts}</select>
-                  <button class="btn-expand" title="Agrandir" onclick="expandCode('${agent}',document.getElementById('sel-${agent}').value)">⛶</button>
+                  <button class="btn-expand" title="Expand" onclick="expandCode('${agent}',document.getElementById('sel-${agent}').value)">⛶</button>
                 </div>
                 <pre class="code-block" id="code-${agent}">${firstContent}</pre>
               </div>
@@ -1306,14 +1290,39 @@
   function buildAdaptPanel(run) {
     const agents = run.requires_adaptation || [];
     if (!agents.length) return '';
-    const rows = agents.map(agent => `
-      <div class="agent-row" id="agent-row-adapt-${agent}">
+    const scaffolded = run.scaffolded || {};
+    const isPendingApproval = run.status === 'pending' || run.status === 'routing';
+
+    const rows = agents.map(agent => {
+      const sc = scaffolded[agent];
+      const key = _stateKey(run.run_id, agent);
+      const state = _scaffoldState[key]?.state || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
+
+      let controls = '';
+      if (state === 'pending') {
+        const locked = isPendingApproval;
+        controls = `
+          <span style="font-size:11px;color:var(--ink-dim);margin-right:8px">exists in KG — will be updated for this context</span>
+          <input type="text" id="ingest-text-${agent}" placeholder="Additional context…" oninput="onIngestTextInput('${agent}',this)" ${locked ? 'disabled' : ''} style="flex:1;min-width:0;max-width:200px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--ink);font-size:11px;padding:4px 8px;outline:none;${locked ? 'opacity:0.35;cursor:not-allowed' : ''}">
+          <button class="btn-scaffold" ${locked ? 'disabled title="Approve the routing plan first"' : `onclick="scaffold('${run.run_id}','${agent}')"`} style="border-color:var(--aqua);color:var(--aqua);${locked ? 'opacity:0.35;cursor:not-allowed' : ''}">Adapt</button>`;
+      } else if (state === 'scaffolding') {
+        controls = `<span class="spinner"></span> <span style="color:var(--ink-dim);font-size:11px">Adapting…</span>`;
+      } else if (state === 'scaffolded' || state === 'installing' || state === 'installed') {
+        const stateLabel = state === 'installed' ? '<span style="color:var(--aqua);font-size:11px">✓ installed</span>' : '';
+        controls = `
+          ${stateLabel}
+          <button class="btn-install" onclick="installAgent('${run.run_id}','${agent}')">Install &amp; Register</button>
+          <button onclick="openTestAgentPanel('${run.run_id}','${agent}')" style="font-size:12px;padding:5px 14px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Test</button>`;
+      }
+
+      return `<div class="agent-row" id="agent-row-adapt-${agent}">
         <div class="agent-row-header">
           <span class="agent-row-name">${agent}</span>
           <span style="font-size:10px;color:var(--aqua);border:1px solid var(--aqua);border-radius:3px;padding:1px 6px;margin-left:8px">adapt</span>
-          <span style="font-size:11px;color:var(--ink-dim);margin-left:8px">exists in KG — needs update for this context</span>
+          <div style="display:flex;gap:6px;align-items:center;margin-left:auto">${controls}</div>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     return `<div class="create-panel" style="margin-top:16px"><h3 style="color:var(--aqua)">Agents to Adapt (${agents.length})</h3>${rows}</div>`;
   }
 
