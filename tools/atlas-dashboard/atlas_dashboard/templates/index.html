@@ -1199,6 +1199,17 @@
     for (const agent of agents) { await installAgent(runId, agent); }
   }
 
+  async function testSelected(runId) {
+    const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
+    const agents = (run.requires_creation || []).filter(a => {
+      const key = _stateKey(runId, a);
+      const sc = (run.scaffolded || {})[a];
+      const state = _scaffoldState[key]?.state || (sc?.installed ? 'installed' : sc ? 'scaffolded' : 'pending');
+      return (state === 'installed' || state === 'scaffolded') && _isSelected(runId, a);
+    });
+    for (const agent of agents) { openTestAgentPanel(runId, agent); await new Promise(r => setTimeout(r, 300)); }
+  }
+
   async function adaptSelected(runId) {
     const run = await fetch(`/api/runs/${runId}`).then(r => r.json());
     const agents = (run.requires_adaptation || []).filter(a => {
@@ -1307,8 +1318,10 @@
         const iSelectOpts = iAllFiles.map(f => `<option value="${f}"${f===iDefault?' selected':''}>${f}</option>`).join('');
         const iFirstContent = iDefault ? escHtml(iFiles[iDefault]) : '';
         const iKey = `agent-detail-${agent}`;
+        const iSel = _isSelected(run.run_id, agent);
         return `<div class="agent-row card-collapsible" id="agent-row-${agent}" data-card-key="${iKey}">
           <div class="agent-row-header card-toggle" onclick="toggleCard('${iKey}',event)" style="cursor:pointer">
+            <input type="checkbox" ${iSel ? 'checked' : ''} style="accent-color:var(--aqua);margin-right:8px;cursor:pointer" onclick="event.stopPropagation()" onchange="_toggleAgentSel('${run.run_id}','${agent}',this.checked)">
             <span class="agent-row-name">${agent}</span>
             <span class="badge badge-approved">installed</span>
             <span class="toggle-chevron">▶</span>
@@ -1355,6 +1368,7 @@
       </label>
       ${anyPending && !isPendingApproval ? `<button onclick="generateSelected('${run.run_id}')" style="font-size:11px;padding:3px 12px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer" title="Generates selected agents without additional context">Generate selected</button>` : ''}
       ${anyScaffolded ? `<button onclick="installSelected('${run.run_id}')" style="font-size:11px;padding:3px 12px;border:1px solid var(--aqua);color:var(--aqua);border-radius:var(--radius);background:none;cursor:pointer">Install selected</button>` : ''}
+      <button onclick="testSelected('${run.run_id}')" style="font-size:11px;padding:3px 12px;border:1px solid var(--violet);color:var(--violet);border-radius:var(--radius);background:none;cursor:pointer">Test selected</button>
     </div>`;
 
     const step2hint = isApproved
