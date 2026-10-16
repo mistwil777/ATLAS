@@ -911,6 +911,7 @@
       <div class="waiting-title">Pending decisions — ${escHtml(agent)}</div>
       <div class="waiting-intro">${n === 1 ? '1 point requires' : n + ' points require'} your validation before finalising this agent.</div>`;
 
+    const hasAnySuggestion = qs.some(q => q.hint);
     const questions = qs.map((q, i) => {
       const num = `① ② ③ ④ ⑤`.split(' ')[i] || `(${i+1})`;
       let input = '';
@@ -925,9 +926,20 @@
         ).join('');
         input = `<div class="waiting-q-options">${opts}</div>`;
       } else {
-        input = `<input type="text" class="waiting-q-text-input" id="ans_${q.id}" value="${escHtml(q.hint || '')}" placeholder="Your answer…" />`;
+        const actions = q.hint
+          ? `<div style="display:flex;gap:6px;margin-top:4px">
+               <button type="button" onclick="document.getElementById('ans_${q.id}').value=${JSON.stringify(q.hint || '')};document.getElementById('ans_${q.id}').style.opacity='1'" style="font-size:10px;padding:2px 8px;border:1px solid var(--aqua);color:var(--aqua);border-radius:3px;background:none;cursor:pointer">Use suggestion</button>
+               <button type="button" onclick="document.getElementById('ans_${q.id}').value='';document.getElementById('ans_${q.id}').setAttribute('data-skipped','1');document.getElementById('ans_${q.id}').style.opacity='0.4'" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);color:var(--ink-dim);border-radius:3px;background:none;cursor:pointer">Skip</button>
+             </div>`
+          : `<div style="display:flex;gap:6px;margin-top:4px">
+               <button type="button" onclick="document.getElementById('ans_${q.id}').value='';document.getElementById('ans_${q.id}').setAttribute('data-skipped','1');document.getElementById('ans_${q.id}').style.opacity='0.4'" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);color:var(--ink-dim);border-radius:3px;background:none;cursor:pointer">Skip</button>
+             </div>`;
+        input = `<input type="text" class="waiting-q-text-input" id="ans_${q.id}" value="${escHtml(q.hint || '')}" placeholder="Your answer…" oninput="this.removeAttribute('data-skipped');this.style.opacity='1'" />
+                 ${actions}`;
       }
-      const suggestionHtml = q.hint ? `<div style="font-size:11px;color:var(--aqua);margin-bottom:4px">💡 Suggestion: ${escHtml(q.hint)}</div>` : '';
+      const suggestionHtml = q.hint
+        ? `<div style="font-size:11px;color:var(--aqua);margin-bottom:6px;line-height:1.4">💡 <strong>Suggestion :</strong> ${escHtml(q.hint)}</div>`
+        : '';
       return `<div class="waiting-question">
         <div class="waiting-q-num">${num} ${escHtml(q.criterion || '')}</div>
         <div class="waiting-q-text">${escHtml(q.question || '')}</div>
@@ -936,11 +948,25 @@
       </div>`;
     }).join('');
 
-    return `<div class="waiting-panel" id="waiting-panel-${run.run_id}">
+    const acceptAllBtn = hasAnySuggestion
+      ? `<button type="button" onclick="(()=>{document.querySelectorAll('[id^=ans_]').forEach(el=>{const hint=el.getAttribute('data-hint');if(hint){el.value=hint;el.removeAttribute('data-skipped');el.style.opacity='1'}})})()" style="font-size:11px;padding:4px 12px;border:1px solid var(--aqua);color:var(--aqua);border-radius:var(--radius);background:none;cursor:pointer">Accept all suggestions</button>`
+      : '';
+
+    // embed hint as data-hint on each input for accept-all
+    const panelHtml = `<div class="waiting-panel" id="waiting-panel-${run.run_id}">
       ${header}
       ${questions}
-      <button class="btn-submit-answers" onclick="submitAnswers('${run.run_id}', this)">Submit and continue</button>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        ${acceptAllBtn}
+        <button class="btn-submit-answers" onclick="submitAnswers('${run.run_id}', this)">Submit and continue</button>
+      </div>
     </div>`;
+
+    // inject data-hint after render via a trick: replace id values with data-hint
+    return panelHtml.replace(/id="ans_(q_\d+)" value="([^"]*)"/g, (m, id, val) => {
+      const q = qs.find(q => q.id === id);
+      return `id="ans_${id}" data-hint="${escHtml(q?.hint||'')}" value="${val}"`;
+    });
   }
 
   async function submitAnswers(runId, btn) {
@@ -959,10 +985,7 @@
         if (el && el.value.trim()) answers[q.id] = el.value.trim();
       }
     }
-    if (!Object.keys(answers).length) {
-      alert('Please answer at least one question before continuing.');
-      return;
-    }
+    // Empty answers are allowed — skipped questions use the suggestion as default on re-run
     btn.disabled = true;
     btn.textContent = 'Resuming generation…';
     const panel = document.getElementById(`waiting-panel-${runId}`);
