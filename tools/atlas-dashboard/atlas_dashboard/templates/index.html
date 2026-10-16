@@ -757,7 +757,9 @@
           <button class="btn-approve" onclick="decideSelected('${runId}','approve')">Approve selection</button>
         ` : `<button class="btn-approve" ${isPending ? '' : 'disabled'} onclick="decide('${runId}','approve')">Approve</button>`}
         <button class="btn-reject"  ${isPending ? '' : 'disabled'} onclick="decide('${runId}','reject')">Reject</button>
-        <button class="btn-reject" style="margin-left:auto;background:transparent;border:1px solid var(--red);color:var(--red)" onclick="deleteRun('${runId}')">Delete</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:${isWaiting ? '8px' : '-36px'}">
+        <button class="btn-reject" style="background:transparent;border:1px solid var(--red);color:var(--red)" onclick="deleteRun('${runId}')">Delete</button>
       </div>
       ${(() => {
         const blocs = run.blocs || [];
