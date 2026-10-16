@@ -1210,14 +1210,13 @@
     if (!agents.length) { alert('No installed agents selected.'); return; }
     const total = agents.length;
     let done = 0;
-    // Show progress toast
-    _showToast(`Running tests 0/${total}…`);
+    const statusEl = document.getElementById('page-subtitle');
+    const prevSubtitle = statusEl?.textContent || '';
+    if (statusEl) statusEl.textContent = `Running tests 0/${total}…`;
     for (const agent of agents) {
       try {
-        // Auto-generate inputs from CDC
         const genRes = await fetch(`/api/runs/${runId}/agents/${agent}/test-inputs?n=1`).then(r => r.json()).catch(() => null);
         const input = genRes?.inputs?.[0] || { cdc_bloc: '', context: '' };
-        // Run test
         await fetch(`/api/runs/${runId}/agents/${agent}/run-test`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1225,10 +1224,10 @@
         }).catch(() => null);
       } catch(_) {}
       done++;
-      _showToast(`Running tests ${done}/${total}…`);
+      if (statusEl) statusEl.textContent = `Running tests ${done}/${total}…`;
     }
-    _showToast(`Tests complete — ${total} agent(s) tested. See Tests tab.`);
-    setTimeout(() => _hideToast(), 4000);
+    if (statusEl) statusEl.textContent = `Tests complete — ${total} agent(s) tested. See Tests tab.`;
+    setTimeout(() => { if (statusEl) statusEl.textContent = prevSubtitle; }, 4000);
   }
 
   async function adaptSelected(runId) {
